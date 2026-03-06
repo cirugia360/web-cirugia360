@@ -272,6 +272,14 @@ export const doctorAwards = [
   "Master en Contorno Corporal Total Definer — Bogotá, Colombia",
 ];
 
+export const doctorMemberships = [
+  "Miembro de la Sociedad Americana de Cirugía Plástica",
+  "Miembro de la Sociedad Europea de Cirugía Plástica Facial (EAFPS)",
+  "Miembro de la Sociedad Italiana de Cirugía Plástica (AICPE)",
+  "Miembro del Colegio Médico de Chile (RCM 40135-8)",
+  "Miembro Honorario de SOCHIMCE",
+];
+
 export const trustLogos = ["Renuvion", "BodyTite", "UGRAFT"];
 
 export const canonicalUrl = "https://cirugia360.cl/marcacion-nivel-dios";

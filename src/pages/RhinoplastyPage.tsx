@@ -2,8 +2,9 @@ import { useEffect, useState } from "react";
 import { ArrowRight, Check, ChevronRight, MessageCircle } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import ExperienceMetricsSection from "@/components/landing/ExperienceMetricsSection";
+import SpecialistSection from "@/components/landing/SpecialistSection";
 import ScrollReveal from "@/components/ScrollReveal";
-import Counter from "@/components/Counter";
 import { ContactModalButton } from "@/components/ContactModalProvider";
 import SectionHeading from "@/components/marcacion/SectionHeading";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -289,36 +290,10 @@ const RhinoplastyPage = () => {
           </div>
         </section>
 
-        <section className="bg-foreground">
-          <div className="container-premium section-padding">
-            <ScrollReveal>
-              <SectionHeading
-                label="EXPERIENCIA"
-                title="Referente en rinoplastia en Chile y Latinoamerica"
-                inverted
-              />
-            </ScrollReveal>
-            <div className="mt-14 grid gap-8 sm:grid-cols-2 xl:grid-cols-4">
-              {stats.map((stat, index) => (
-                <ScrollReveal key={stat.label} delay={index * 0.08}>
-                  <article className="rounded-lg border border-background/15 bg-background/5 p-8 text-center backdrop-blur">
-                    <div className="text-primary">
-                      <Counter
-                        target={stat.target}
-                        prefix={stat.prefix}
-                        suffix={stat.suffix}
-                        locale="es-CL"
-                      />
-                    </div>
-                    <p className="mt-3 text-sm font-medium uppercase tracking-[0.18em] text-[#F9FAFB99]">
-                      {stat.label}
-                    </p>
-                  </article>
-                </ScrollReveal>
-              ))}
-            </div>
-          </div>
-        </section>
+        <ExperienceMetricsSection
+          title="Referente en rinoplastia en Chile y Latinoamérica"
+          metrics={stats.map((stat) => ({ ...stat, locale: "es-CL" }))}
+        />
 
         <section id="tecnologia" className="scroll-mt-28 bg-background">
           <div className="container-premium section-padding">
@@ -350,75 +325,26 @@ const RhinoplastyPage = () => {
           </div>
         </section>
 
-        <section id="doctor" className="scroll-mt-28 bg-muted">
-          <div className="container-premium section-padding">
-            <div className="grid items-center gap-12 lg:grid-cols-[0.95fr_1.05fr] lg:gap-16">
-              <ScrollReveal>
-                <div className="card-premium overflow-hidden rounded-lg">
-                  <img
-                    src="/images/rhinoplasty/doctor-1024.webp"
-                    srcSet="/images/rhinoplasty/doctor-640.webp 640w, /images/rhinoplasty/doctor-1024.webp 1024w"
-                    sizes="(max-width: 1024px) 100vw, 42vw"
-                    alt="Dr. Sebastian Torres Farr, especialista en rinoplastia en Chile con resultados naturales"
-                    className="h-full w-full object-cover"
-                    loading="lazy"
-                    decoding="async"
-                  />
-                </div>
-              </ScrollReveal>
-
-              <ScrollReveal delay={0.1}>
-                <div>
-                  <SectionHeading
-                    label="TU CIRUJANO"
-                    title="Dr. Sebastian Torres Farr - Mas de 5.000 Rinoplastias con Resultados Naturales"
-                    centered={false}
-                  />
-                  <div className="mt-6 space-y-5 text-base leading-8 text-muted-foreground">
-                    <p>
-                      El Dr. Sebastian Torres Farr es medico de la Pontificia Universidad Catolica de
-                      Chile, con especializacion en Cirugia de Cabeza, Cuello y Maxilofacial en la
-                      Universita degli Studi di Messina, Italia, y Master en Rinoplastia de la
-                      Universita Cattolica di Roma. Su titulo es valido en toda la Comunidad Europea,
-                      Suiza, Monaco y el Reino Unido.
-                    </p>
-                    <p>
-                      Con mas de 5.000 rinoplastias realizadas y una tasa de revision menor al 1%, el
-                      Dr. Torres Farr combina un enfoque integral de estetica y funcion respiratoria con
-                      simulacion 3D y tecnologia ultrasonica de vanguardia. Sus resultados son
-                      consistentes, naturales y respetuosos de la identidad facial de cada paciente.
-                    </p>
-                  </div>
-
-                  <div className="mt-8 grid gap-4 md:grid-cols-2">
-                    {doctorAwards.map((item) => (
-                      <div
-                        key={item.title}
-                        className="flex items-start gap-3 rounded-lg border border-primary/20 bg-background px-5 py-4 text-sm leading-7 text-foreground"
-                      >
-                        <span className="mt-0.5 flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full border border-primary/10 bg-primary/10 text-primary">
-                          <item.icon size={22} strokeWidth={2.2} />
-                        </span>
-                        <span>{item.title}</span>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="mt-8 flex flex-wrap gap-3">
-                    {doctorMemberships.map((membership) => (
-                      <div
-                        key={membership}
-                        className="rounded-sm border border-border bg-background/70 px-4 py-3 text-sm text-muted-foreground"
-                      >
-                        {membership}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </ScrollReveal>
-            </div>
-          </div>
-        </section>
+        <SpecialistSection
+          title="Dr. Sebastián Torres Farr — Más de 5.000 Rinoplastias con Resultados Naturales"
+          paragraphs={[
+            "El Dr. Sebastián Torres Farr es médico de la Pontificia Universidad Católica de Chile, con especialización en Cirugía de Cabeza, Cuello y Maxilofacial en la Università degli Studi di Messina, Italia, y Master en Rinoplastia de la Università Cattolica di Roma. Su título es válido en toda la Comunidad Europea, Suiza, Mónaco y el Reino Unido.",
+            "Con más de 5.000 rinoplastias realizadas y una tasa de revisión menor al 1%, combina un enfoque integral de estética y función respiratoria con simulación 3D y tecnología ultrasónica de vanguardia para lograr resultados consistentes, naturales y respetuosos de la identidad facial de cada paciente.",
+          ]}
+          awards={doctorAwards.map((award) => award.title)}
+          memberships={doctorMemberships}
+          image={
+            <img
+              src="/images/rhinoplasty/doctor-1024.webp"
+              srcSet="/images/rhinoplasty/doctor-640.webp 640w, /images/rhinoplasty/doctor-1024.webp 1024w"
+              sizes="(max-width: 1024px) 100vw, 42vw"
+              alt="Dr. Sebastián Torres Farr, especialista en rinoplastia en Chile con resultados naturales"
+              className="w-full object-cover"
+              loading="lazy"
+              decoding="async"
+            />
+          }
+        />
 
         <section id="proceso" className="scroll-mt-28 bg-background">
           <div className="container-premium section-padding">
@@ -526,37 +452,40 @@ const RhinoplastyPage = () => {
           </div>
         </section>
 
-        <section id="evaluacion" className="scroll-mt-28 bg-primary">
-          <div className="container-premium section-padding">
+        <section id="evaluacion" className="scroll-mt-28 bg-foreground">
+          <div className="container-premium section-padding max-w-5xl text-center">
             <ScrollReveal>
-              <div className="mx-auto max-w-3xl text-center">
-                <h2 className="heading-section text-primary-foreground md:text-5xl">
-                  ¿Listo para ver tu nueva nariz?
+              <div className="mx-auto">
+                <p className="subtitle-premium text-accent">Cierre de valoración</p>
+                <h2 className="heading-section mt-4 text-background">
+                  ¿Listo para una nariz más armónica y una mejor respiración?
                 </h2>
-                <p className="mx-auto mt-6 max-w-2xl text-lg leading-8 text-primary-foreground">
-                  Agenda tu evaluacion y descubre con simulacion 3D como puede transformarse tu rostro
-                  con Torres Rhinoplasty.
+                <p className="mx-auto mt-6 max-w-3xl text-lg leading-8 text-background/72">
+                  Agenda tu evaluación y descubre con simulación 3D si Torres Rhinoplasty es el
+                  procedimiento adecuado para equilibrar tu rostro y mejorar tu función nasal.
                 </p>
-                <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
+                <p className="mt-4 text-sm uppercase tracking-[0.2em] text-accent">
+                  Cupos limitados · Evaluaciones personalizadas
+                </p>
+                <div className="mt-10 flex flex-col items-center justify-center gap-5 sm:flex-row">
                   <ContactModalButton
-                    className="inline-flex w-full items-center justify-center rounded-sm bg-background px-8 py-4 text-sm font-sans font-medium uppercase tracking-[0.18em] text-foreground transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg sm:w-[280px]"
+                    className="inline-flex items-center justify-center rounded-sm border border-background/60 px-10 py-4 text-sm font-medium uppercase tracking-[0.18em] text-background transition-all duration-300 hover:bg-background hover:text-foreground"
                     aria-label="Abrir evaluacion final de Torres Rhinoplasty"
                   >
-                    AGENDAR EVALUACION
+                    Agendar evaluación
                   </ContactModalButton>
                   <a
                     href={buildWhatsAppUrl(defaultWhatsappMessage)}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex w-full items-center justify-center gap-2 rounded-sm border-[2.5px] border-primary-foreground bg-transparent px-8 py-4 text-sm font-sans font-medium uppercase tracking-[0.18em] text-primary-foreground transition-all duration-300 hover:-translate-y-0.5 hover:bg-primary-foreground hover:text-primary sm:w-[280px]"
+                    className="inline-flex items-center gap-2 text-sm font-medium text-background/80 transition-colors hover:text-background"
                   >
                     <MessageCircle size={18} />
-                    O escribenos por WhatsApp
+                    O escríbenos por WhatsApp
                   </a>
                 </div>
-                <p className="mt-5 text-sm text-primary-foreground">
-                  Sin compromiso · Evaluacion personalizada · Respuesta en menos de 24h · Evaluaciones
-                  limitadas por semana
+                <p className="mt-6 text-sm text-background/55">
+                  Sin compromiso · Evaluación personalizada · Respuesta en menos de 24h
                 </p>
               </div>
             </ScrollReveal>

@@ -1,0 +1,77 @@
+<svg width="800" height="640" viewBox="0 0 800 640" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="800" height="640" rx="28" fill="#F7F7F4"/>
+  <rect x="48" y="44" width="704" height="552" rx="24" fill="#FFFFFF" stroke="#D8E7E3" stroke-width="2"/>
+  <text x="88" y="110" fill="#2A7A7B" font-family="Inter, Arial, sans-serif" font-size="20" font-weight="700" letter-spacing="3">
+    CELULITIS ESTRUCTURAL
+  </text>
+  <text x="88" y="146" fill="#1A1A2E" font-family="Montserrat, Arial, sans-serif" font-size="36" font-weight="700">
+    Septos fibrosos que traccionan la piel
+  </text>
+
+  <g transform="translate(80 190)">
+    <rect x="0" y="0" width="300" height="316" rx="20" fill="#F5F5F5"/>
+    <path d="M0 64C42 44 90 34 150 34C210 34 258 44 300 64V90H0V64Z" fill="#E6C6AA"/>
+    <path d="M0 90H300V150C250 168 226 182 198 224C174 260 154 282 128 294C90 310 46 314 0 312V90Z" fill="#F1D0B2"/>
+    <path d="M38 90C56 128 74 188 84 260" stroke="#2A7A7B" stroke-width="8" stroke-linecap="round"/>
+    <path d="M110 90C126 128 144 194 148 286" stroke="#2A7A7B" stroke-width="8" stroke-linecap="round"/>
+    <path d="M194 90C184 134 178 194 180 286" stroke="#2A7A7B" stroke-width="8" stroke-linecap="round"/>
+    <path d="M258 90C236 132 224 188 222 272" stroke="#2A7A7B" stroke-width="8" stroke-linecap="round"/>
+    <path d="M36 88C102 72 176 78 234 96C270 108 286 124 300 140V46C248 22 190 12 150 12C108 12 48 22 0 46V116C14 104 24 96 36 88Z" fill="#F6D9C0"/>
+    <path d="M78 302C88 250 112 208 140 208C174 208 188 248 206 298" stroke="#CC8F63" stroke-width="10" stroke-linecap="round"/>
+    <circle cx="70" cy="174" r="26" fill="#F2B882"/>
+    <circle cx="134" cy="198" r="30" fill="#E8A56F"/>
+    <circle cx="220" cy="182" r="30" fill="#F0B985"/>
+    <circle cx="244" cy="246" r="28" fill="#E6A16E"/>
+    <circle cx="112" cy="258" r="24" fill="#F4BE89"/>
+    <text x="28" y="350" fill="#1A1A2E" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="600">
+      Hoyuelos y desniveles
+    </text>
+    <text x="28" y="378" fill="#667085" font-family="Inter, Arial, sans-serif" font-size="16">
+      Los septos tiran la piel hacia abajo.
+    </text>
+  </g>
+
+  <g transform="translate(420 190)">
+    <rect x="0" y="0" width="300" height="316" rx="20" fill="#F5F5F5"/>
+    <path d="M0 64C42 44 90 34 150 34C210 34 258 44 300 64V90H0V64Z" fill="#E9C9AD"/>
+    <path d="M0 90H300V316H0V90Z" fill="#F4D5BB"/>
+    <path d="M52 90C66 150 78 208 84 290" stroke="#A8D6D2" stroke-width="8" stroke-linecap="round"/>
+    <path d="M122 90C134 148 142 208 144 290" stroke="#A8D6D2" stroke-width="8" stroke-linecap="round"/>
+    <path d="M192 90C186 150 184 212 186 290" stroke="#A8D6D2" stroke-width="8" stroke-linecap="round"/>
+    <path d="M252 90C236 148 228 208 220 290" stroke="#A8D6D2" stroke-width="8" stroke-linecap="round"/>
+    <path d="M28 90C88 74 168 72 232 88C264 96 286 110 300 126V46C248 22 190 12 150 12C108 12 48 22 0 46V106C10 100 18 96 28 90Z" fill="#FAE3D0"/>
+    <circle cx="68" cy="180" r="26" fill="#F2C494"/>
+    <circle cx="134" cy="194" r="30" fill="#F5C79A"/>
+    <circle cx="220" cy="182" r="30" fill="#F1BE8F"/>
+    <circle cx="242" cy="242" r="28" fill="#F4C796"/>
+    <circle cx="116" cy="254" r="24" fill="#F5C79A"/>
+    <text x="40" y="350" fill="#1A1A2E" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="600">
+      Superficie mas uniforme
+    </text>
+    <text x="40" y="378" fill="#667085" font-family="Inter, Arial, sans-serif" font-size="16">
+      Septos liberados y apoyo interno.
+    </text>
+  </g>
+
+  <g transform="translate(118 532)">
+    <rect x="0" y="0" width="200" height="40" rx="20" fill="#2A7A7B" fill-opacity="0.1"/>
+    <circle cx="24" cy="20" r="7" fill="#2A7A7B"/>
+    <text x="42" y="26" fill="#1A1A2E" font-family="Inter, Arial, sans-serif" font-size="15" font-weight="600">
+      Septos fibrosos tensos
+    </text>
+  </g>
+  <g transform="translate(344 532)">
+    <rect x="0" y="0" width="150" height="40" rx="20" fill="#D28E59" fill-opacity="0.15"/>
+    <circle cx="24" cy="20" r="7" fill="#D28E59"/>
+    <text x="42" y="26" fill="#1A1A2E" font-family="Inter, Arial, sans-serif" font-size="15" font-weight="600">
+      Tejido graso
+    </text>
+  </g>
+  <g transform="translate(516 532)">
+    <rect x="0" y="0" width="168" height="40" rx="20" fill="#A8D6D2" fill-opacity="0.22"/>
+    <circle cx="24" cy="20" r="7" fill="#7DB7B2"/>
+    <text x="42" y="26" fill="#1A1A2E" font-family="Inter, Arial, sans-serif" font-size="15" font-weight="600">
+      Liberacion interna
+    </text>
+  </g>
+</svg>
