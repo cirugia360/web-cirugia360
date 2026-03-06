@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { MessageCircle } from "lucide-react";
 import Footer from "@/components/Footer";
 import MarcacionClosing from "@/components/marcacion/MarcacionClosing";
 import MarcacionHero from "@/components/marcacion/MarcacionHero";
@@ -6,6 +7,11 @@ import MarcacionSectionsPrimary from "@/components/marcacion/MarcacionSectionsPr
 import MarcacionSectionsSecondary from "@/components/marcacion/MarcacionSectionsSecondary";
 import Navbar from "@/components/Navbar";
 import useMarcacionSeo from "@/hooks/useMarcacionSeo";
+import { cn } from "@/lib/utils";
+import { defaultWhatsappMessage, whatsappNumber } from "@/pages/marcacionData";
+
+const buildWhatsAppUrl = (message: string) =>
+  `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`;
 
 const MarcacionPage = () => {
   useMarcacionSeo();
@@ -45,6 +51,21 @@ const MarcacionPage = () => {
         <MarcacionSectionsSecondary />
         <MarcacionClosing showMobileStickyCta={showMobileStickyCta} />
       </main>
+
+      <a
+        href={buildWhatsAppUrl(defaultWhatsappMessage)}
+        target="_blank"
+        rel="noreferrer"
+        aria-label="Escribir por WhatsApp a Cirugia 360"
+        className={cn(
+          "animate-soft-pulse fixed right-4 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-[0_14px_34px_-16px_rgba(42,122,123,0.55)] transition-all duration-300 hover:bg-primary-dark md:h-auto md:w-auto md:gap-2 md:rounded-full md:px-5 md:py-4",
+          showMobileStickyCta ? "bottom-24" : "bottom-5",
+          "md:bottom-6",
+        )}
+      >
+        <MessageCircle size={22} />
+        <span className="hidden text-sm font-medium md:inline">WhatsApp</span>
+      </a>
 
       <Footer />
     </div>
