@@ -5,9 +5,10 @@ interface CounterProps {
   suffix?: string;
   prefix?: string;
   duration?: number;
+  locale?: string;
 }
 
-const Counter = ({ target, suffix = "", prefix = "", duration = 2000 }: CounterProps) => {
+const Counter = ({ target, suffix = "", prefix = "", duration = 2000, locale }: CounterProps) => {
   const [count, setCount] = useState(0);
   const ref = useRef<HTMLDivElement>(null);
   const [started, setStarted] = useState(false);
@@ -43,7 +44,9 @@ const Counter = ({ target, suffix = "", prefix = "", duration = 2000 }: CounterP
 
   return (
     <div ref={ref} className="stat-number">
-      {prefix}{count.toLocaleString()}{suffix}
+      {prefix}
+      {count.toLocaleString(locale)}
+      {suffix}
     </div>
   );
 };
