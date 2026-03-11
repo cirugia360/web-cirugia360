@@ -71,3 +71,66 @@ Yes, you can!
 To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
 
 Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+
+## AutoSEO webhook with Supabase + Vercel
+
+This repo now publishes blog articles through Vercel Functions and stores all content in Supabase:
+
+- `POST /api/autoseo/webhook` receives AutoSEO article payloads
+- `GET /api/blog-posts` lists published posts for the frontend
+- `GET /api/blog-posts/:slug` returns the full article
+- `GET /sitemap.xml` returns a dynamic sitemap
+- `GET /robots.txt` returns a dynamic robots file
+- `GET /blog/:slug` is rewritten to a server-side HTML response with article SEO metadata
+
+### 1. Create the Supabase schema
+
+Run [supabase/schema.sql](./supabase/schema.sql) in the SQL editor of your Supabase project.
+
+That script creates:
+
+- `public.blog_articles`
+- the public Storage bucket `blog-media`
+
+### 2. Configure environment variables in Vercel
+
+Copy `.env.example` and set:
+
+- `PUBLIC_SITE_URL`
+- `AUTOSEO_BEARER_TOKEN`
+- `AUTOSEO_SIGNATURE_SECRET`
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+
+### 3. Deploy on Vercel
+
+This project uses [vercel.json](./vercel.json) so Vercel can:
+
+- rewrite `/blog/:slug` to the SEO HTML function
+- rewrite `/robots.txt` and `/sitemap.xml` to dynamic functions
+- keep the SPA fallback for the rest of the site
+
+Use this webhook URL in AutoSEO:
+
+```text
+https://your-domain.com/api/autoseo/webhook
+```
+
+AutoSEO must send:
+
+- `Authorization: Bearer <AUTOSEO_BEARER_TOKEN>`
+- `X-AutoSEO-Signature: <hmac-sha256>`
+
+### Local development
+
+For the frontend only:
+
+```sh
+npm run dev
+```
+
+To test the Vercel functions locally, use:
+
+```sh
+npm run vercel:dev
+```

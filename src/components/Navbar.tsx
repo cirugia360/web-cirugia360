@@ -36,7 +36,8 @@ const Navbar = () => {
               key={link.href}
               to={link.href}
               className={`font-sans text-xs uppercase tracking-widest transition-colors duration-300 ${
-                location.pathname === link.href
+                location.pathname === link.href ||
+                (link.href === "/blog" && location.pathname.startsWith("/blog/"))
                   ? "text-primary"
                   : "text-muted-foreground hover:text-foreground"
               }`}
@@ -72,7 +73,10 @@ const Navbar = () => {
                   key={link.href}
                   to={link.href}
                   className={`py-2 font-sans text-sm uppercase tracking-wider ${
-                    location.pathname === link.href ? "text-primary" : "text-muted-foreground"
+                    location.pathname === link.href ||
+                    (link.href === "/blog" && location.pathname.startsWith("/blog/"))
+                      ? "text-primary"
+                      : "text-muted-foreground"
                   }`}
                 >
                   {link.label}
