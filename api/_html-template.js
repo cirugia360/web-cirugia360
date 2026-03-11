@@ -239,13 +239,24 @@ export const renderBlogPostHtml = ({ post, siteUrl, assets }) => {
               </section>
 
               <article class="mt-16 rounded-[2rem] border border-border/60 bg-card p-8 shadow-sm md:p-12">
-                <div class="prose prose-lg max-w-none prose-headings:font-serif prose-headings:text-foreground prose-p:text-muted-foreground prose-p:leading-8 prose-a:text-primary prose-strong:text-foreground prose-li:text-muted-foreground prose-img:rounded-3xl">
+                <div class="article-rich-content prose-headings:font-serif prose-strong:text-foreground">
                   ${post.contentHtml}
                 </div>
               </article>
 
               ${infographicMarkup}
               ${faqMarkup}
+
+              <section class="mt-16 rounded-[2rem] bg-foreground px-8 py-10 text-background md:px-12">
+                <p class="subtitle-premium mb-3">Siguiente paso</p>
+                <h2 class="heading-section mb-4 text-background">Agenda una evaluación</h2>
+                <p class="max-w-2xl text-base leading-8 text-background/75">
+                  Si quieres saber si este procedimiento es adecuado para ti, el equipo del Dr. Sebastian Torres puede evaluar tu caso y recomendar la mejor estrategia.
+                </p>
+                <div class="mt-8">
+                  <a class="btn-premium" href="/#agenda" onclick="if (window.openContactModal) { window.openContactModal(); return false; }">Agendar evaluación</a>
+                </div>
+              </section>
             </div>
           </div>
         </main>

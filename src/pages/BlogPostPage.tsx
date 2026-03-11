@@ -1,6 +1,7 @@
 import Footer from "@/components/Footer";
 import Navbar from "@/components/Navbar";
 import ScrollReveal from "@/components/ScrollReveal";
+import { ContactModalButton } from "@/components/ContactModalProvider";
 import useBlogSeo from "@/hooks/useBlogSeo";
 import { fetchBlogPost } from "@/lib/blogApi";
 import type { BlogPost } from "@/types/blog";
@@ -163,7 +164,7 @@ const BlogPostPage = () => {
                 <ScrollReveal delay={0.1}>
                   <article className="mt-16 rounded-[2rem] border border-border/60 bg-card p-8 shadow-sm md:p-12">
                     <div
-                      className="prose prose-lg max-w-none prose-headings:font-serif prose-headings:text-foreground prose-p:text-muted-foreground prose-p:leading-8 prose-a:text-primary prose-strong:text-foreground prose-li:text-muted-foreground prose-img:rounded-3xl"
+                      className="article-rich-content prose-headings:font-serif prose-strong:text-foreground"
                       dangerouslySetInnerHTML={{ __html: post.contentHtml }}
                     />
                   </article>
@@ -214,16 +215,16 @@ const BlogPostPage = () => {
                   <section className="mt-16 rounded-[2rem] bg-foreground px-8 py-10 text-background md:px-12">
                     <p className="subtitle-premium mb-3">Siguiente paso</p>
                     <h2 className="heading-section mb-4 text-background">
-                      Agenda una evaluacion personalizada
+                      Agenda una evaluación
                     </h2>
                     <p className="max-w-2xl text-base leading-8 text-background/75">
                       Si quieres saber si este procedimiento es adecuado para ti, el equipo del Dr.
                       Sebastian Torres puede evaluar tu caso y recomendar la mejor estrategia.
                     </p>
                     <div className="mt-8">
-                      <Link to="/" className="btn-premium">
-                        Solicitar valoracion
-                      </Link>
+                      <ContactModalButton className="btn-premium">
+                        Agendar evaluación
+                      </ContactModalButton>
                     </div>
                   </section>
                 </ScrollReveal>

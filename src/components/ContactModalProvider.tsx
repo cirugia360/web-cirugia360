@@ -4,11 +4,18 @@ import {
   type MouseEvent,
   type ReactNode,
   useContext,
+  useEffect,
   useMemo,
   useState,
 } from "react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import ContactBookingForm from "@/components/ContactBookingForm";
+
+declare global {
+  interface Window {
+    openContactModal?: () => void;
+  }
+}
 
 type ContactModalContextValue = {
   openModal: () => void;
@@ -31,6 +38,14 @@ export const ContactModalProvider = ({ children }: { children: ReactNode }) => {
     }),
     [],
   );
+
+  useEffect(() => {
+    window.openContactModal = contextValue.openModal;
+
+    return () => {
+      delete window.openContactModal;
+    };
+  }, [contextValue]);
 
   return (
     <ContactModalContext.Provider value={contextValue}>
