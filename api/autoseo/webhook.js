@@ -40,12 +40,15 @@ export default async function handler(request, response) {
 
   const signatureSecret = process.env.AUTOSEO_SIGNATURE_SECRET?.trim();
   const signatureHeader = request.headers["x-autoseo-signature"];
+  const hasSignatureHeader =
+    typeof signatureHeader === "string" && signatureHeader.trim().length > 0;
 
   if (
     signatureSecret &&
+    hasSignatureHeader &&
     !verifyAutoSeoSignature(
       rawBody,
-      typeof signatureHeader === "string" ? signatureHeader : "",
+      signatureHeader,
       signatureSecret,
     )
   ) {
