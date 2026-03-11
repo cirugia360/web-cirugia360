@@ -28,4 +28,4 @@ export const fetchBlogPosts = async () => {
 };
 
 export const fetchBlogPost = async (slug: string) =>
-  readJson<BlogPost>(`/api/blog-posts/${encodeURIComponent(slug)}`);
+  readJson<BlogPost>(`/api/blog-post?slug=${encodeURIComponent(slug)}`);

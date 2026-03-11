@@ -1,5 +1,5 @@
-import { sendJson } from "../_blog-shared.js";
-import { getPostBySlug } from "../_supabase.js";
+import { sendJson } from "./_blog-shared.js";
+import { getPostBySlug } from "./_supabase.js";
 
 export default async function handler(request, response) {
   if (request.method !== "GET") {
