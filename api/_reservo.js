@@ -4,6 +4,7 @@ const DEFAULT_TIME_ZONE = "America/Santiago";
 const DEFAULT_WEEKS_AHEAD = 6;
 const ONE_WEEK_IN_DAYS = 7;
 const PAYMENT_KEYWORDS = ["payment", "pago", "pay", "checkout", "cobro", "webpay", "transbank"];
+const FLOW_PAYMENT_HOSTS = new Set(["flow.cl", "www.flow.cl"]);
 const HTML_ENTITY_MAP = {
   amp: "&",
   lt: "<",
@@ -302,6 +303,22 @@ const toHttpUrl = (value) => {
   }
 };
 
+const getHostname = (value) => {
+  const normalized = toHttpUrl(value);
+
+  if (!normalized) {
+    return "";
+  }
+
+  try {
+    return new URL(normalized).hostname.toLowerCase();
+  } catch {
+    return "";
+  }
+};
+
+const isFlowPaymentUrl = (value) => FLOW_PAYMENT_HOSTS.has(getHostname(value));
+
 const decodeHtmlEntities = (value) =>
   normalizeText(value).replace(/&(#x?[0-9a-f]+|[a-z]+);/gi, (match, entity) => {
     const normalizedEntity = String(entity || "").toLowerCase();
@@ -346,6 +363,32 @@ const resolveAgainstBaseUrl = (value, baseUrl) => {
 
   try {
     return new URL(normalized, baseUrl).toString();
+  } catch {
+    return "";
+  }
+};
+
+const buildUrlWithFields = (url, fields) => {
+  const normalized = toHttpUrl(url);
+
+  if (!normalized) {
+    return "";
+  }
+
+  try {
+    const nextUrl = new URL(normalized);
+
+    Object.entries(fields || {}).forEach(([key, rawValue]) => {
+      const name = normalizeText(key);
+
+      if (!name) {
+        return;
+      }
+
+      nextUrl.searchParams.set(name, normalizeText(rawValue));
+    });
+
+    return nextUrl.toString();
   } catch {
     return "";
   }
@@ -407,7 +450,43 @@ const buildPaymentFormFields = (formHtml) => {
   return fields;
 };
 
+const extractSubmitAction = (formHtml) => {
+  for (const match of formHtml.matchAll(/<(input|button)\b([^>]*)>/gi)) {
+    const tagName = String(match[1] || "").toLowerCase();
+    const attributes = parseHtmlAttributes(match[2] || "");
+    const type = normalizeText(attributes.type || (tagName === "button" ? "submit" : "")).toLowerCase();
+    const label = normalizeText(attributes.value || attributes["aria-label"] || attributes.title);
+
+    if (type !== "submit" && !(tagName === "button" && !type)) {
+      continue;
+    }
+
+    if (!/realizar\s+pago/i.test(label) && !/pagar/i.test(label)) {
+      continue;
+    }
+
+    return {
+      name: normalizeText(attributes.name),
+      value: normalizeText(attributes.value),
+    };
+  }
+
+  return null;
+};
+
 const extractPaymentRedirectFromHtml = (html, pageUrl) => {
+  const directFlowUrlMatch = decodeHtmlEntities(html).match(
+    /https?:\/\/(?:www\.)?flow\.cl\/app\/web\/pay\.php\?[^"'\\s<>]+/i,
+  );
+
+  if (directFlowUrlMatch) {
+    return {
+      url: directFlowUrlMatch[0],
+      method: "GET",
+      fields: {},
+    };
+  }
+
   const formMatches = [...html.matchAll(/<form\b([^>]*)>([\s\S]*?)<\/form>/gi)];
 
   for (const match of formMatches) {
@@ -416,16 +495,39 @@ const extractPaymentRedirectFromHtml = (html, pageUrl) => {
     const formText = stripHtmlTags(formHtml).toLowerCase();
     const formAction = resolveAgainstBaseUrl(formAttributes.action || pageUrl, pageUrl);
     const formMethod = normalizeText(formAttributes.method || "GET").toUpperCase();
+    const formFields = buildPaymentFormFields(formHtml);
+    const submitAction = extractSubmitAction(formHtml);
+    const enrichedFields = { ...formFields };
+
+    if (submitAction?.name) {
+      enrichedFields[submitAction.name] = submitAction.value;
+    }
 
     if (!formAction) {
       continue;
     }
 
+    const directFlowUrl =
+      isFlowPaymentUrl(formAction) && formMethod !== "POST"
+        ? buildUrlWithFields(formAction, enrichedFields)
+        : "";
+
+    if (directFlowUrl) {
+      return {
+        url: directFlowUrl,
+        method: "GET",
+        fields: {},
+      };
+    }
+
     const hasPaymentButton =
       /realizar\s+pago/i.test(formText) ||
       /pagar/i.test(formText) ||
+      /wflow/i.test(formText) ||
+      /flow/i.test(formText) ||
       isPaymentLikeText(formAction) ||
-      isPaymentLikeText(formText);
+      isPaymentLikeText(formText) ||
+      isFlowPaymentUrl(formAction);
 
     if (!hasPaymentButton) {
       continue;
@@ -434,7 +536,7 @@ const extractPaymentRedirectFromHtml = (html, pageUrl) => {
     return {
       url: formAction,
       method: formMethod === "POST" ? "POST" : "GET",
-      fields: buildPaymentFormFields(formHtml),
+      fields: enrichedFields,
     };
   }
 
@@ -447,7 +549,11 @@ const extractPaymentRedirectFromHtml = (html, pageUrl) => {
       continue;
     }
 
-    if (/realizar\s+pago/i.test(text) || (/pagar/i.test(text) && isPaymentLikeText(href))) {
+    if (
+      isFlowPaymentUrl(href) ||
+      /realizar\s+pago/i.test(text) ||
+      (/pagar/i.test(text) && (isPaymentLikeText(href) || isFlowPaymentUrl(href)))
+    ) {
       return {
         url: href,
         method: "GET",
@@ -465,7 +571,11 @@ const extractPaymentRedirectFromHtml = (html, pageUrl) => {
       continue;
     }
 
-    if (/realizar\s+pago/i.test(text) || (/pagar/i.test(text) && isPaymentLikeText(actionUrl))) {
+    if (
+      isFlowPaymentUrl(actionUrl) ||
+      /realizar\s+pago/i.test(text) ||
+      (/pagar/i.test(text) && (isPaymentLikeText(actionUrl) || isFlowPaymentUrl(actionUrl)))
+    ) {
       return {
         url: actionUrl,
         method: "GET",
