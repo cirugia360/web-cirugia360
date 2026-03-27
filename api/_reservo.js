@@ -4,6 +4,14 @@ const DEFAULT_TIME_ZONE = "America/Santiago";
 const DEFAULT_WEEKS_AHEAD = 6;
 const ONE_WEEK_IN_DAYS = 7;
 const PAYMENT_KEYWORDS = ["payment", "pago", "pay", "checkout", "cobro", "webpay", "transbank"];
+const HTML_ENTITY_MAP = {
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  apos: "'",
+  nbsp: " ",
+};
 
 const bookingDefinitions = {
   online: {
@@ -294,6 +302,222 @@ const toHttpUrl = (value) => {
   }
 };
 
+const decodeHtmlEntities = (value) =>
+  normalizeText(value).replace(/&(#x?[0-9a-f]+|[a-z]+);/gi, (match, entity) => {
+    const normalizedEntity = String(entity || "").toLowerCase();
+
+    if (normalizedEntity.startsWith("#x")) {
+      const codePoint = Number.parseInt(normalizedEntity.slice(2), 16);
+      return Number.isNaN(codePoint) ? match : String.fromCodePoint(codePoint);
+    }
+
+    if (normalizedEntity.startsWith("#")) {
+      const codePoint = Number.parseInt(normalizedEntity.slice(1), 10);
+      return Number.isNaN(codePoint) ? match : String.fromCodePoint(codePoint);
+    }
+
+    return HTML_ENTITY_MAP[normalizedEntity] || match;
+  });
+
+const parseHtmlAttributes = (source) => {
+  const attributes = {};
+  const attributePattern =
+    /([^\s"'<>/=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g;
+
+  for (const match of source.matchAll(attributePattern)) {
+    const name = String(match[1] || "").toLowerCase();
+
+    if (!name) {
+      continue;
+    }
+
+    attributes[name] = decodeHtmlEntities(match[2] || match[3] || match[4] || "");
+  }
+
+  return attributes;
+};
+
+const resolveAgainstBaseUrl = (value, baseUrl) => {
+  const normalized = normalizeText(value);
+
+  if (!normalized) {
+    return "";
+  }
+
+  try {
+    return new URL(normalized, baseUrl).toString();
+  } catch {
+    return "";
+  }
+};
+
+const stripHtmlTags = (value) => normalizeText(value).replace(/<[^>]*>/g, " ");
+
+const extractUrlFromInlineScript = (value, baseUrl) => {
+  const normalized = decodeHtmlEntities(value);
+  const directUrlMatch =
+    normalized.match(/https?:\/\/[^\s"'<>]+/i) ||
+    normalized.match(/(?:location(?:\.href)?|window\.open)\s*=?\s*\(?\s*['"]([^'"]+)['"]/i) ||
+    normalized.match(/['"]((?:\/|\.\/|\.\.\/)[^'"]+)['"]/i);
+
+  if (!directUrlMatch) {
+    return "";
+  }
+
+  const candidate = directUrlMatch[1] || directUrlMatch[0];
+  return resolveAgainstBaseUrl(candidate, baseUrl);
+};
+
+const buildPaymentFormFields = (formHtml) => {
+  const fields = {};
+  const radioGroups = new Map();
+
+  for (const match of formHtml.matchAll(/<input\b([^>]*)>/gi)) {
+    const attributes = parseHtmlAttributes(match[1] || "");
+    const name = normalizeText(attributes.name);
+    const type = normalizeText(attributes.type || "text").toLowerCase();
+
+    if (!name || type === "submit" || type === "button" || type === "image" || type === "reset") {
+      continue;
+    }
+
+    if (type === "radio" || type === "checkbox") {
+      if (!radioGroups.has(name)) {
+        radioGroups.set(name, []);
+      }
+
+      radioGroups.get(name).push({
+        value: attributes.value || "on",
+        checked: Object.prototype.hasOwnProperty.call(attributes, "checked"),
+      });
+      continue;
+    }
+
+    fields[name] = attributes.value || "";
+  }
+
+  for (const [name, options] of radioGroups.entries()) {
+    const checkedOption = options.find((option) => option.checked) || options[0];
+
+    if (checkedOption) {
+      fields[name] = checkedOption.value;
+    }
+  }
+
+  return fields;
+};
+
+const extractPaymentRedirectFromHtml = (html, pageUrl) => {
+  const formMatches = [...html.matchAll(/<form\b([^>]*)>([\s\S]*?)<\/form>/gi)];
+
+  for (const match of formMatches) {
+    const formAttributes = parseHtmlAttributes(match[1] || "");
+    const formHtml = match[2] || "";
+    const formText = stripHtmlTags(formHtml).toLowerCase();
+    const formAction = resolveAgainstBaseUrl(formAttributes.action || pageUrl, pageUrl);
+    const formMethod = normalizeText(formAttributes.method || "GET").toUpperCase();
+
+    if (!formAction) {
+      continue;
+    }
+
+    const hasPaymentButton =
+      /realizar\s+pago/i.test(formText) ||
+      /pagar/i.test(formText) ||
+      isPaymentLikeText(formAction) ||
+      isPaymentLikeText(formText);
+
+    if (!hasPaymentButton) {
+      continue;
+    }
+
+    return {
+      url: formAction,
+      method: formMethod === "POST" ? "POST" : "GET",
+      fields: buildPaymentFormFields(formHtml),
+    };
+  }
+
+  for (const match of html.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi)) {
+    const attributes = parseHtmlAttributes(match[1] || "");
+    const text = stripHtmlTags(match[2] || "");
+    const href = resolveAgainstBaseUrl(attributes.href || "", pageUrl);
+
+    if (!href) {
+      continue;
+    }
+
+    if (/realizar\s+pago/i.test(text) || (/pagar/i.test(text) && isPaymentLikeText(href))) {
+      return {
+        url: href,
+        method: "GET",
+        fields: {},
+      };
+    }
+  }
+
+  for (const match of html.matchAll(/<button\b([^>]*)>([\s\S]*?)<\/button>/gi)) {
+    const attributes = parseHtmlAttributes(match[1] || "");
+    const text = stripHtmlTags(match[2] || "");
+    const actionUrl = extractUrlFromInlineScript(attributes.onclick || "", pageUrl);
+
+    if (!actionUrl) {
+      continue;
+    }
+
+    if (/realizar\s+pago/i.test(text) || (/pagar/i.test(text) && isPaymentLikeText(actionUrl))) {
+      return {
+        url: actionUrl,
+        method: "GET",
+        fields: {},
+      };
+    }
+  }
+
+  return null;
+};
+
+const resolvePaymentRedirect = async (paymentUrl) => {
+  const normalizedPaymentUrl = toHttpUrl(paymentUrl);
+
+  if (!normalizedPaymentUrl) {
+    return null;
+  }
+
+  try {
+    const response = await fetch(normalizedPaymentUrl, {
+      headers: {
+        Accept: "text/html,application/xhtml+xml",
+        "User-Agent": "Mozilla/5.0 (compatible; Cirugia360Bot/1.0)",
+      },
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const responseText = await response.text();
+    const finalUrl = toHttpUrl(response.url) || normalizedPaymentUrl;
+    const resolvedRedirect = extractPaymentRedirectFromHtml(responseText, finalUrl);
+
+    if (resolvedRedirect) {
+      return resolvedRedirect;
+    }
+
+    if (finalUrl !== normalizedPaymentUrl) {
+      return {
+        url: finalUrl,
+        method: "GET",
+        fields: {},
+      };
+    }
+  } catch (error) {
+    console.warn("No se pudo resolver el redirect de pago de Reservo.", error);
+  }
+
+  return null;
+};
+
 const extractPaymentUrlFromPayload = (payload, appointmentType) => {
   const visited = new Set();
   const paymentUrls = [];
@@ -560,6 +784,7 @@ export const createReservoBooking = async (payload) => {
   }
 
   const paymentUrl = extractPaymentUrlFromPayload(remotePayload, config.id);
+  const paymentRedirect = paymentUrl ? await resolvePaymentRedirect(paymentUrl) : null;
 
   return {
     ok: true,
@@ -570,6 +795,7 @@ export const createReservoBooking = async (payload) => {
       timeZone: config.timeZone,
     },
     paymentUrl,
+    paymentRedirect,
     source: remotePayload,
   };
 };

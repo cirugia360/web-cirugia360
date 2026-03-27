@@ -37,6 +37,12 @@ export type ReservoBookingPayload = {
   sourceUrl?: string;
 };
 
+export type ReservoPaymentRedirect = {
+  url: string;
+  method: "GET" | "POST";
+  fields: Record<string, string>;
+};
+
 export type ReservoBookingResponse = {
   ok: true;
   option: ReservoBookingOption;
@@ -46,6 +52,7 @@ export type ReservoBookingResponse = {
     timeZone: string;
   };
   paymentUrl: string | null;
+  paymentRedirect: ReservoPaymentRedirect | null;
   source: unknown;
 };
 

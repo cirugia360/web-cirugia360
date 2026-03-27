@@ -16,6 +16,7 @@ import {
   fetchReservoAvailability,
   type AppointmentType,
   type ReservoBookingOption,
+  type ReservoPaymentRedirect,
   type ReservoBookingResponse,
 } from "@/lib/reservo";
 
@@ -165,6 +166,24 @@ const formatPhoneInput = (value: string) => {
 
 const isValidPhone = (value: string) => /^\+56 \d \d{4} \d{4}$/.test(value.trim());
 
+const submitPaymentRedirect = (redirect: ReservoPaymentRedirect) => {
+  const form = document.createElement("form");
+  form.method = redirect.method;
+  form.action = redirect.url;
+  form.style.display = "none";
+
+  Object.entries(redirect.fields).forEach(([name, value]) => {
+    const input = document.createElement("input");
+    input.type = "hidden";
+    input.name = name;
+    input.value = value;
+    form.appendChild(input);
+  });
+
+  document.body.appendChild(form);
+  form.submit();
+};
+
 const ContactBookingForm = () => {
   const [step, setStep] = useState<Step>(1);
   const [appointmentType, setAppointmentType] = useState<AppointmentType | null>(null);
@@ -206,14 +225,20 @@ const ContactBookingForm = () => {
   });
 
   useEffect(() => {
+    const paymentRedirect = confirmedBooking?.paymentRedirect;
     const paymentUrl = confirmedBooking?.paymentUrl;
 
-    if (step !== 4 || !paymentUrl) {
+    if (step !== 4 || (!paymentRedirect && !paymentUrl)) {
       return;
     }
 
     const timeoutId = window.setTimeout(() => {
-      window.location.assign(paymentUrl);
+      if (paymentRedirect) {
+        submitPaymentRedirect(paymentRedirect);
+        return;
+      }
+
+      window.location.assign(paymentUrl as string);
     }, 150);
 
     return () => window.clearTimeout(timeoutId);
@@ -564,9 +589,22 @@ const ContactBookingForm = () => {
               <p className="mb-8 text-sm text-muted-foreground">
                 Tu hora fue apartada y te llevaremos al link de pago para completar la reserva.
               </p>
-              <a href={confirmedBooking.paymentUrl} className="btn-premium inline-flex px-8 py-3 text-xs">
+              <button
+                type="button"
+                onClick={() => {
+                  if (confirmedBooking.paymentRedirect) {
+                    submitPaymentRedirect(confirmedBooking.paymentRedirect);
+                    return;
+                  }
+
+                  if (confirmedBooking.paymentUrl) {
+                    window.location.assign(confirmedBooking.paymentUrl);
+                  }
+                }}
+                className="btn-premium inline-flex px-8 py-3 text-xs"
+              >
                 Ir al pago ahora
-              </a>
+              </button>
             </>
           ) : (
             <>
