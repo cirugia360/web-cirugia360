@@ -5,9 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:web": "vite",
+    "dev:api": "npx vercel dev --listen 3001",
+    "dev:full": "npx concurrently -n api,web -c yellow,cyan \"npm run dev:api\" \"npm run dev:web\"",
     "build": "vite build",
     "build:dev": "vite build --mode development",
-    "vercel:dev": "npx vercel dev",
+    "vercel:dev": "npx vercel dev --listen 3001",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
