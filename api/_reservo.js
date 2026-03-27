@@ -3,6 +3,7 @@ const DEFAULT_BOOKING_ENDPOINT = "https://reservo.cl/makereserva/confirmApptAPI/
 const DEFAULT_TIME_ZONE = "America/Santiago";
 const DEFAULT_WEEKS_AHEAD = 6;
 const ONE_WEEK_IN_DAYS = 7;
+const PAYMENT_KEYWORDS = ["payment", "pago", "pay", "checkout", "cobro", "webpay", "transbank"];
 
 const bookingDefinitions = {
   online: {
@@ -267,6 +268,102 @@ export const fetchAvailability = async (appointmentType) => {
 
 const normalizeText = (value) => String(value || "").trim();
 
+const isPaymentLikeText = (value) => {
+  const normalized = normalizeText(value).toLowerCase();
+
+  return PAYMENT_KEYWORDS.some((keyword) => normalized.includes(keyword));
+};
+
+const toHttpUrl = (value) => {
+  const normalized = normalizeText(value);
+
+  if (!normalized) {
+    return "";
+  }
+
+  try {
+    const parsedUrl = new URL(normalized);
+
+    if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+      return "";
+    }
+
+    return parsedUrl.toString();
+  } catch {
+    return "";
+  }
+};
+
+const extractPaymentUrlFromPayload = (payload, appointmentType) => {
+  const visited = new Set();
+  const paymentUrls = [];
+  const candidateUrls = [];
+
+  const visit = (value, parentKey = "", withinPaymentContext = false) => {
+    if (typeof value === "string") {
+      const url = toHttpUrl(value);
+
+      if (!url) {
+        return;
+      }
+
+      if (withinPaymentContext || isPaymentLikeText(parentKey) || isPaymentLikeText(url)) {
+        paymentUrls.push(url);
+        return;
+      }
+
+      candidateUrls.push(url);
+      return;
+    }
+
+    if (!value || typeof value !== "object") {
+      return;
+    }
+
+    if (visited.has(value)) {
+      return;
+    }
+
+    visited.add(value);
+
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        visit(item, parentKey, withinPaymentContext);
+      }
+      return;
+    }
+
+    const entries = Object.entries(value);
+    const objectHasPaymentContext =
+      withinPaymentContext ||
+      entries.some(([key, childValue]) => {
+        if (isPaymentLikeText(key)) {
+          return true;
+        }
+
+        return typeof childValue === "string" && isPaymentLikeText(childValue);
+      });
+
+    for (const [key, childValue] of entries) {
+      visit(childValue, key, objectHasPaymentContext || isPaymentLikeText(key));
+    }
+  };
+
+  visit(payload);
+
+  if (paymentUrls.length > 0) {
+    return paymentUrls[0];
+  }
+
+  const uniqueCandidateUrls = [...new Set(candidateUrls)];
+
+  if (appointmentType === "presencial" && uniqueCandidateUrls.length === 1) {
+    return uniqueCandidateUrls[0];
+  }
+
+  return null;
+};
+
 const getRutRawValue = (value) =>
   normalizeText(value)
     .replace(/[^0-9kK]/g, "")
@@ -462,6 +559,8 @@ export const createReservoBooking = async (payload) => {
     throw error;
   }
 
+  const paymentUrl = extractPaymentUrlFromPayload(remotePayload, config.id);
+
   return {
     ok: true,
     option: toPublicBookingOption(config),
@@ -470,6 +569,7 @@ export const createReservoBooking = async (payload) => {
       time: requestBody.calendario.hour,
       timeZone: config.timeZone,
     },
+    paymentUrl,
     source: remotePayload,
   };
 };

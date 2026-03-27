@@ -193,13 +193,31 @@ const ContactBookingForm = () => {
     onSuccess: (response) => {
       setConfirmedBooking(response);
       setStep(4);
-      toast.success("Tu evaluacion quedo reservada.");
+      toast.success(
+        response.paymentUrl
+          ? "Te estamos redirigiendo al pago para completar tu reserva."
+          : "Tu evaluacion quedo reservada.",
+      );
     },
     onError: (error) => {
       toast.error(error instanceof Error ? error.message : "No se pudo confirmar la reserva.");
       availabilityQuery.refetch();
     },
   });
+
+  useEffect(() => {
+    const paymentUrl = confirmedBooking?.paymentUrl;
+
+    if (step !== 4 || !paymentUrl) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      window.location.assign(paymentUrl);
+    }, 150);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [confirmedBooking, step]);
 
   useEffect(() => {
     setSelectedDate("");
@@ -534,33 +552,55 @@ const ContactBookingForm = () => {
           <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
             <CheckCircle className="text-primary" size={32} />
           </div>
-          <h3 className="mb-3 font-serif text-2xl font-medium text-foreground">Evaluacion Agendada</h3>
-          <p className="mb-2 text-muted-foreground">{confirmedBooking.option.procedureName}</p>
-          <p className="mb-2 text-sm font-medium text-foreground">
-            {form.nombre} {form.apellido}
-          </p>
-          <p className="mb-2 text-sm text-muted-foreground">
-            {formatSummaryDate(confirmedBooking.selectedSlot.date, confirmedBooking.selectedSlot.time)}
-          </p>
-          <p className="mb-8 text-sm text-muted-foreground">
-            {confirmedBooking.option.locationLabel}
-            {confirmedBooking.option.id === "presencial"
-              ? ` - ${confirmedBooking.option.clinicAddress}`
-              : ` - ${confirmedBooking.option.professionalName}`}
-          </p>
-          <div className="rounded-sm border border-border bg-background/70 px-5 py-4 text-left">
-            <p className="text-xs font-sans uppercase tracking-[0.2em] text-muted-foreground">
-              Resumen
-            </p>
-            <p className="mt-3 flex items-center gap-2 text-sm text-foreground">
-              <CalendarIcon size={14} />
-              {confirmedBooking.selectedSlot.date} - {confirmedBooking.selectedSlot.time}
-            </p>
-            <p className="mt-2 flex items-center gap-2 text-sm text-foreground">
-              {confirmedBooking.option.id === "online" ? <Video size={14} /> : <MapPin size={14} />}
-              {confirmedBooking.option.locationLabel}
-            </p>
-          </div>
+          {confirmedBooking.paymentUrl ? (
+            <>
+              <h3 className="mb-3 font-serif text-2xl font-medium text-foreground">
+                Redirigiendo al Pago
+              </h3>
+              <p className="mb-2 text-muted-foreground">{confirmedBooking.option.procedureName}</p>
+              <p className="mb-2 text-sm text-muted-foreground">
+                {formatSummaryDate(confirmedBooking.selectedSlot.date, confirmedBooking.selectedSlot.time)}
+              </p>
+              <p className="mb-8 text-sm text-muted-foreground">
+                Tu hora fue apartada y te llevaremos al link de pago para completar la reserva.
+              </p>
+              <a href={confirmedBooking.paymentUrl} className="btn-premium inline-flex px-8 py-3 text-xs">
+                Ir al pago ahora
+              </a>
+            </>
+          ) : (
+            <>
+              <h3 className="mb-3 font-serif text-2xl font-medium text-foreground">
+                Evaluacion Agendada
+              </h3>
+              <p className="mb-2 text-muted-foreground">{confirmedBooking.option.procedureName}</p>
+              <p className="mb-2 text-sm font-medium text-foreground">
+                {form.nombre} {form.apellido}
+              </p>
+              <p className="mb-2 text-sm text-muted-foreground">
+                {formatSummaryDate(confirmedBooking.selectedSlot.date, confirmedBooking.selectedSlot.time)}
+              </p>
+              <p className="mb-8 text-sm text-muted-foreground">
+                {confirmedBooking.option.locationLabel}
+                {confirmedBooking.option.id === "presencial"
+                  ? ` - ${confirmedBooking.option.clinicAddress}`
+                  : ` - ${confirmedBooking.option.professionalName}`}
+              </p>
+              <div className="rounded-sm border border-border bg-background/70 px-5 py-4 text-left">
+                <p className="text-xs font-sans uppercase tracking-[0.2em] text-muted-foreground">
+                  Resumen
+                </p>
+                <p className="mt-3 flex items-center gap-2 text-sm text-foreground">
+                  <CalendarIcon size={14} />
+                  {confirmedBooking.selectedSlot.date} - {confirmedBooking.selectedSlot.time}
+                </p>
+                <p className="mt-2 flex items-center gap-2 text-sm text-foreground">
+                  {confirmedBooking.option.id === "online" ? <Video size={14} /> : <MapPin size={14} />}
+                  {confirmedBooking.option.locationLabel}
+                </p>
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -588,7 +628,7 @@ const ContactBookingForm = () => {
                   Confirmando...
                 </span>
               ) : (
-                "Confirmar reserva"
+                appointmentType === "presencial" ? "Confirmar y pagar" : "Confirmar reserva"
               )
             ) : (
               <span className="inline-flex items-center gap-2">

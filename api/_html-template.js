@@ -186,7 +186,6 @@ export const renderBlogPostHtml = ({ post, siteUrl, assets }) => {
     <meta name="twitter:description" content="${escapeHtml(description)}" />
     <meta name="twitter:image" content="${escapeHtml(imageUrl)}" />
     <link rel="canonical" href="${escapeHtml(post.url)}" />
-    <link rel="icon" href="/favicon.ico" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

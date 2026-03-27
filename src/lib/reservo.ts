@@ -45,6 +45,7 @@ export type ReservoBookingResponse = {
     time: string;
     timeZone: string;
   };
+  paymentUrl: string | null;
   source: unknown;
 };
 
