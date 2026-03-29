@@ -186,6 +186,7 @@ export const renderBlogPostHtml = ({ post, siteUrl, assets }) => {
     <meta name="twitter:description" content="${escapeHtml(description)}" />
     <meta name="twitter:image" content="${escapeHtml(imageUrl)}" />
     <link rel="canonical" href="${escapeHtml(post.url)}" />
+    <link rel="icon" href="data:," />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -277,6 +278,7 @@ export const renderNotFoundHtml = ({ siteUrl, assets, title, description }) => {
     <meta name="description" content="${escapeHtml(description)}" />
     <meta name="robots" content="noindex,follow" />
     <link rel="canonical" href="${escapeHtml(siteUrl)}" />
+    <link rel="icon" href="data:," />
     ${assetTags}
   </head>
   <body>

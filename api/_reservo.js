@@ -283,7 +283,7 @@ const isPaymentLikeText = (value) => {
   return PAYMENT_KEYWORDS.some((keyword) => normalized.includes(keyword));
 };
 
-const toHttpUrl = (value) => {
+export const toHttpUrl = (value) => {
   const normalized = normalizeText(value);
 
   if (!normalized) {
@@ -317,7 +317,7 @@ const getHostname = (value) => {
   }
 };
 
-const isFlowPaymentUrl = (value) => FLOW_PAYMENT_HOSTS.has(getHostname(value));
+export const isFlowPaymentUrl = (value) => FLOW_PAYMENT_HOSTS.has(getHostname(value));
 
 const decodeHtmlEntities = (value) =>
   normalizeText(value).replace(/&(#x?[0-9a-f]+|[a-z]+);/gi, (match, entity) => {
@@ -474,7 +474,7 @@ const extractSubmitAction = (formHtml) => {
   return null;
 };
 
-const extractPaymentRedirectFromHtml = (html, pageUrl) => {
+export const extractPaymentRedirectFromHtml = (html, pageUrl) => {
   const directFlowUrlMatch = decodeHtmlEntities(html).match(
     /https?:\/\/(?:www\.)?flow\.cl\/app\/web\/pay\.php\?[^"'\\s<>]+/i,
   );

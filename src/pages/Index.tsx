@@ -7,10 +7,11 @@ import ScrollReveal from "@/components/ScrollReveal";
 import Counter from "@/components/Counter";
 import { ContactModalButton } from "@/components/ContactModalProvider";
 import heroDoctor from "@/assets/hero-doctor.jpg";
-import technology from "@/assets/technology.jpg";
 import marcacionCover from "@/assets/marcacion.jpeg";
 import rinoplastiaCover from "@/assets/rinoplastia.jpeg";
 import subcisionCover from "@/assets/subcision.jpeg";
+
+const technology = "/images/Bodytite.webp";
 
 const credentials = [
   { icon: GraduationCap, title: "Médico", desc: "Pontificia Universidad Católica de Chile" },
@@ -266,7 +267,7 @@ const Index = () => {
               </div>
             </ScrollReveal>
             <ScrollReveal delay={0.2}>
-              <div className="aspect-square rounded-lg overflow-hidden">
+              <div className="aspect-square rounded-lg overflow-hidden bg-muted/40">
                 <img src={technology} alt="Tecnología avanzada" className="w-full h-full object-cover" />
               </div>
             </ScrollReveal>

@@ -165,6 +165,20 @@ const formatPhoneInput = (value: string) => {
 };
 
 const isValidPhone = (value: string) => /^\+56 \d \d{4} \d{4}$/.test(value.trim());
+const RESERVO_PAYMENT_HOSTS = new Set(["reservo.cl", "www.reservo.cl"]);
+
+const getPaymentHost = (value: string) => {
+  try {
+    return new URL(value).hostname.toLowerCase();
+  } catch {
+    return "";
+  }
+};
+
+const isReservoPaymentUrl = (value: string) => RESERVO_PAYMENT_HOSTS.has(getPaymentHost(value));
+
+const buildPaymentBridgeUrl = (paymentUrl: string) =>
+  `/api/reservo/payment-bridge?target=${encodeURIComponent(paymentUrl)}`;
 
 const submitPaymentRedirect = (redirect: ReservoPaymentRedirect) => {
   const form = document.createElement("form");
@@ -182,6 +196,25 @@ const submitPaymentRedirect = (redirect: ReservoPaymentRedirect) => {
 
   document.body.appendChild(form);
   form.submit();
+};
+
+const continueToPayment = (
+  paymentUrl: string | null,
+  paymentRedirect: ReservoPaymentRedirect | null,
+) => {
+  if (paymentUrl && isReservoPaymentUrl(paymentUrl)) {
+    window.location.assign(buildPaymentBridgeUrl(paymentUrl));
+    return;
+  }
+
+  if (paymentRedirect) {
+    submitPaymentRedirect(paymentRedirect);
+    return;
+  }
+
+  if (paymentUrl) {
+    window.location.assign(paymentUrl);
+  }
 };
 
 const ContactBookingForm = () => {
@@ -233,12 +266,7 @@ const ContactBookingForm = () => {
     }
 
     const timeoutId = window.setTimeout(() => {
-      if (paymentRedirect) {
-        submitPaymentRedirect(paymentRedirect);
-        return;
-      }
-
-      window.location.assign(paymentUrl as string);
+      continueToPayment(paymentUrl, paymentRedirect);
     }, 150);
 
     return () => window.clearTimeout(timeoutId);
@@ -592,14 +620,7 @@ const ContactBookingForm = () => {
               <button
                 type="button"
                 onClick={() => {
-                  if (confirmedBooking.paymentRedirect) {
-                    submitPaymentRedirect(confirmedBooking.paymentRedirect);
-                    return;
-                  }
-
-                  if (confirmedBooking.paymentUrl) {
-                    window.location.assign(confirmedBooking.paymentUrl);
-                  }
+                  continueToPayment(confirmedBooking.paymentUrl, confirmedBooking.paymentRedirect);
                 }}
                 className="btn-premium inline-flex px-8 py-3 text-xs"
               >
