@@ -202,13 +202,13 @@ const continueToPayment = (
   paymentUrl: string | null,
   paymentRedirect: ReservoPaymentRedirect | null,
 ) => {
-  if (paymentUrl && isReservoPaymentUrl(paymentUrl)) {
-    window.location.assign(buildPaymentBridgeUrl(paymentUrl));
+  if (paymentRedirect) {
+    submitPaymentRedirect(paymentRedirect);
     return;
   }
 
-  if (paymentRedirect) {
-    submitPaymentRedirect(paymentRedirect);
+  if (paymentUrl && isReservoPaymentUrl(paymentUrl)) {
+    window.location.assign(buildPaymentBridgeUrl(paymentUrl));
     return;
   }
 
@@ -246,7 +246,7 @@ const ContactBookingForm = () => {
       setConfirmedBooking(response);
       setStep(4);
       toast.success(
-        response.paymentUrl
+        response.paymentUrl || response.paymentRedirect
           ? "Te estamos redirigiendo al pago para completar tu reserva."
           : "Tu evaluacion quedo reservada.",
       );
@@ -605,7 +605,7 @@ const ContactBookingForm = () => {
           <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
             <CheckCircle className="text-primary" size={32} />
           </div>
-          {confirmedBooking.paymentUrl ? (
+          {confirmedBooking.paymentUrl || confirmedBooking.paymentRedirect ? (
             <>
               <h3 className="mb-3 font-serif text-2xl font-medium text-foreground">
                 Redirigiendo al Pago
