@@ -145,8 +145,30 @@ const buildBridgeHtml = (html, pageUrl) => {
             return false;
           }
         };
+        const getFormAction = (form) => {
+          const rawAction = form.getAttribute("action");
+          const fallbackAction = document.baseURI || "";
+          return toAbsoluteUrl(rawAction && rawAction.trim() ? rawAction : fallbackAction);
+        };
+        const normalizeFormActions = () => {
+          Array.from(document.forms).forEach((form) => {
+            const action = getFormAction(form);
+            if (action) {
+              form.setAttribute("action", action);
+            }
+            Array.from(form.querySelectorAll("[formaction]")).forEach((control) => {
+              const rawFormAction = control.getAttribute("formaction");
+              const nextFormAction = toAbsoluteUrl(
+                rawFormAction && rawFormAction.trim() ? rawFormAction : document.baseURI || ""
+              );
+              if (nextFormAction) {
+                control.setAttribute("formaction", nextFormAction);
+              }
+            });
+          });
+        };
         const scoreForm = (form) => {
-          const action = toAbsoluteUrl(form.getAttribute("action") || window.location.href);
+          const action = getFormAction(form);
           const text = (form.innerText || form.textContent || "").toLowerCase();
           let score = 0;
           if (isFlowUrl(action)) score += 100;
@@ -162,6 +184,9 @@ const buildBridgeHtml = (html, pageUrl) => {
         const triggerPayment = () => {
           const best = chooseBestForm();
           if (best && best.score > 0) {
+            if (best.action) {
+              best.form.setAttribute("action", best.action);
+            }
             const firstRadio = best.form.querySelector('input[type="radio"]');
             if (firstRadio && !firstRadio.checked) {
               firstRadio.checked = true;
@@ -187,6 +212,7 @@ const buildBridgeHtml = (html, pageUrl) => {
           return false;
         };
         const boot = () => {
+          normalizeFormActions();
           triggerPayment();
           window.setTimeout(triggerPayment, 250);
           window.setTimeout(triggerPayment, 1000);

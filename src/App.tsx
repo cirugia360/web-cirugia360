@@ -12,6 +12,9 @@ import ResultsPage from "./pages/ResultsPage";
 import TechnologyPage from "./pages/TechnologyPage";
 import BlogPage from "./pages/BlogPage";
 import BlogPostPage from "./pages/BlogPostPage";
+import BlefaroplastiaPage from "./pages/BlefaroplastiaPage";
+import LiftingPage from "./pages/LiftingPage";
+import LiposuccionPage from "./pages/LiposuccionPage";
 import MarcacionPage from "./pages/MarcacionPage";
 import RhinoplastyPage from "./pages/RhinoplastyPage";
 import SubcisionPage from "./pages/SubcisionPage";
@@ -48,6 +51,9 @@ const App = () => (
             <Route path="/marcacion-nivel-dios" element={<MarcacionPage />} />
             <Route path="/torres-rhinoplasty" element={<RhinoplastyPage />} />
             <Route path="/subcision-magic" element={<SubcisionPage />} />
+            <Route path="/procedimientos/blefaroplastia" element={<BlefaroplastiaPage />} />
+            <Route path="/procedimientos/lifting-facial" element={<LiftingPage />} />
+            <Route path="/procedimientos/liposuccion" element={<LiposuccionPage />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </ContactModalProvider>

@@ -32,20 +32,20 @@ const allProcedures = [
   },
   {
     title: "Lifting Facial",
-    desc: "Rejuvenecimiento facial con tecnicas minimamente invasivas.",
-    href: "/procedimientos",
+    desc: "Rejuvenecimiento de rostro y cuello con resultado natural y elegante.",
+    href: "/procedimientos/lifting-facial",
     image: liftingCover,
   },
   {
     title: "Blefaroplastia",
-    desc: "Cirugia de parpados para una mirada rejuvenecida y natural.",
-    href: "/procedimientos",
+    desc: "Cirugia de parpados para una mirada mas fresca, descansada y natural.",
+    href: "/procedimientos/blefaroplastia",
     image: blefaroplastiaCover,
   },
   {
     title: "Liposuccion",
-    desc: "Remodelacion corporal con tecnologia avanzada.",
-    href: "/procedimientos",
+    desc: "Contorno corporal para grasa localizada con resultado natural y armonico.",
+    href: "/procedimientos/liposuccion",
     image: liposuccionCover,
   },
 ];
