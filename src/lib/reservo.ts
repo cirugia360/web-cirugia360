@@ -1,4 +1,4 @@
-export type AppointmentType = "online" | "presencial";
+export type AppointmentType = "presencial";
 
 export type ReservoBookingOption = {
   id: AppointmentType;

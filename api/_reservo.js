@@ -15,22 +15,9 @@ const HTML_ENTITY_MAP = {
 };
 
 const bookingDefinitions = {
-  online: {
-    id: "online",
-    label: "Evaluacion online",
-    description: "Gratis por videollamada con el equipo clinico.",
-    priceLabel: "Gratis",
-    procedureName: "Consulta Medica Diagnostica Gratuita - Online",
-    professionalName: "EU. PATRICIA BARRADA",
-    locationLabel: "Videollamada",
-    durationMinutes: 20,
-    clinicName: "Dr Sebastian Torres Farr",
-    clinicAddress: "Avenida La Dehesa 440, oficina 315.",
-    envPrefix: "RESERVO_ONLINE",
-  },
   presencial: {
     id: "presencial",
-    label: "Evaluacion presencial",
+    label: "Evaluacion con el Dr. Torres",
     description: "$100.000 con el Dr. Sebastian Torres.",
     priceLabel: "$100.000",
     procedureName: "Consulta Medica Dr. Sebastian Torres - Presencial o a Distancia",

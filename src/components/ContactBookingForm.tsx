@@ -6,7 +6,6 @@ import {
   ChevronRight,
   LoaderCircle,
   MapPin,
-  Video,
 } from "lucide-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Calendar } from "@/components/ui/calendar";
@@ -31,24 +30,14 @@ type FormState = {
   telefono: string;
 };
 
-const appointmentCards: Record<
-  AppointmentType,
-  {
-    label: string;
-    description: string;
-    procedureName: string;
-  }
-> = {
-  online: {
-    label: "Evaluacion Online",
-    description: "Gratuita - Videollamada con el equipo",
-    procedureName: "Consulta Medica Diagnostica Gratuita - Online",
-  },
-  presencial: {
-    label: "Evaluacion Presencial",
-    description: "$100.000 - Con el Dr. Torres en clinica",
-    procedureName: "Consulta Medica Dr. Sebastian Torres - Presencial o a Distancia",
-  },
+const appointmentCard: {
+  label: string;
+  description: string;
+  procedureName: string;
+} = {
+  label: "Evaluacion con el Dr. Torres",
+  description: "$100.000 - Consulta medica con el Dr. Torres",
+  procedureName: "Consulta Medica Dr. Sebastian Torres - Presencial o a Distancia",
 };
 
 const fields: Array<{
@@ -219,7 +208,6 @@ const continueToPayment = (
 
 const ContactBookingForm = () => {
   const [step, setStep] = useState<Step>(1);
-  const [appointmentType, setAppointmentType] = useState<AppointmentType | null>(null);
   const [showDetailErrors, setShowDetailErrors] = useState(false);
   const [form, setForm] = useState<FormState>({
     rut: "",
@@ -232,11 +220,12 @@ const ContactBookingForm = () => {
   const [selectedDate, setSelectedDate] = useState("");
   const [selectedTime, setSelectedTime] = useState("");
   const [confirmedBooking, setConfirmedBooking] = useState<ReservoBookingResponse | null>(null);
+  const appointmentType: AppointmentType = "presencial";
 
   const availabilityQuery = useQuery({
     queryKey: ["reservo-availability", appointmentType],
-    queryFn: () => fetchReservoAvailability(appointmentType as AppointmentType),
-    enabled: appointmentType !== null,
+    queryFn: () => fetchReservoAvailability(appointmentType),
+    enabled: true,
     staleTime: 60_000,
   });
 
@@ -273,12 +262,6 @@ const ContactBookingForm = () => {
   }, [confirmedBooking, step]);
 
   useEffect(() => {
-    setSelectedDate("");
-    setSelectedTime("");
-    setShowDetailErrors(false);
-  }, [appointmentType]);
-
-  useEffect(() => {
     const nextAvailability = availabilityQuery.data?.availability || {};
     const nextDates = Object.keys(nextAvailability);
 
@@ -307,7 +290,7 @@ const ContactBookingForm = () => {
     }
   }, [availabilityQuery.data, selectedDate, selectedTime]);
 
-  const activeCard = appointmentType ? appointmentCards[appointmentType] : null;
+  const activeCard = appointmentCard;
   const activeOption: ReservoBookingOption | null = availabilityQuery.data?.option || null;
   const availability = availabilityQuery.data?.availability || {};
   const availableDates = Object.keys(availability);
@@ -359,7 +342,7 @@ const ContactBookingForm = () => {
   };
 
   const handlePrimaryAction = () => {
-    if (step === 1 && appointmentType) {
+    if (step === 1) {
       setStep(2);
       return;
     }
@@ -375,7 +358,7 @@ const ContactBookingForm = () => {
       return;
     }
 
-    if (step !== 3 || !appointmentType || !canConfirmBooking) {
+    if (step !== 3 || !canConfirmBooking) {
       return;
     }
 
@@ -397,8 +380,7 @@ const ContactBookingForm = () => {
     });
   };
 
-  const primaryButtonDisabled =
-    (step === 1 && !appointmentType) || (step === 3 && !canConfirmBooking);
+  const primaryButtonDisabled = step === 3 && !canConfirmBooking;
 
   return (
     <div className="card-premium p-5 sm:p-7">
@@ -421,29 +403,13 @@ const ContactBookingForm = () => {
 
       {step === 1 && (
         <div>
-          <h3 className="mb-2 font-serif text-xl font-medium text-foreground">Tipo de Evaluacion</h3>
+          <h3 className="mb-2 font-serif text-xl font-medium text-foreground">Evaluacion Disponible</h3>
           <p className="mb-6 text-sm text-muted-foreground">
-            Selecciona el tipo de evaluacion que prefieres.
+            La reserva disponible corresponde solo a la evaluacion con el Dr. Torres por $100.000.
           </p>
-          <div className="space-y-4">
-            {(["online", "presencial"] as AppointmentType[]).map((type) => {
-              const card = appointmentCards[type];
-              const isActive = appointmentType === type;
-
-              return (
-                <button
-                  key={type}
-                  type="button"
-                  onClick={() => setAppointmentType(type)}
-                  className={`w-full rounded-sm border-2 p-5 text-left transition-all ${
-                    isActive ? "border-primary bg-primary/5" : "border-border hover:border-primary/30"
-                  }`}
-                >
-                  <p className="font-serif text-lg font-medium text-foreground">{card.label}</p>
-                  <p className="mt-1 text-sm text-muted-foreground">{card.description}</p>
-                </button>
-              );
-            })}
+          <div className="rounded-sm border-2 border-primary bg-primary/5 p-5 text-left">
+            <p className="font-serif text-lg font-medium text-foreground">{activeCard.label}</p>
+            <p className="mt-1 text-sm text-muted-foreground">{activeCard.description}</p>
           </div>
         </div>
       )}
@@ -495,7 +461,7 @@ const ContactBookingForm = () => {
             </div>
             <div className="space-y-2 text-sm text-muted-foreground">
               <p className="flex items-center gap-2">
-                {appointmentType === "online" ? <Video size={14} /> : <MapPin size={14} />}
+                <MapPin size={14} />
                 {activeOption?.locationLabel || activeCard?.description}
               </p>
               <p>{activeOption?.professionalName}</p>
@@ -641,9 +607,7 @@ const ContactBookingForm = () => {
               </p>
               <p className="mb-8 text-sm text-muted-foreground">
                 {confirmedBooking.option.locationLabel}
-                {confirmedBooking.option.id === "presencial"
-                  ? ` - ${confirmedBooking.option.clinicAddress}`
-                  : ` - ${confirmedBooking.option.professionalName}`}
+                {` - ${confirmedBooking.option.clinicAddress}`}
               </p>
               <div className="rounded-sm border border-border bg-background/70 px-5 py-4 text-left">
                 <p className="text-xs font-sans uppercase tracking-[0.2em] text-muted-foreground">
@@ -654,7 +618,7 @@ const ContactBookingForm = () => {
                   {confirmedBooking.selectedSlot.date} - {confirmedBooking.selectedSlot.time}
                 </p>
                 <p className="mt-2 flex items-center gap-2 text-sm text-foreground">
-                  {confirmedBooking.option.id === "online" ? <Video size={14} /> : <MapPin size={14} />}
+                  <MapPin size={14} />
                   {confirmedBooking.option.locationLabel}
                 </p>
               </div>
@@ -687,7 +651,7 @@ const ContactBookingForm = () => {
                   Confirmando...
                 </span>
               ) : (
-                appointmentType === "presencial" ? "Confirmar y pagar" : "Confirmar reserva"
+                "Confirmar y pagar"
               )
             ) : (
               <span className="inline-flex items-center gap-2">
