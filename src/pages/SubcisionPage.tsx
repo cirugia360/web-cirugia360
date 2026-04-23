@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import ProcedureResultsPreviewSection from "@/components/landing/ProcedureResultsPreviewSection";
 import ScrollReveal from "@/components/ScrollReveal";
 import { ContactModalButton } from "@/components/ContactModalProvider";
 import {
@@ -569,6 +570,8 @@ const SubcisionPage = () => {
             </ScrollReveal>
           </div>
         </section>
+
+        <ProcedureResultsPreviewSection procedureId="subcision-magic" />
 
         <section className="section-padding bg-foreground">
           <div className="container-premium">

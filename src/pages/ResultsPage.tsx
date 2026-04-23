@@ -1,90 +1,43 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { ArrowUpRight } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import ScrollReveal from "@/components/ScrollReveal";
 import { ContactModalButton } from "@/components/ContactModalProvider";
+import {
+  proceduresWithResults,
+  resultsFilterParam,
+} from "@/data/procedureCatalog";
 
-const buildCases = (folder: string, title: string, files: string[]) =>
-  files.map((file, index) => ({
-    id: `${folder}-${index + 1}`,
-    label: `Caso ${index + 1}`,
-    src: `/images/results/${folder}/${file}`,
-    alt: `Resultado real de ${title}, caso ${index + 1}`,
-  }));
-
-const resultCollections = [
-  {
-    id: "torres-rhinoplasty",
-    title: "Torres Rhinoplasty",
-    eyebrow: "Rinoplastia",
-    description:
-      "Casos reales de rinoplastia con foco en armonia facial, definicion de punta y resultados naturales.",
-    href: "/torres-rhinoplasty",
-    cases: buildCases("torres-rhinoplasty", "Torres Rhinoplasty", [
-      "1.png",
-      "2.JPG",
-      "3.JPG",
-      "4.JPG",
-      "5.JPG",
-      "6.JPG",
-      "7.JPG",
-      "8.jpg",
-      "9.JPG",
-      "10.JPG",
-    ]),
-  },
-  {
-    id: "mnd",
-    title: "Marcacion Nivel Dios",
-    eyebrow: "Lipoescultura HD",
-    description:
-      "Resultados de marcacion abdominal y contorno corporal masculino con definicion avanzada y transiciones anatomicas limpias.",
-    href: "/marcacion-nivel-dios",
-    cases: buildCases("mnd", "Marcacion Nivel Dios", [
-      "1.png",
-      "2.png",
-      "3.JPG",
-      "4.jpg",
-      "5.JPG",
-      "6.JPG",
-      "7.JPG",
-      "8.JPG",
-      "9.JPG",
-      "10.JPG",
-    ]),
-  },
-  {
-    id: "subcision-magic",
-    title: "Subcision Magic",
-    eyebrow: "Celulitis",
-    description:
-      "Evolucion de pacientes tratados por celulitis profunda con subcision, liberacion de septos y mejoria visible del relieve cutaneo.",
-    href: "/subcision-magic",
-    cases: buildCases("subcision-magic", "Subcision Magic", [
-      "1.JPG",
-      "2.JPG",
-      "3.JPG",
-      "4.JPG",
-      "5.JPG",
-      "6.JPG",
-      "7.JPG",
-      "8.JPG",
-      "9.JPG",
-      "10.JPG",
-    ]),
-  },
+const categories = [
+  { id: "todos", label: "Todos" },
+  ...proceduresWithResults.map((procedure) => ({
+    id: procedure.id,
+    label: procedure.title,
+  })),
 ];
 
-const categories = ["Todos", ...resultCollections.map((collection) => collection.title)];
-
 const ResultsPage = () => {
-  const [active, setActive] = useState("Todos");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeParam = searchParams.get(resultsFilterParam);
+  const active =
+    activeParam && proceduresWithResults.some((collection) => collection.id === activeParam)
+      ? activeParam
+      : "todos";
+
   const visibleCollections =
-    active === "Todos"
-      ? resultCollections
-      : resultCollections.filter((collection) => collection.title === active);
+    active === "todos"
+      ? proceduresWithResults
+      : proceduresWithResults.filter((collection) => collection.id === active);
+
+  const handleFilterChange = (filterId: string) => {
+    if (filterId === "todos") {
+      setSearchParams({});
+      return;
+    }
+
+    setSearchParams({ [resultsFilterParam]: filterId });
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -107,17 +60,17 @@ const ResultsPage = () => {
             <div className="mb-12 flex flex-wrap justify-center gap-3">
               {categories.map((category) => (
                 <button
-                  key={category}
+                  key={category.id}
                   type="button"
-                  aria-pressed={active === category}
-                  onClick={() => setActive(category)}
+                  aria-pressed={active === category.id}
+                  onClick={() => handleFilterChange(category.id)}
                   className={`rounded-sm px-6 py-2 text-xs font-sans uppercase tracking-wider transition-all duration-300 ${
-                    active === category
+                    active === category.id
                       ? "bg-primary text-primary-foreground"
                       : "bg-muted text-muted-foreground hover:bg-primary/10"
                   }`}
                 >
-                  {category}
+                  {category.label}
                 </button>
               ))}
             </div>
@@ -145,7 +98,7 @@ const ResultsPage = () => {
                     <div className="max-w-3xl">
                       <p className="subtitle-premium mb-3">{collection.eyebrow}</p>
                       <h2 className="heading-section mb-3 text-foreground">{collection.title}</h2>
-                      <p className="text-muted-foreground">{collection.description}</p>
+                      <p className="text-muted-foreground">{collection.resultsDescription}</p>
                     </div>
 
                     <div className="flex flex-col items-start gap-3 md:items-end">

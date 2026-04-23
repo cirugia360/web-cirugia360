@@ -3,6 +3,7 @@ import { ArrowRight, Check, ChevronRight, MessageCircle } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import ExperienceMetricsSection from "@/components/landing/ExperienceMetricsSection";
+import ProcedureResultsPreviewSection from "@/components/landing/ProcedureResultsPreviewSection";
 import SpecialistSection from "@/components/landing/SpecialistSection";
 import ScrollReveal from "@/components/ScrollReveal";
 import { ContactModalButton } from "@/components/ContactModalProvider";
@@ -289,6 +290,8 @@ const RhinoplastyPage = () => {
             </ScrollReveal>
           </div>
         </section>
+
+        <ProcedureResultsPreviewSection procedureId="torres-rhinoplasty" />
 
         <ExperienceMetricsSection
           title="Referente en rinoplastia en Chile y Latinoamérica"

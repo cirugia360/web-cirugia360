@@ -3,52 +3,7 @@ import { ChevronRight } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import ScrollReveal from "@/components/ScrollReveal";
-import marcacionCover from "@/assets/marcacion.jpeg";
-import rinoplastiaCover from "@/assets/rinoplastia.jpeg";
-import subcisionCover from "@/assets/subcision.jpeg";
-
-const liftingCover = "/images/lifting.png";
-const blefaroplastiaCover = "/images/blefaroplastia.png";
-const liposuccionCover = "/images/liposuccion.png";
-
-const allProcedures = [
-  {
-    title: "Marcacion Nivel Dios",
-    desc: "Liposuccion de alta definicion avanzada para contorno corporal masculino.",
-    href: "/marcacion-nivel-dios",
-    image: marcacionCover,
-  },
-  {
-    title: "Torres Rhinoplasty",
-    desc: "Rinoplastia armonica y natural con mas de 5000 procedimientos.",
-    href: "/torres-rhinoplasty",
-    image: rinoplastiaCover,
-  },
-  {
-    title: "Subcision Magic",
-    desc: "Solucion definitiva para celulitis profunda.",
-    href: "/subcision-magic",
-    image: subcisionCover,
-  },
-  {
-    title: "Lifting Facial",
-    desc: "Rejuvenecimiento de rostro y cuello con resultado natural y elegante.",
-    href: "/procedimientos/lifting-facial",
-    image: liftingCover,
-  },
-  {
-    title: "Blefaroplastia",
-    desc: "Cirugia de parpados para una mirada mas fresca, descansada y natural.",
-    href: "/procedimientos/blefaroplastia",
-    image: blefaroplastiaCover,
-  },
-  {
-    title: "Liposuccion",
-    desc: "Contorno corporal para grasa localizada con resultado natural y armonico.",
-    href: "/procedimientos/liposuccion",
-    image: liposuccionCover,
-  },
-];
+import { procedureCatalog } from "@/data/procedureCatalog";
 
 const ProceduresPage = () => {
   return (
@@ -68,7 +23,7 @@ const ProceduresPage = () => {
           </ScrollReveal>
 
           <div className="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3">
-            {allProcedures.map((procedure, index) => (
+            {procedureCatalog.map((procedure, index) => (
               <ScrollReveal key={procedure.title} delay={index * 0.08}>
                 <Link to={procedure.href} className="group block">
                   <div className="card-premium overflow-hidden">
@@ -84,7 +39,7 @@ const ProceduresPage = () => {
                         {procedure.title}
                       </h3>
                       <p className="mb-4 text-sm leading-relaxed text-muted-foreground">
-                        {procedure.desc}
+                        {procedure.cardDescription}
                       </p>
                       <span className="inline-flex items-center gap-2 text-xs font-sans font-medium uppercase tracking-wider text-primary">
                         Conocer mas <ChevronRight size={14} />

@@ -18,6 +18,7 @@ import LiposuccionPage from "./pages/LiposuccionPage";
 import MarcacionPage from "./pages/MarcacionPage";
 import RhinoplastyPage from "./pages/RhinoplastyPage";
 import SubcisionPage from "./pages/SubcisionPage";
+import GenericProcedurePage from "./pages/GenericProcedurePage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -54,6 +55,26 @@ const App = () => (
             <Route path="/procedimientos/blefaroplastia" element={<BlefaroplastiaPage />} />
             <Route path="/procedimientos/lifting-facial" element={<LiftingPage />} />
             <Route path="/procedimientos/liposuccion" element={<LiposuccionPage />} />
+            <Route
+              path="/procedimientos/abdominoplastia"
+              element={<GenericProcedurePage procedureId="abdomino" />}
+            />
+            <Route
+              path="/procedimientos/implantes-mamarios"
+              element={<GenericProcedurePage procedureId="implantes-mamarios" />}
+            />
+            <Route
+              path="/procedimientos/lipofilling"
+              element={<GenericProcedurePage procedureId="lipofilling" />}
+            />
+            <Route
+              path="/procedimientos/lipopapada"
+              element={<GenericProcedurePage procedureId="lipopapada" />}
+            />
+            <Route
+              path="/procedimientos/armtite-renuvion"
+              element={<GenericProcedurePage procedureId="armtite-renuvion" />}
+            />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </ContactModalProvider>

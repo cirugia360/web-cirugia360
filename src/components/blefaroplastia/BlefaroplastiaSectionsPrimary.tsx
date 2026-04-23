@@ -1,5 +1,6 @@
 import { Check, ChevronRight } from "lucide-react";
 import { ContactModalButton } from "@/components/ContactModalProvider";
+import ProcedureResultsPreviewSection from "@/components/landing/ProcedureResultsPreviewSection";
 import ScrollReveal from "@/components/ScrollReveal";
 import SectionHeading from "@/components/marcacion/SectionHeading";
 import {
@@ -175,6 +176,8 @@ const BlefaroplastiaSectionsPrimary = () => (
         </div>
       </div>
     </section>
+
+    <ProcedureResultsPreviewSection procedureId="blefaroplastia" />
   </>
 );
 
