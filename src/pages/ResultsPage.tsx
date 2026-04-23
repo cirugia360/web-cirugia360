@@ -4,6 +4,7 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import ScrollReveal from "@/components/ScrollReveal";
 import { ContactModalButton } from "@/components/ContactModalProvider";
+import ResultsGalleryGrid from "@/components/results/ResultsGalleryGrid";
 import {
   proceduresWithResults,
   resultsFilterParam,
@@ -79,9 +80,9 @@ const ResultsPage = () => {
           <ScrollReveal>
             <div className="mb-16 rounded-lg border border-border/70 bg-muted/60 p-6 text-center">
               <p className="text-sm leading-relaxed text-muted-foreground">
-                Haz clic en cada imagen para verla en mayor tamano. Las fotografias corresponden a
-                pacientes reales y el resultado final siempre depende de la evaluacion, la tecnica y
-                el postoperatorio de cada caso.
+                Haz clic en cada imagen para verla en mayor tamano dentro de un popup y cerrarla
+                con la X. Las fotografias corresponden a pacientes reales y el resultado final
+                siempre depende de la evaluacion, la tecnica y el postoperatorio de cada caso.
               </p>
             </div>
           </ScrollReveal>
@@ -116,41 +117,7 @@ const ResultsPage = () => {
                   </div>
                 </ScrollReveal>
 
-                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
-                  {collection.cases.map((result, index) => (
-                    <ScrollReveal key={result.id} delay={Math.min(index * 0.05, 0.25)}>
-                      <figure className="card-premium overflow-hidden">
-                        <a
-                          href={result.src}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="group block"
-                        >
-                          <div className="aspect-square bg-muted/35 p-4">
-                            <img
-                              src={result.src}
-                              alt={result.alt}
-                              loading="lazy"
-                              decoding="async"
-                              className="h-full w-full rounded-md object-contain transition-transform duration-500 group-hover:scale-[1.02]"
-                            />
-                          </div>
-                          <figcaption className="flex items-center justify-between gap-4 border-t border-border/60 p-5">
-                            <div>
-                              <span className="text-[11px] font-sans uppercase tracking-[0.18em] text-accent">
-                                {collection.eyebrow}
-                              </span>
-                              <p className="mt-2 text-sm text-foreground">{result.label}</p>
-                            </div>
-                            <span className="text-[11px] font-sans uppercase tracking-[0.18em] text-primary">
-                              Abrir
-                            </span>
-                          </figcaption>
-                        </a>
-                      </figure>
-                    </ScrollReveal>
-                  ))}
-                </div>
+                <ResultsGalleryGrid cases={collection.cases} eyebrow={collection.eyebrow} />
               </section>
             ))}
           </div>

@@ -2,6 +2,7 @@ import { ArrowUpRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import ScrollReveal from "@/components/ScrollReveal";
 import SectionHeading from "@/components/marcacion/SectionHeading";
+import ResultsGalleryGrid from "@/components/results/ResultsGalleryGrid";
 import {
   buildResultsFilterHref,
   getProcedureById,
@@ -54,35 +55,14 @@ const ProcedureResultsPreviewSection = ({
           </div>
         </ScrollReveal>
 
-        <div className="mt-14 grid grid-cols-1 gap-6 md:grid-cols-3">
-          {procedure.previewCases.map((result, index) => (
-            <ScrollReveal key={result.id} delay={index * 0.08}>
-              <figure className="card-premium overflow-hidden">
-                <a href={result.src} target="_blank" rel="noreferrer" className="group block">
-                  <div className="aspect-square bg-muted/35 p-4">
-                    <img
-                      src={result.src}
-                      alt={result.alt}
-                      loading="lazy"
-                      decoding="async"
-                      className="h-full w-full rounded-md object-contain transition-transform duration-500 group-hover:scale-[1.02]"
-                    />
-                  </div>
-                  <figcaption className="flex items-center justify-between gap-4 border-t border-border/60 p-5">
-                    <div>
-                      <span className="text-[11px] font-sans uppercase tracking-[0.18em] text-accent">
-                        {procedure.eyebrow}
-                      </span>
-                      <p className="mt-2 text-sm text-foreground">{result.label}</p>
-                    </div>
-                    <span className="text-[11px] font-sans uppercase tracking-[0.18em] text-primary">
-                      Abrir
-                    </span>
-                  </figcaption>
-                </a>
-              </figure>
-            </ScrollReveal>
-          ))}
+        <div className="mt-14">
+          <ResultsGalleryGrid
+            cases={procedure.previewCases}
+            eyebrow={procedure.eyebrow}
+            gridClassName="grid grid-cols-1 gap-6 md:grid-cols-3"
+            delayStep={0.08}
+            maxDelay={0.16}
+          />
         </div>
 
         <ScrollReveal delay={0.18}>
