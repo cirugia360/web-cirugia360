@@ -120,14 +120,24 @@ export const mergeRuntimeSettingsIntoConfig = async (config, options = {}) => {
     }
   }
 
-  const activeSettingsAgents = (settings?.agents || []).filter((agent) => agent.active);
-  const mergedAgents = activeSettingsAgents.length
-    ? activeSettingsAgents.map(({ id, name, phone, email }) => ({ id, name, phone, email }))
-    : config.salesAgents;
+  // Keep ALL agents (active and inactive) in the merged list. Inactive agents
+  // carry `active: false` so the workflow can recognise them without losing
+  // the historical assignment on each lead.
+  const settingsAgents = (settings?.agents || []).map(({ id, name, phone, email, active }) => ({
+    id,
+    name,
+    phone,
+    email,
+    active: active !== false,
+  }));
+  const mergedAgents = settingsAgents.length
+    ? settingsAgents
+    : config.salesAgents.map((agent) => ({ ...agent, active: agent.active !== false }));
+  const activeMergedAgents = mergedAgents.filter((agent) => agent.active !== false);
 
-  if (requireAgents && !mergedAgents.length) {
+  if (requireAgents && activeMergedAgents.length === 0) {
     throw new Error(
-      "Define asesoras en el dashboard o en CIRUGIA360_STL_AGENTS_JSON antes de iniciar llamadas.",
+      "Define al menos una asesora activa en el dashboard o en CIRUGIA360_STL_AGENTS_JSON antes de iniciar llamadas.",
     );
   }
 

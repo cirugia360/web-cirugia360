@@ -25,6 +25,7 @@ vi.mock("./_cirugia360-speed-twilio.js", () => ({
 import {
   createBookingLeadFromBooking,
   createContactLead,
+  dispatchDueLeads,
   extractBookingReference,
   extractExternalReferenceCandidates,
   extractPaymentReference,
@@ -184,5 +185,63 @@ describe("cirugia360 speed-to-lead booking leads", () => {
         procedure_interest: "Rinoplastia",
       }),
     );
+  });
+});
+
+describe("cirugia360 speed-to-lead inactive-agent pause", () => {
+  const baseLead = {
+    id: "lead-1",
+    status: "scheduled",
+    payment_status: "not_required",
+    assigned_agent_name: "Maria",
+    assigned_agent_phone: "+56911111111",
+    assigned_agent_email: "maria@clinic.cl",
+    agent_attempts: 1,
+    metadata: {
+      routing: {
+        attemptedAgentIds: [],
+        currentAssignedAgentId: "agent-1",
+        nextStartAgentId: null,
+      },
+    },
+  };
+
+  it("pauses the lead and keeps the assignment when the asesora está inactiva", async () => {
+    const config = {
+      defaultCountryDialCode: "56",
+      retryDelaySeconds: 180,
+      agentCallCooldownSeconds: 180,
+      salesAgents: [
+        { id: "agent-1", name: "Maria", phone: "+56911111111", email: "maria@clinic.cl", active: false },
+        { id: "agent-2", name: "Ana", phone: "+56922222222", email: "ana@clinic.cl", active: true },
+      ],
+      twilioConfigured: false,
+      twilioPhoneNumber: "+56229146709",
+      appUrl: "https://example.com",
+      queuePaused: false,
+    };
+
+    dbMocks.claimDueSpeedLeads.mockResolvedValueOnce([baseLead]);
+    dbMocks.getSpeedLeadById.mockResolvedValueOnce(baseLead);
+
+    const result = await dispatchDueLeads(config, 10);
+
+    expect(result.pausedInactiveAgent).toBe(1);
+    expect(result.rescheduled).toBe(1);
+    expect(result.dispatched).toBe(0);
+
+    // Debe reprogramar sin modificar la asignación actual.
+    const updates = dbMocks.updateSpeedLead.mock.calls.map(([, patch]) => patch);
+    const touchedAssignment = updates.some(
+      (patch) =>
+        Object.prototype.hasOwnProperty.call(patch, "assigned_agent_name") ||
+        Object.prototype.hasOwnProperty.call(patch, "assigned_agent_phone") ||
+        Object.prototype.hasOwnProperty.call(patch, "assigned_agent_email"),
+    );
+
+    expect(touchedAssignment).toBe(false);
+
+    const eventNames = dbMocks.insertSpeedLeadEvent.mock.calls.map(([, eventType]) => eventType);
+    expect(eventNames).toContain("sales_call.paused_inactive_agent");
   });
 });

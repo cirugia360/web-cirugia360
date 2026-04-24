@@ -51,11 +51,18 @@ const rotateAgents = (agents, startAgentId) => {
   return [...agents.slice(startIndex), ...agents.slice(0, startIndex)];
 };
 
+const isAgentActive = (agent) => Boolean(agent) && agent.active !== false;
+
+const getActiveSalesAgents = (config) =>
+  (config.salesAgents || []).filter(isAgentActive);
+
+// Lookups resolve against the full list (active + inactive) so we can still
+// recognise a historical assignment when the asesora was toggled off.
 const getAgentById = (config, agentId) =>
-  config.salesAgents.find((agent) => agent.id === agentId) || null;
+  (config.salesAgents || []).find((agent) => agent.id === agentId) || null;
 
 const getAgentByPhone = (config, phone) =>
-  config.salesAgents.find((agent) => agent.phone === phone) || null;
+  (config.salesAgents || []).find((agent) => agent.phone === phone) || null;
 
 const getNextAgentId = (agents, currentAgentId) => {
   if (!agents.length) {
@@ -118,6 +125,31 @@ const markLeadAsNoAgentAvailable = async (lead, reason) => {
   return updatedLead;
 };
 
+// Reschedule the lead for a later retry without touching its assignment when
+// the currently assigned asesora was toggled off from the dashboard. Desactivar
+// la vendedora en el panel NO debe perder la relación comercial con sus leads.
+const pauseLeadForInactiveAgent = async (lead, config, assignedAgent) => {
+  const retryAtIso = buildRetryDate(config).toISOString();
+  const agentLabel = assignedAgent?.name || lead.assigned_agent_name || "la asesora asignada";
+  const reason = `${agentLabel} está pausada. Reactivala o reasigna el lead manualmente para reanudar las llamadas.`;
+  const updatedLead = await updateSpeedLead(lead.id, {
+    dispatch_scheduled_at: retryAtIso,
+    status: "scheduled",
+    sales_call_status: "scheduled",
+    twilio_sales_call_sid: null,
+    last_error: reason,
+  });
+
+  await insertSpeedLeadEvent(lead.id, "sales_call.paused_inactive_agent", {
+    scheduledAt: retryAtIso,
+    agentId: assignedAgent?.id || null,
+    agentName: assignedAgent?.name || lead.assigned_agent_name || null,
+    reason,
+  });
+
+  return updatedLead;
+};
+
 const buildRetryDate = (config, referenceTime = new Date()) =>
   new Date(referenceTime.getTime() + config.retryDelaySeconds * 1000);
 
@@ -125,8 +157,9 @@ const buildLeadDispatchPlan = async (lead, config, referenceTime = new Date(), o
   const routingState = getRoutingState(lead.metadata);
   const excludeAgentIds = new Set(options.excludeAgentIds || []);
   const attemptedAgentIds = new Set(options.resetCycle ? [] : routingState.attemptedAgentIds);
+  const activeAgents = getActiveSalesAgents(config);
   const orderedAgents = rotateAgents(
-    config.salesAgents,
+    activeAgents,
     routingState.nextStartAgentId || routingState.currentAssignedAgentId || null,
   );
   let scheduledFallbackAgent = null;
@@ -177,7 +210,7 @@ const buildLeadDispatchPlan = async (lead, config, referenceTime = new Date(), o
     agent: scheduledFallbackAgent,
     immediate: false,
     scheduledAt: buildRetryDate(config, referenceTime),
-    resetCycle: Boolean(options.resetCycle || attemptedAgentIds.size >= config.salesAgents.length),
+    resetCycle: Boolean(options.resetCycle || attemptedAgentIds.size >= activeAgents.length),
   };
 };
 
@@ -186,7 +219,7 @@ const scheduleLeadWithPlan = async (lead, plan, config, reason = null) => {
   const updatedRoutingState = {
     attemptedAgentIds: plan.resetCycle ? [] : routingState.attemptedAgentIds,
     currentAssignedAgentId: plan.agent.id,
-    nextStartAgentId: getNextAgentId(config.salesAgents, plan.agent.id),
+    nextStartAgentId: getNextAgentId(getActiveSalesAgents(config), plan.agent.id),
   };
   const scheduledAtIso = toIsoString(plan.scheduledAt);
   const updatedLead = await updateSpeedLead(lead.id, {
@@ -239,14 +272,21 @@ export const scheduleLeadForNextAttempt = async (lead, config, options = {}) => 
 
 const scheduleLeadRetryDelay = async (lead, config, reason = null, preferredAgent = null) => {
   const routingState = getRoutingState(lead.metadata);
+  const activeAgents = getActiveSalesAgents(config);
+  const preferredAgentActive = isAgentActive(preferredAgent) ? preferredAgent : null;
+  const currentAssignedAgent = getAssignedAgent(config, lead);
+  const assignedAgentActive = isAgentActive(currentAssignedAgent) ? currentAssignedAgent : null;
+  const rotationAgent = getAgentById(config, routingState.nextStartAgentId);
+  const rotationAgentActive = isAgentActive(rotationAgent) ? rotationAgent : null;
   const nextAgent =
-    preferredAgent ||
-    getAgentById(config, routingState.nextStartAgentId) ||
-    getAssignedAgent(config, lead) ||
-    config.salesAgents[0];
+    preferredAgentActive ||
+    rotationAgentActive ||
+    assignedAgentActive ||
+    activeAgents[0] ||
+    null;
   const retryAtIso = buildRetryDate(config).toISOString();
   const attemptedAgentIds =
-    routingState.attemptedAgentIds.length >= config.salesAgents.length
+    routingState.attemptedAgentIds.length >= activeAgents.length
       ? []
       : routingState.attemptedAgentIds;
   const updatedLead = await updateSpeedLead(lead.id, {
@@ -261,7 +301,7 @@ const scheduleLeadRetryDelay = async (lead, config, reason = null, preferredAgen
     metadata: withRoutingState(lead.metadata, {
       attemptedAgentIds,
       currentAssignedAgentId: nextAgent?.id || null,
-      nextStartAgentId: nextAgent ? getNextAgentId(config.salesAgents, nextAgent.id) : null,
+      nextStartAgentId: nextAgent ? getNextAgentId(activeAgents, nextAgent.id) : null,
     }),
   });
 
@@ -304,7 +344,7 @@ export const dispatchLeadToAssignedAgent = async (lead, config, options = {}) =>
   const updatedMetadata = withRoutingState(lead.metadata, {
     attemptedAgentIds: uniqueStrings([...routingState.attemptedAgentIds, assignedAgent.id]),
     currentAssignedAgentId: assignedAgent.id,
-    nextStartAgentId: getNextAgentId(config.salesAgents, assignedAgent.id),
+    nextStartAgentId: getNextAgentId(getActiveSalesAgents(config), assignedAgent.id),
   });
   const call = await client.calls.create({
     to: assignedAgent.phone,
@@ -835,6 +875,7 @@ export const dispatchDueLeads = async (config, limit = 20) => {
     rescheduled: 0,
     exhausted: 0,
     skippedPaid: 0,
+    pausedInactiveAgent: 0,
     failed: 0,
     paused: config.queuePaused,
     leadIds: [],
@@ -863,6 +904,18 @@ export const dispatchDueLeads = async (config, limit = 20) => {
 
     try {
       const lead = (await getSpeedLeadById(claimedLead.id)) || claimedLead;
+
+      // If the lead is already assigned to an asesora that is currently
+      // inactive in settings, pause the lead for a retry without touching
+      // its assignment. That way "desactivar" no se confunde con "eliminar".
+      const assignedAgent = getAssignedAgent(config, lead);
+      if (assignedAgent && !isAgentActive(assignedAgent)) {
+        await pauseLeadForInactiveAgent(lead, config, assignedAgent);
+        result.pausedInactiveAgent += 1;
+        result.rescheduled += 1;
+        continue;
+      }
+
       const nextAttempt = await scheduleLeadForNextAttempt(lead, config, {
         reason: "Lead reclamado desde la cola.",
       });

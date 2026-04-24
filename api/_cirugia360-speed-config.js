@@ -46,6 +46,7 @@ const normalizeAgent = (agent, index, defaultCountryDialCode) => {
     id: normalizeText(agent.id) || `agent-${index + 1}`,
     name,
     phone,
+    active: agent.active !== false,
   };
 };
 
@@ -79,6 +80,7 @@ const parseSalesAgents = (defaultCountryDialCode, requireAgents = true) => {
         id: "agent-1",
         name: singleAgentName,
         phone: normalizePhoneInput(singleAgentPhone, defaultCountryDialCode),
+        active: true,
       },
     ];
   }

@@ -423,6 +423,29 @@ const formatCompactMoney = (value: number) => {
   return `$${(value / 1000000).toFixed(1)}M`;
 };
 
+const leadMatchesSearch = (lead: DashboardLead, search: string) => {
+  const normalizedSearch = search.trim().toLowerCase();
+
+  if (!normalizedSearch) {
+    return true;
+  }
+
+  const haystack = [
+    lead.fullName,
+    lead.phone,
+    lead.email,
+    lead.procedureInterest,
+    lead.assignedAgentName,
+    lead.assignedAgentEmail,
+    lead.pipelineOutcomeReason,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return haystack.includes(normalizedSearch);
+};
+
 const PipelineBoard = ({
   leads,
   stages,
@@ -1334,7 +1357,19 @@ const LeadDetail = ({
   const [reason, setReason] = useState(lead.pipelineOutcomeReason || "");
   const [callbackTime, setCallbackTime] = useState(toDateTimeLocalValue(lead.dispatchScheduledAt));
   const [callbackContext, setCallbackContext] = useState(lead.callbackContext || "");
-  const [isSaving, setIsSaving] = useState(false);
+  const [savingAction, setSavingAction] = useState<
+    | "value"
+    | "note"
+    | "edit-note"
+    | "callback"
+    | "clear-callback"
+    | "outcome-active"
+    | "outcome-won"
+    | "outcome-lost"
+    | null
+  >(null);
+  const [deletingNoteId, setDeletingNoteId] = useState<number | null>(null);
+  const isSaving = savingAction !== null || deletingNoteId !== null;
   const [error, setError] = useState("");
   const [editingNoteId, setEditingNoteId] = useState<number | null>(null);
   const [editingNoteBody, setEditingNoteBody] = useState("");
@@ -1419,7 +1454,7 @@ const LeadDetail = ({
   }, [onClose]);
 
   const saveValue = async () => {
-    setIsSaving(true);
+    setSavingAction("value");
     setError("");
 
     try {
@@ -1436,7 +1471,7 @@ const LeadDetail = ({
       setError(message);
       showDrawerToast("error", message);
     } finally {
-      setIsSaving(false);
+      setSavingAction(null);
     }
   };
 
@@ -1447,7 +1482,7 @@ const LeadDetail = ({
       return;
     }
 
-    setIsSaving(true);
+    setSavingAction(`outcome-${outcome}` as "outcome-active" | "outcome-won" | "outcome-lost");
     setError("");
 
     try {
@@ -1469,7 +1504,7 @@ const LeadDetail = ({
       setError(message);
       showDrawerToast("error", message);
     } finally {
-      setIsSaving(false);
+      setSavingAction(null);
     }
   };
 
@@ -1478,7 +1513,7 @@ const LeadDetail = ({
       return;
     }
 
-    setIsSaving(true);
+    setSavingAction("note");
     setError("");
 
     try {
@@ -1496,7 +1531,7 @@ const LeadDetail = ({
       setError(message);
       showDrawerToast("error", message);
     } finally {
-      setIsSaving(false);
+      setSavingAction(null);
     }
   };
 
@@ -1545,11 +1580,11 @@ const LeadDetail = ({
       return;
     }
 
-    setIsSaving(true);
+    setSavingAction("callback");
     setError("");
 
     const saved = await onCallback(lead.id, callbackTimeIso, callbackContext, { skipToast: true });
-    setIsSaving(false);
+    setSavingAction(null);
 
     if (saved) {
       showDrawerToast("success", "Rellamada programada.", formatDate(callbackTimeIso));
@@ -1559,11 +1594,11 @@ const LeadDetail = ({
   };
 
   const clearCallback = async () => {
-    setIsSaving(true);
+    setSavingAction("clear-callback");
     setError("");
 
     const saved = await onCallback(lead.id, null, "", { skipToast: true });
-    setIsSaving(false);
+    setSavingAction(null);
 
     if (saved) {
       setCallbackTime("");
@@ -1584,9 +1619,9 @@ const LeadDetail = ({
       return;
     }
 
-    setIsSaving(true);
+    setSavingAction("edit-note");
     const saved = await onUpdateNote(lead.id, editingNoteId, editingNoteBody, { skipToast: true });
-    setIsSaving(false);
+    setSavingAction(null);
 
     if (saved) {
       setEditingNoteId(null);
@@ -1604,9 +1639,9 @@ const LeadDetail = ({
       return;
     }
 
-    setIsSaving(true);
+    setDeletingNoteId(leadNote.id);
     const deleted = await onDeleteNote(lead.id, leadNote.id);
-    setIsSaving(false);
+    setDeletingNoteId(null);
 
     if (deleted) {
       showDrawerToast("success", "Nota eliminada.");
@@ -1700,11 +1735,14 @@ const LeadDetail = ({
             {lead.dispatchScheduledAt ? (
               <button
                 type="button"
-                className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600"
+                className="inline-flex items-center gap-2 rounded-md border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 disabled:cursor-not-allowed disabled:opacity-60"
                 onClick={() => void clearCallback()}
                 disabled={isSaving}
               >
-                Cancelar
+                {savingAction === "clear-callback" ? (
+                  <RefreshCcw className="h-3 w-3 animate-spin" />
+                ) : null}
+                {savingAction === "clear-callback" ? "Cancelando..." : "Cancelar"}
               </button>
             ) : null}
           </div>
@@ -1730,11 +1768,14 @@ const LeadDetail = ({
             <div className="flex justify-end">
               <button
                 type="button"
-                className="rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white"
+                className="inline-flex items-center gap-2 rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
                 onClick={() => void saveCallback()}
                 disabled={isSaving}
               >
-                Programar rellamada
+                {savingAction === "callback" ? (
+                  <RefreshCcw className="h-4 w-4 animate-spin" />
+                ) : null}
+                {savingAction === "callback" ? "Programando..." : "Programar rellamada"}
               </button>
             </div>
           </div>
@@ -1768,24 +1809,53 @@ const LeadDetail = ({
                 />
                 <button
                   type="button"
-                  className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold"
+                  className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60"
                   onClick={saveValue}
                   disabled={isSaving}
+                  aria-label={savingAction === "value" ? "Guardando valor" : "Guardar valor comercial"}
                 >
-                  <Save className="h-4 w-4" />
+                  {savingAction === "value" ? (
+                    <RefreshCcw className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Save className="h-4 w-4" />
+                  )}
                 </button>
               </div>
             </label>
           </div>
           <div className="mt-3 grid gap-2 sm:grid-cols-3">
-            <button type="button" className="rounded-md border border-slate-200 px-3 py-2 text-sm" onClick={() => saveOutcome("active")}>
-              Activo
+            <button
+              type="button"
+              className="inline-flex items-center justify-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+              onClick={() => saveOutcome("active")}
+              disabled={isSaving}
+            >
+              {savingAction === "outcome-active" ? (
+                <RefreshCcw className="h-3.5 w-3.5 animate-spin" />
+              ) : null}
+              {savingAction === "outcome-active" ? "Guardando..." : "Activo"}
             </button>
-            <button type="button" className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800" onClick={() => saveOutcome("won")}>
-              Ganado
+            <button
+              type="button"
+              className="inline-flex items-center justify-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
+              onClick={() => saveOutcome("won")}
+              disabled={isSaving}
+            >
+              {savingAction === "outcome-won" ? (
+                <RefreshCcw className="h-3.5 w-3.5 animate-spin" />
+              ) : null}
+              {savingAction === "outcome-won" ? "Guardando..." : "Ganado"}
             </button>
-            <button type="button" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800" onClick={() => saveOutcome("lost")}>
-              Perdido
+            <button
+              type="button"
+              className="inline-flex items-center justify-center gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 disabled:cursor-not-allowed disabled:opacity-60"
+              onClick={() => saveOutcome("lost")}
+              disabled={isSaving}
+            >
+              {savingAction === "outcome-lost" ? (
+                <RefreshCcw className="h-3.5 w-3.5 animate-spin" />
+              ) : null}
+              {savingAction === "outcome-lost" ? "Guardando..." : "Perdido"}
             </button>
           </div>
           <div className="mt-3 grid gap-2">
@@ -1836,11 +1906,12 @@ const LeadDetail = ({
           />
           <button
             type="button"
-            className="mt-2 rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white"
+            className="mt-2 inline-flex items-center gap-2 rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
             onClick={saveNote}
-            disabled={isSaving}
+            disabled={isSaving || !note.trim()}
           >
-            Guardar nota
+            {savingAction === "note" ? <RefreshCcw className="h-4 w-4 animate-spin" /> : null}
+            {savingAction === "note" ? "Guardando..." : "Guardar nota"}
           </button>
           <div className="mt-4 space-y-3">
             {sortedNotes.map((leadNote) => (
@@ -1865,11 +1936,14 @@ const LeadDetail = ({
                       </button>
                       <button
                         type="button"
-                        className="rounded-md bg-slate-950 px-2 py-1 text-xs font-semibold text-white"
+                        className="inline-flex items-center gap-1.5 rounded-md bg-slate-950 px-2 py-1 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
                         onClick={() => void saveEditedNote()}
-                        disabled={isSaving}
+                        disabled={isSaving || !editingNoteBody.trim()}
                       >
-                        Guardar
+                        {savingAction === "edit-note" ? (
+                          <RefreshCcw className="h-3 w-3 animate-spin" />
+                        ) : null}
+                        {savingAction === "edit-note" ? "Guardando..." : "Guardar"}
                       </button>
                     </div>
                   </div>
@@ -1891,10 +1965,14 @@ const LeadDetail = ({
                     </button>
                     <button
                       type="button"
-                      className="text-xs font-semibold text-red-700"
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-red-700 disabled:cursor-not-allowed disabled:opacity-60"
                       onClick={() => void deleteNote(leadNote)}
+                      disabled={isSaving}
                     >
-                      Eliminar
+                      {deletingNoteId === leadNote.id ? (
+                        <RefreshCcw className="h-3 w-3 animate-spin" />
+                      ) : null}
+                      {deletingNoteId === leadNote.id ? "Eliminando..." : "Eliminar"}
                     </button>
                   </div>
                 ) : null}
@@ -2114,11 +2192,13 @@ const TeamSettings = ({
   const [lastSyncedKey, setLastSyncedKey] = useState<string | null>(() =>
     settings ? serializeTeamSettings(settings) : null,
   );
-  const [isSaving, setIsSaving] = useState(false);
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const [isTogglingQueue, setIsTogglingQueue] = useState(false);
   const [error, setError] = useState("");
   const settingsKey = useMemo(() => (settings ? serializeTeamSettings(settings) : null), [settings]);
   const draftKey = useMemo(() => serializeTeamSettings(draft), [draft]);
   const hasUnsavedChanges = Boolean(lastSyncedKey && draftKey !== lastSyncedKey);
+  const isSavingAny = isSavingSettings || isTogglingQueue;
 
   useEffect(() => {
     if (!settings || !settingsKey) {
@@ -2191,16 +2271,16 @@ const TeamSettings = ({
   };
 
   const saveSettings = async () => {
-    setIsSaving(true);
-    setError("");
-
     const validationError = validateTeamSettings();
 
     if (validationError) {
       setError(validationError);
-      setIsSaving(false);
+      showActionToast("warning", validationError);
       return;
     }
+
+    setIsSavingSettings(true);
+    setError("");
 
     try {
       const data = await apiRequest<AgentSettings>("/api/cirugia360-speed/dashboard?resource=sales-agents", {
@@ -2212,27 +2292,36 @@ const TeamSettings = ({
       setDraft(data);
       setLastSyncedKey(nextKey);
       onRefresh({ force: true });
+      showActionToast(
+        "success",
+        "Equipo actualizado.",
+        "Los cambios ya están vigentes para las próximas llamadas.",
+      );
     } catch (saveError) {
       if (isSessionExpiredError(saveError)) {
         await onSessionExpired();
         return;
       }
 
-      setError(saveError instanceof Error ? saveError.message : "No pudimos guardar.");
+      const message = saveError instanceof Error ? saveError.message : "No pudimos guardar.";
+      setError(message);
+      showActionToast("error", "No pudimos guardar el equipo.", message);
     } finally {
-      setIsSaving(false);
+      setIsSavingSettings(false);
     }
   };
 
   const toggleQueue = async () => {
-    setIsSaving(true);
+    const nextPaused = !draft.queuePaused;
+
+    setIsTogglingQueue(true);
     setError("");
 
     try {
       const data = await apiRequest<AgentSettings>("/api/cirugia360-speed/dashboard?resource=queue-control", {
         method: "POST",
         body: JSON.stringify({
-          action: draft.queuePaused ? "resume" : "pause",
+          action: nextPaused ? "pause" : "resume",
         }),
       });
       const nextKey = serializeTeamSettings(data);
@@ -2240,15 +2329,24 @@ const TeamSettings = ({
       setDraft(data);
       setLastSyncedKey(nextKey);
       onRefresh({ force: true });
+      showActionToast(
+        "success",
+        nextPaused ? "Cola pausada." : "Cola reanudada.",
+        nextPaused
+          ? "La cola deja de entregar nuevos leads hasta que la reanudes."
+          : "La cola volvió a entregar leads a las asesoras activas.",
+      );
     } catch (saveError) {
       if (isSessionExpiredError(saveError)) {
         await onSessionExpired();
         return;
       }
 
-      setError(saveError instanceof Error ? saveError.message : "No pudimos cambiar la cola.");
+      const message = saveError instanceof Error ? saveError.message : "No pudimos cambiar la cola.";
+      setError(message);
+      showActionToast("error", "No pudimos cambiar la cola.", message);
     } finally {
-      setIsSaving(false);
+      setIsTogglingQueue(false);
     }
   };
 
@@ -2262,17 +2360,18 @@ const TeamSettings = ({
           <div className="flex gap-2">
             <button
               type="button"
-              className="rounded-md bg-amber-700 px-3 py-1.5 text-xs font-semibold text-white"
+              className="inline-flex items-center gap-2 rounded-md bg-amber-700 px-3 py-1.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
               onClick={() => void saveSettings()}
-              disabled={isSaving}
+              disabled={isSavingAny}
             >
-              Guardar
+              {isSavingSettings ? <RefreshCcw className="h-3.5 w-3.5 animate-spin" /> : null}
+              {isSavingSettings ? "Guardando..." : "Guardar"}
             </button>
             <button
               type="button"
-              className="rounded-md border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900"
+              className="rounded-md border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 disabled:cursor-not-allowed disabled:opacity-60"
               onClick={discardChanges}
-              disabled={isSaving}
+              disabled={isSavingAny}
             >
               Descartar
             </button>
@@ -2288,11 +2387,23 @@ const TeamSettings = ({
         <button
           type="button"
           onClick={toggleQueue}
-          disabled={isSaving}
-          className="inline-flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm font-semibold"
+          disabled={isTogglingQueue}
+          className="inline-flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {draft.queuePaused ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
-          {draft.queuePaused ? "Reanudar cola" : "Pausar cola"}
+          {isTogglingQueue ? (
+            <RefreshCcw className="h-4 w-4 animate-spin" />
+          ) : draft.queuePaused ? (
+            <Play className="h-4 w-4" />
+          ) : (
+            <Pause className="h-4 w-4" />
+          )}
+          {isTogglingQueue
+            ? draft.queuePaused
+              ? "Reanudando..."
+              : "Pausando..."
+            : draft.queuePaused
+              ? "Reanudar cola"
+              : "Pausar cola"}
         </button>
       </div>
 
@@ -2380,12 +2491,16 @@ const TeamSettings = ({
         </button>
         <button
           type="button"
-          className="inline-flex items-center gap-2 rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white"
+          className="inline-flex items-center gap-2 rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
           onClick={saveSettings}
-          disabled={isSaving}
+          disabled={isSavingAny}
         >
-          <Save className="h-4 w-4" />
-          Guardar equipo
+          {isSavingSettings ? (
+            <RefreshCcw className="h-4 w-4 animate-spin" />
+          ) : (
+            <Save className="h-4 w-4" />
+          )}
+          {isSavingSettings ? "Guardando..." : "Guardar equipo"}
         </button>
       </div>
 
