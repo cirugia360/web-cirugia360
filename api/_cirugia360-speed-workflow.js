@@ -413,7 +413,7 @@ const buildBaseLeadRow = ({
       message: normalizedMessage,
     }),
     source_url: normalizeText(sourceUrl) || null,
-    payment_status,
+    payment_status: paymentStatus,
     payment_due_at: paymentDueAt,
     payment_confirmed_at: paymentConfirmedAt,
     payment_reference: normalizeText(paymentReference) || null,
