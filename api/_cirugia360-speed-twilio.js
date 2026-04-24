@@ -158,7 +158,9 @@ export const validateTwilioRequestIfNeeded = (request, config, params) => {
     return false;
   }
 
+  const validationParams = request.method === "GET" ? {} : params;
+
   return getTwilioValidationUrls(request, config).some((url) =>
-    twilio.validateRequest(config.twilioAuthToken, signature, url, params),
+    twilio.validateRequest(config.twilioAuthToken, signature, url, validationParams),
   );
 };

@@ -25,6 +25,16 @@ import { tryNextAgent } from "../../../_cirugia360-speed-workflow.js";
 
 const getLead = (request) => getSpeedLeadById(getFirstQueryValue(request.query?.leadId));
 
+const readTwilioVoiceParams = async (request) => {
+  if (request.method !== "GET") {
+    return readFormBody(request);
+  }
+
+  return Object.fromEntries(
+    Object.entries(request.query || {}).map(([key, value]) => [key, getFirstQueryValue(value)]),
+  );
+};
+
 const getDecisionMessage = (retryResult) => {
   if (retryResult === "dispatched") {
     return "No recibimos confirmacion. Vamos a intentar con otra asesora.";
@@ -213,14 +223,14 @@ const handleCustomerComplete = async (request, response, form) => {
 };
 
 export default async function handler(request, response) {
-  if (request.method !== "POST") {
-    return methodNotAllowed(response, ["POST"]);
+  if (!["GET", "POST"].includes(request.method)) {
+    return methodNotAllowed(response, ["GET", "POST"]);
   }
 
   const action = getFirstQueryValue(request.query?.action);
 
   try {
-    const form = await readFormBody(request);
+    const form = await readTwilioVoiceParams(request);
 
     switch (action) {
       case "sales-intro":
