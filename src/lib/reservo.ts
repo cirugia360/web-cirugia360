@@ -43,6 +43,16 @@ export type ReservoPaymentRedirect = {
   fields: Record<string, string>;
 };
 
+export type ReservoBookingFollowUp = {
+  leadId: string;
+  callStarted: boolean;
+  queued: boolean;
+  dispatchScheduledAt: string | null;
+  assignedAgent?: string | null;
+  bookingReference: string | null;
+  warning?: string | null;
+};
+
 export type ReservoBookingResponse = {
   ok: true;
   option: ReservoBookingOption;
@@ -53,6 +63,7 @@ export type ReservoBookingResponse = {
   };
   paymentUrl: string | null;
   paymentRedirect: ReservoPaymentRedirect | null;
+  bookingFollowUp: ReservoBookingFollowUp | null;
   source: unknown;
 };
 

@@ -1,4 +1,6 @@
 import { parseRawBody, sendJson } from "./_blog-shared.js";
+import { getCirugia360SpeedConfig } from "./_cirugia360-speed-config.js";
+import { createBookingLeadFromBooking } from "./_cirugia360-speed-workflow.js";
 import { createReservoBooking, validateBookingPayload } from "./_reservo.js";
 
 const readJsonPayload = async (request) => {
@@ -43,7 +45,30 @@ export default async function handler(request, response) {
 
   try {
     const booking = await createReservoBooking(payload);
-    sendJson(response, 200, booking);
+    let bookingFollowUp = null;
+
+    try {
+      const speedConfig = getCirugia360SpeedConfig(request, {
+        requireAgents: true,
+        requireTwilio: false,
+      });
+
+      bookingFollowUp = await createBookingLeadFromBooking(
+        {
+          bookingPayload: payload,
+          bookingResponse: booking,
+          sourceUrl: payload?.sourceUrl || "",
+        },
+        speedConfig,
+      );
+    } catch (bookingFollowUpError) {
+      console.error("Cirugia360 booking follow-up setup error", bookingFollowUpError);
+    }
+
+    sendJson(response, 200, {
+      ...booking,
+      bookingFollowUp,
+    });
   } catch (error) {
     console.error("Reservo booking API error", error);
     sendJson(response, error.statusCode || 500, {
