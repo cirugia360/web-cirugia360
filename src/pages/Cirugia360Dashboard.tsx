@@ -18,6 +18,7 @@ import {
   Pause,
   Phone,
   Play,
+  Plus,
   RefreshCcw,
   Save,
   Search,
@@ -146,11 +147,23 @@ type LeadCallResult = {
   warning?: string;
 };
 
+type CreateLeadPayload = {
+  fullName: string;
+  phone: string;
+  procedureInterest: string;
+  assignedAgentId: string;
+  pipelineValue: number;
+};
+
 type ToastTone = "success" | "warning" | "error";
 
 type ActionOptions = {
   skipToast?: boolean;
   skipUndoToast?: boolean;
+};
+
+type RefreshOptions = {
+  silent?: boolean;
 };
 
 type LeadSortKey = "createdAt" | "fullName" | "procedureInterest" | "assignedAgentName" | "status";
@@ -723,6 +736,7 @@ const PipelineBoard = ({
   onStage,
   onCall,
   onOutcome,
+  onNewLead,
   updatingLeadId,
   callingLeadId,
 }: {
@@ -732,6 +746,7 @@ const PipelineBoard = ({
   onStage: (leadId: string, stage: string, options?: ActionOptions) => Promise<boolean>;
   onCall: (leadId: string, options?: ActionOptions) => Promise<boolean>;
   onOutcome: (leadId: string, outcome: "active" | "lost" | "won", reason?: string, options?: ActionOptions) => Promise<boolean>;
+  onNewLead: () => void;
   updatingLeadId: string | null;
   callingLeadId: string | null;
 }) => {
@@ -1014,6 +1029,14 @@ const PipelineBoard = ({
             placeholder="Buscar paciente, telefono o asesora"
           />
         </label>
+        <button
+          type="button"
+          onClick={onNewLead}
+          className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-dashboard-primary px-3 text-sm font-bold text-white transition hover:opacity-90"
+        >
+          <Plus className="h-4 w-4" />
+          Nuevo lead
+        </button>
       </div>
 
       {view === "active" ? (
@@ -1252,11 +1275,13 @@ const LeadsTable = ({
   leads,
   onSelect,
   onCall,
+  onNewLead,
   callingLeadId,
 }: {
   leads: DashboardLead[];
   onSelect: (lead: DashboardLead) => void;
   onCall: (leadId: string, options?: ActionOptions) => Promise<boolean>;
+  onNewLead: () => void;
   callingLeadId: string | null;
 }) => {
   const [search, setSearch] = useState("");
@@ -1382,6 +1407,14 @@ const LeadsTable = ({
             </select>
           </label>
         </div>
+        <button
+          type="button"
+          onClick={onNewLead}
+          className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-dashboard-primary px-3 text-sm font-bold text-white transition hover:opacity-90"
+        >
+          <Plus className="h-4 w-4" />
+          Nuevo lead
+        </button>
       </div>
 
       <div className="overflow-x-auto">
@@ -1537,20 +1570,24 @@ const LeadCard = ({
 const LeadDetail = ({
   lead,
   stages,
+  settings,
   onClose,
   onStage,
   onValue,
   onOutcome,
   onNote,
+  onAgent,
   onCall,
 }: {
   lead: DashboardLead;
   stages: PipelineStage[];
+  settings: AgentSettings | null;
   onClose: () => void;
   onStage: (leadId: string, stage: string, options?: ActionOptions) => Promise<boolean>;
   onValue: (leadId: string, pipelineValue: number, options?: ActionOptions) => Promise<boolean>;
   onOutcome: (leadId: string, outcome: "active" | "lost" | "won", reason?: string, options?: ActionOptions) => Promise<boolean>;
   onNote: (leadId: string, body: string, options?: ActionOptions) => Promise<boolean>;
+  onAgent: (leadId: string, assignedAgentId: string, options?: ActionOptions) => Promise<boolean>;
   onCall: (leadId: string, options?: ActionOptions) => Promise<boolean>;
 }) => {
   const [note, setNote] = useState("");
@@ -1560,6 +1597,11 @@ const LeadDetail = ({
   const [error, setError] = useState("");
   const [drawerToast, setDrawerToast] = useState<{ id: number; tone: ToastTone; title: string; detail?: string } | null>(null);
   const drawerRef = useRef<HTMLElement | null>(null);
+  const activeAgents = (settings?.agents || []).filter((agent) => agent.active !== false);
+  const selectedAgentId =
+    activeAgents.find(
+      (agent) => agent.name === lead.assignedAgentName,
+    )?.id || "";
 
   const showDrawerToast = (tone: ToastTone, title: string, detail?: string) => {
     const id = Date.now();
@@ -1718,6 +1760,16 @@ const LeadDetail = ({
     }
   };
 
+  const updateDrawerAgent = async (assignedAgentId: string) => {
+    const saved = await onAgent(lead.id, assignedAgentId, { skipToast: true });
+
+    if (saved) {
+      showDrawerToast("success", "Asesora actualizada.");
+    } else {
+      showDrawerToast("error", "No pudimos actualizar la asesora.");
+    }
+  };
+
   return (
     <div
       className="fixed inset-0 z-40 bg-slate-950/20"
@@ -1768,7 +1820,21 @@ const LeadDetail = ({
           <Detail label="Procedimiento" value={lead.procedureInterest || "Evaluacion"} />
           <Detail label="Email" value={lead.email || "Sin dato"} />
           <Detail label="Creado" value={formatDate(lead.createdAt)} />
-          <Detail label="Asesora" value={lead.assignedAgentName || "Sin asignar"} />
+          <label className="text-sm">
+            <span className="text-xs font-medium uppercase tracking-wide text-slate-500">Asesora</span>
+            <select
+              className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2"
+              value={selectedAgentId}
+              onChange={(event) => void updateDrawerAgent(event.target.value)}
+            >
+              <option value="">Sin asignar</option>
+              {activeAgents.map((agent) => (
+                <option key={agent.id} value={agent.id}>
+                  {agent.name}
+                </option>
+              ))}
+            </select>
+          </label>
           <Detail label="Intentos" value={String(lead.agentAttempts || 0)} />
           <Detail label="Ultimo error" value={lead.lastError || "Sin error"} />
         </section>
@@ -1883,6 +1949,168 @@ const Detail = ({ label, value }: { label: string; value: string }) => (
     <p className="mt-1 break-words text-sm text-slate-900">{value}</p>
   </div>
 );
+
+const CreateLeadModal = ({
+  settings,
+  onClose,
+  onCreate,
+}: {
+  settings: AgentSettings | null;
+  onClose: () => void;
+  onCreate: (payload: CreateLeadPayload) => Promise<boolean>;
+}) => {
+  const [draft, setDraft] = useState<CreateLeadPayload>({
+    fullName: "",
+    phone: "",
+    procedureInterest: "Evaluacion",
+    assignedAgentId: "",
+    pipelineValue: 0,
+  });
+  const [error, setError] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const firstInputRef = useRef<HTMLInputElement | null>(null);
+  const activeAgents = (settings?.agents || []).filter((agent) => agent.active !== false);
+
+  useEffect(() => {
+    firstInputRef.current?.focus();
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    document.addEventListener("keydown", handleEscape);
+
+    return () => {
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [onClose]);
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError("");
+
+    if (!draft.fullName.trim() || !draft.phone.trim()) {
+      setError("Ingresa nombre y telefono.");
+      return;
+    }
+
+    setIsSaving(true);
+
+    try {
+      const created = await onCreate({
+        ...draft,
+        pipelineValue: Number(draft.pipelineValue || 0),
+      });
+
+      if (created) {
+        onClose();
+      }
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) {
+          onClose();
+        }
+      }}
+    >
+      <form
+        className="w-full max-w-lg rounded-lg bg-white shadow-xl"
+        onSubmit={submit}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="create-lead-title"
+      >
+        <div className="flex items-center justify-between border-b border-dashboard-line px-5 py-4">
+          <h2 id="create-lead-title" className="text-base font-bold text-dashboard-ink">Nuevo lead</h2>
+          <button type="button" className="rounded-md p-1.5 hover:bg-slate-100" onClick={onClose}>
+            <XCircle className="h-5 w-5 text-dashboard-muted" />
+          </button>
+        </div>
+        <div className="grid gap-4 p-5 sm:grid-cols-2">
+          <label className="text-sm font-medium sm:col-span-2">
+            Nombre
+            <input
+              ref={firstInputRef}
+              className="mt-1 h-10 w-full rounded-lg border border-dashboard-line px-3 text-sm outline-none focus:border-dashboard-primary"
+              value={draft.fullName}
+              onChange={(event) => setDraft((current) => ({ ...current, fullName: event.target.value }))}
+            />
+          </label>
+          <label className="text-sm font-medium">
+            Telefono
+            <input
+              className="mt-1 h-10 w-full rounded-lg border border-dashboard-line px-3 text-sm outline-none focus:border-dashboard-primary"
+              value={draft.phone}
+              onChange={(event) => setDraft((current) => ({ ...current, phone: event.target.value }))}
+            />
+          </label>
+          <label className="text-sm font-medium">
+            Valor estimado
+            <input
+              className="mt-1 h-10 w-full rounded-lg border border-dashboard-line px-3 text-sm outline-none focus:border-dashboard-primary"
+              inputMode="numeric"
+              value={draft.pipelineValue ? String(draft.pipelineValue) : ""}
+              onChange={(event) =>
+                setDraft((current) => ({ ...current, pipelineValue: Number(event.target.value.replace(/\D/g, "") || 0) }))
+              }
+            />
+          </label>
+          <label className="text-sm font-medium">
+            Procedimiento
+            <input
+              className="mt-1 h-10 w-full rounded-lg border border-dashboard-line px-3 text-sm outline-none focus:border-dashboard-primary"
+              value={draft.procedureInterest}
+              onChange={(event) => setDraft((current) => ({ ...current, procedureInterest: event.target.value }))}
+            />
+          </label>
+          <label className="text-sm font-medium">
+            Asesora inicial
+            <select
+              className="mt-1 h-10 w-full rounded-lg border border-dashboard-line bg-white px-3 text-sm outline-none focus:border-dashboard-primary"
+              value={draft.assignedAgentId}
+              onChange={(event) => setDraft((current) => ({ ...current, assignedAgentId: event.target.value }))}
+            >
+              <option value="">Sin asignar</option>
+              {activeAgents.map((agent) => (
+                <option key={agent.id} value={agent.id}>
+                  {agent.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          {error ? (
+            <p className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800 sm:col-span-2">{error}</p>
+          ) : null}
+        </div>
+        <div className="flex justify-end gap-2 border-t border-dashboard-line px-5 py-4">
+          <button
+            type="button"
+            className="rounded-md border border-dashboard-line px-3 py-2 text-sm font-bold text-dashboard-muted"
+            onClick={onClose}
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            disabled={isSaving}
+            className="inline-flex items-center gap-2 rounded-md bg-dashboard-primary px-3 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isSaving ? <RefreshCcw className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+            Crear lead
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+};
 
 const TeamSettings = ({
   settings,
@@ -2055,6 +2283,7 @@ const Cirugia360Dashboard = () => {
   const [snapshot, setSnapshot] = useState<DashboardSnapshot | null>(null);
   const [settings, setSettings] = useState<AgentSettings | null>(null);
   const [selectedLead, setSelectedLead] = useState<DashboardLead | null>(null);
+  const [isCreateLeadOpen, setIsCreateLeadOpen] = useState(false);
   const [error, setError] = useState("");
   const [authBanner, setAuthBanner] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -2066,6 +2295,8 @@ const Cirugia360Dashboard = () => {
     dateTo: toDateInputValue(new Date()),
   });
   const leadDetailReturnFocusRef = useRef<HTMLElement | null>(null);
+  const pollingTimerRef = useRef<number | null>(null);
+  const realtimeRefreshTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     const configError = getDashboardSupabaseConfigError();
@@ -2102,12 +2333,14 @@ const Cirugia360Dashboard = () => {
 
   const dashboardDateRange = useMemo(() => getDashboardDateRange(period, customRange), [customRange, period]);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (options: RefreshOptions = {}) => {
     if (!session) {
       return;
     }
 
-    setIsLoading(true);
+    if (!options.silent) {
+      setIsLoading(true);
+    }
     setError("");
 
     try {
@@ -2142,13 +2375,86 @@ const Cirugia360Dashboard = () => {
 
       setError(loadError instanceof Error ? loadError.message : "No pudimos cargar el dashboard.");
     } finally {
-      setIsLoading(false);
+      if (!options.silent) {
+        setIsLoading(false);
+      }
     }
   }, [dashboardDateRange.dateFrom, dashboardDateRange.dateTo, expireDashboardSession, session]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    if (!session) {
+      return undefined;
+    }
+
+    const clearPollingTimer = () => {
+      if (pollingTimerRef.current !== null) {
+        window.clearTimeout(pollingTimerRef.current);
+        pollingTimerRef.current = null;
+      }
+    };
+
+    const schedulePolling = () => {
+      clearPollingTimer();
+      const intervalMs = document.visibilityState === "visible" ? 60_000 : 180_000;
+
+      pollingTimerRef.current = window.setTimeout(() => {
+        void refresh({ silent: true }).finally(schedulePolling);
+      }, intervalMs);
+    };
+
+    const handleVisibilityChange = () => {
+      schedulePolling();
+    };
+
+    schedulePolling();
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      clearPollingTimer();
+    };
+  }, [refresh, session]);
+
+  useEffect(() => {
+    if (!session) {
+      return undefined;
+    }
+
+    const supabase = getDashboardSupabase();
+    const channel = supabase
+      .channel("c360-speed-leads-inserts")
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "c360_speed_leads",
+        },
+        () => {
+          if (realtimeRefreshTimerRef.current !== null) {
+            window.clearTimeout(realtimeRefreshTimerRef.current);
+          }
+
+          realtimeRefreshTimerRef.current = window.setTimeout(() => {
+            void refresh({ silent: true });
+          }, 750);
+        },
+      )
+      .subscribe();
+
+    return () => {
+      if (realtimeRefreshTimerRef.current !== null) {
+        window.clearTimeout(realtimeRefreshTimerRef.current);
+        realtimeRefreshTimerRef.current = null;
+      }
+
+      void supabase.removeChannel(channel);
+    };
+  }, [refresh, session]);
 
   const signOut = async () => {
     await getDashboardSupabase().auth.signOut();
@@ -2291,6 +2597,36 @@ const Cirugia360Dashboard = () => {
     }
   };
 
+  const createLead = async (payload: CreateLeadPayload) => {
+    setError("");
+
+    try {
+      const lead = await apiRequest<DashboardLead>("/api/cirugia360-speed/lead", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      setSnapshot((currentSnapshot) => {
+        if (!currentSnapshot) {
+          return currentSnapshot;
+        }
+
+        return withLeads(currentSnapshot, [lead, ...currentSnapshot.leads]);
+      });
+      showActionToast("success", "Lead creado.", lead.fullName);
+      return true;
+    } catch (createError) {
+      if (isSessionExpiredError(createError)) {
+        await expireDashboardSession();
+        return false;
+      }
+
+      const message = createError instanceof Error ? createError.message : "No se pudo crear el lead.";
+      setError(message);
+      showActionToast("error", "No se pudo crear el lead.", message);
+      return false;
+    }
+  };
+
   const updateOutcome = async (
     leadId: string,
     outcome: "active" | "lost" | "won",
@@ -2391,6 +2727,46 @@ const Cirugia360Dashboard = () => {
       return false;
     } finally {
       setUpdatingPipelineLeadId(null);
+    }
+  };
+
+  const updateAssignedAgent = async (leadId: string, assignedAgentId: string, options: ActionOptions = {}) => {
+    setError("");
+    const previousSnapshot = snapshot;
+    const agent = settings?.agents.find((currentAgent) => currentAgent.id === assignedAgentId) || null;
+    patchLead(leadId, { assignedAgentName: agent?.name || null });
+
+    try {
+      const updatedLead = await apiRequest<DashboardLead>("/api/cirugia360-speed/lead", {
+        method: "PATCH",
+        body: JSON.stringify({
+          leadId,
+          assignedAgentId: assignedAgentId || null,
+        }),
+      });
+      patchLead(leadId, { assignedAgentName: updatedLead.assignedAgentName });
+
+      if (!options.skipToast) {
+        showActionToast("success", "Asesora actualizada.");
+      }
+
+      return true;
+    } catch (agentError) {
+      if (isSessionExpiredError(agentError)) {
+        await expireDashboardSession();
+        return false;
+      }
+
+      const message = agentError instanceof Error ? agentError.message : "No pudimos actualizar la asesora.";
+      setError(message);
+      await reconcileAfterFailure(previousSnapshot);
+      setError(message);
+
+      if (!options.skipToast) {
+        showActionToast("error", "No pudimos actualizar la asesora.", message);
+      }
+
+      return false;
     }
   };
 
@@ -2542,6 +2918,14 @@ const Cirugia360Dashboard = () => {
             </p>
           </div>
           <div className="ml-auto flex shrink-0 flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setIsCreateLeadOpen(true)}
+              className="inline-flex items-center gap-2 rounded-[10px] bg-dashboard-primary px-3 py-2 text-sm font-bold text-white transition hover:opacity-90"
+            >
+              <Plus className="h-4 w-4" />
+              Nuevo lead
+            </button>
             <div className="flex rounded-[10px] border border-dashboard-line-soft bg-white p-1">
               {periodOptions.map((option) => (
                 <button
@@ -2683,6 +3067,7 @@ const Cirugia360Dashboard = () => {
               onStage={updateStage}
               onCall={callLead}
               onOutcome={updateOutcome}
+              onNewLead={() => setIsCreateLeadOpen(true)}
               updatingLeadId={updatingPipelineLeadId}
               callingLeadId={callingLeadId}
             />
@@ -2693,6 +3078,7 @@ const Cirugia360Dashboard = () => {
               leads={leads}
               onSelect={openLeadDetail}
               onCall={callLead}
+              onNewLead={() => setIsCreateLeadOpen(true)}
               callingLeadId={callingLeadId}
             />
           ) : null}
@@ -2714,12 +3100,21 @@ const Cirugia360Dashboard = () => {
           key={selectedLead.id}
           lead={selectedLead}
           stages={stages}
+          settings={settings}
           onClose={closeLeadDetail}
           onStage={updateStage}
           onValue={updatePipelineValue}
           onOutcome={updateOutcome}
           onNote={addLeadNote}
+          onAgent={updateAssignedAgent}
           onCall={callLead}
+        />
+      ) : null}
+      {isCreateLeadOpen ? (
+        <CreateLeadModal
+          settings={settings}
+          onClose={() => setIsCreateLeadOpen(false)}
+          onCreate={createLead}
         />
       ) : null}
     </main>
