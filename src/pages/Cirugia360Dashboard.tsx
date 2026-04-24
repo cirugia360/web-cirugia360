@@ -130,6 +130,13 @@ type ApiResult<T> = {
   [key: string]: unknown;
 };
 
+class SessionExpiredError extends Error {
+  constructor() {
+    super("Tu sesión expiró, vuelve a iniciar.");
+    this.name = "SessionExpiredError";
+  }
+}
+
 type LeadCallResult = {
   leadId: string;
   callStarted?: boolean;
@@ -260,7 +267,7 @@ const formatMetric = (metric: DashboardMetric) => {
   return String(metric.value ?? 0);
 };
 
-const apiRequest = async <T,>(path: string, options: RequestInit = {}) => {
+const apiRequest = async <T,>(path: string, options: RequestInit = {}, hasRetriedAuth = false): Promise<T> => {
   const token = await getDashboardAccessToken();
   const headers = new Headers(options.headers);
 
@@ -276,6 +283,18 @@ const apiRequest = async <T,>(path: string, options: RequestInit = {}) => {
     headers,
   });
   const payload = (await response.json().catch(() => null)) as ApiResult<T> | null;
+
+  if (response.status === 401) {
+    if (!hasRetriedAuth) {
+      const { data, error } = await getDashboardSupabase().auth.refreshSession();
+
+      if (!error && data.session) {
+        return apiRequest<T>(path, options, true);
+      }
+    }
+
+    throw new SessionExpiredError();
+  }
 
   if (!response.ok || !payload?.success) {
     throw new Error(payload?.error || "No pudimos completar la accion.");
@@ -302,6 +321,8 @@ const showActionToast = (tone: ToastTone, title: string, description?: string) =
 
   toast.error(title, options);
 };
+
+const isSessionExpiredError = (error: unknown) => error instanceof SessionExpiredError;
 
 const buildSpeedMetrics = (leads: DashboardLead[]): DashboardMetric[] => {
   const connected = leads.filter((lead) => lead.customerConnectedAt).length;
@@ -375,7 +396,7 @@ const withLeads = (snapshot: DashboardSnapshot, leads: DashboardLead[]): Dashboa
   };
 };
 
-const LoginPanel = ({ onReady }: { onReady: (session: Session) => void }) => {
+const LoginPanel = ({ onReady, banner }: { onReady: (session: Session) => void; banner?: string }) => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -407,7 +428,7 @@ const LoginPanel = ({ onReady }: { onReady: (session: Session) => void }) => {
   };
 
   return (
-    <main className="min-h-screen bg-[#f5f7f8] px-4 py-12 text-slate-950">
+    <main className="min-h-screen bg-dashboard-page-muted px-4 py-12 text-slate-950">
       <section className="mx-auto grid min-h-[calc(100vh-6rem)] max-w-md place-items-center">
         <form
           onSubmit={handleSubmit}
@@ -419,6 +440,12 @@ const LoginPanel = ({ onReady }: { onReady: (session: Session) => void }) => {
             </p>
             <h1 className="mt-2 text-2xl font-semibold">Dashboard comercial</h1>
           </div>
+
+          {banner ? (
+            <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm font-medium text-amber-900">
+              {banner}
+            </div>
+          ) : null}
 
           {configError ? (
             <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
@@ -620,19 +647,65 @@ const stageVisuals: Record<
   string,
   {
     icon: typeof User;
-    color: string;
-    soft: string;
+    iconClassName: string;
+    iconBackgroundClassName: string;
+    borderClassName: string;
   }
 > = {
-  nuevo: { icon: User, color: "#13344F", soft: "#edf3f7" },
-  contactado: { icon: Phone, color: "#3a9bb5", soft: "#e8f4f8" },
-  contacto_whatsapp: { icon: MessageCircle, color: "#18a957", soft: "#e9fbf1" },
-  esperando_pago: { icon: CreditCard, color: "#d98a06", soft: "#fff7e6" },
-  eval_presencial: { icon: Stethoscope, color: "#7c3aed", soft: "#f0e7ff" },
-  eval_online: { icon: Video, color: "#2563eb", soft: "#eaf0ff" },
-  presupuesto: { icon: FileText, color: "#0891b2", soft: "#e6f7fb" },
-  examenes: { icon: FlaskConical, color: "#c026d3", soft: "#fbe8ff" },
-  cirugia: { icon: CalendarCheck, color: "#22a06b", soft: "#e6f9f0" },
+  nuevo: {
+    icon: User,
+    iconClassName: "text-dashboard-stage-nuevo",
+    iconBackgroundClassName: "bg-dashboard-stage-nuevo-soft",
+    borderClassName: "border-t-dashboard-stage-nuevo",
+  },
+  contactado: {
+    icon: Phone,
+    iconClassName: "text-dashboard-stage-contactado",
+    iconBackgroundClassName: "bg-dashboard-stage-contactado-soft",
+    borderClassName: "border-t-dashboard-stage-contactado",
+  },
+  contacto_whatsapp: {
+    icon: MessageCircle,
+    iconClassName: "text-dashboard-stage-whatsapp",
+    iconBackgroundClassName: "bg-dashboard-stage-whatsapp-soft",
+    borderClassName: "border-t-dashboard-stage-whatsapp",
+  },
+  esperando_pago: {
+    icon: CreditCard,
+    iconClassName: "text-dashboard-stage-pago",
+    iconBackgroundClassName: "bg-dashboard-stage-pago-soft",
+    borderClassName: "border-t-dashboard-stage-pago",
+  },
+  eval_presencial: {
+    icon: Stethoscope,
+    iconClassName: "text-dashboard-stage-presencial",
+    iconBackgroundClassName: "bg-dashboard-stage-presencial-soft",
+    borderClassName: "border-t-dashboard-stage-presencial",
+  },
+  eval_online: {
+    icon: Video,
+    iconClassName: "text-dashboard-stage-online",
+    iconBackgroundClassName: "bg-dashboard-stage-online-soft",
+    borderClassName: "border-t-dashboard-stage-online",
+  },
+  presupuesto: {
+    icon: FileText,
+    iconClassName: "text-dashboard-stage-presupuesto",
+    iconBackgroundClassName: "bg-dashboard-stage-presupuesto-soft",
+    borderClassName: "border-t-dashboard-stage-presupuesto",
+  },
+  examenes: {
+    icon: FlaskConical,
+    iconClassName: "text-dashboard-stage-examenes",
+    iconBackgroundClassName: "bg-dashboard-stage-examenes-soft",
+    borderClassName: "border-t-dashboard-stage-examenes",
+  },
+  cirugia: {
+    icon: CalendarCheck,
+    iconClassName: "text-dashboard-stage-cirugia",
+    iconBackgroundClassName: "bg-dashboard-stage-cirugia-soft",
+    borderClassName: "border-t-dashboard-stage-cirugia",
+  },
 };
 
 const formatCompactMoney = (value: number) => {
@@ -835,15 +908,14 @@ const PipelineBoard = ({
               setDragId(null);
               setOverStage(null);
             }}
-            className={`group rounded-lg border bg-white p-3 shadow-sm transition ${
+            className={`group rounded-lg border border-dashboard-line border-t-[3px] bg-white p-3 shadow-sm transition ${visual.borderClassName} ${
               isUpdating ? "cursor-wait opacity-60" : "cursor-grab active:cursor-grabbing"
             } ${dragId === lead.id ? "opacity-40" : "hover:-translate-y-0.5 hover:shadow-md"}`}
-            style={{ borderColor: "#e4e8ec", borderTopColor: visual.color, borderTopWidth: 3 }}
           >
             <div className="flex items-start justify-between gap-3">
               <button className="min-w-0 flex-1 text-left" type="button" onClick={() => onSelect(lead)}>
-                <h3 className="truncate text-[14px] font-bold text-[#1a2332]">{lead.fullName}</h3>
-                <p className="mt-1 truncate text-xs font-medium text-[#5f6d7e]">
+                <h3 className="truncate text-[14px] font-bold text-dashboard-ink">{lead.fullName}</h3>
+                <p className="mt-1 truncate text-xs font-medium text-dashboard-muted">
                   {lead.procedureInterest || "Evaluacion"}
                 </p>
               </button>
@@ -852,7 +924,7 @@ const PipelineBoard = ({
                   <DropdownMenuTrigger asChild>
                     <button
                       type="button"
-                      className="rounded-md p-1 text-[#5f6d7e] opacity-0 outline-none transition hover:bg-[#edf3f7] hover:text-[#13344F] focus:opacity-100 focus-visible:ring-2 focus-visible:ring-[#13344F] group-hover:opacity-100"
+                      className="rounded-md p-1 text-dashboard-muted opacity-0 outline-none transition hover:bg-dashboard-soft hover:text-dashboard-primary focus:opacity-100 focus-visible:ring-2 focus-visible:ring-dashboard-primary group-hover:opacity-100"
                       aria-label={`Acciones para ${lead.fullName}`}
                       onClick={(event) => event.stopPropagation()}
                     >
@@ -863,18 +935,18 @@ const PipelineBoard = ({
                     {actionMenu}
                   </DropdownMenuContent>
                 </DropdownMenu>
-                <GripVertical className="mt-0.5 h-4 w-4 text-[#a7b0bc] transition group-hover:text-[#5f6d7e]" />
+                <GripVertical className="mt-0.5 h-4 w-4 text-dashboard-icon transition group-hover:text-dashboard-muted" />
               </div>
             </div>
 
             <div className="mt-3 flex items-center justify-between gap-2">
-              <strong className="text-lg font-bold tracking-[-0.01em] text-[#1a2332]">
+              <strong className="text-lg font-bold tracking-[-0.01em] text-dashboard-ink">
                 {formatCompactMoney(lead.pipelineValue)}
               </strong>
               <LeadStatusBadge lead={lead} />
             </div>
 
-            <div className="mt-3 grid gap-1.5 text-[11px] text-[#8e99a8]">
+            <div className="mt-3 grid gap-1.5 text-[11px] text-dashboard-subtle">
               <div className="flex items-center justify-between gap-2">
                 <span className="truncate">{lead.assignedAgentName || "Sin asesora"}</span>
                 <span className="shrink-0">{formatDate(lead.createdAt)}</span>
@@ -883,14 +955,14 @@ const PipelineBoard = ({
             </div>
 
             <label
-              className="mt-3 block text-[11px] font-bold uppercase tracking-wide text-[#8e99a8] md:hidden"
+              className="mt-3 block text-[11px] font-bold uppercase tracking-wide text-dashboard-subtle md:hidden"
               onClick={(event) => event.stopPropagation()}
               onMouseDown={(event) => event.stopPropagation()}
               onTouchStart={(event) => event.stopPropagation()}
             >
               Etapa
               <select
-                className="mt-1 h-9 w-full rounded-md border border-[#d9e0e5] bg-white px-2 text-xs font-semibold normal-case tracking-normal text-[#1a2332] outline-none focus:border-[#13344F]"
+                className="mt-1 h-9 w-full rounded-md border border-dashboard-line-strong bg-white px-2 text-xs font-semibold normal-case tracking-normal text-dashboard-ink outline-none focus:border-dashboard-primary"
                 value={lead.pipelineStage}
                 disabled={isUpdating}
                 onChange={(event) => {
@@ -915,7 +987,7 @@ const PipelineBoard = ({
 
   return (
     <section className="flex h-[calc(100dvh-74px)] min-h-[640px] flex-col overflow-hidden">
-      <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-[#e8ecf0] bg-[#f6f8fa] px-4 py-3 lg:px-6">
+      <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-dashboard-line-soft bg-dashboard-page px-4 py-3 lg:px-6">
         <div className="flex min-w-[260px] flex-1 flex-wrap items-center gap-2">
           {viewButtons.map((item) => (
             <button
@@ -924,8 +996,8 @@ const PipelineBoard = ({
               onClick={() => setView(item.id)}
               className={`rounded-lg border px-3 py-2 text-left transition ${
                 view === item.id
-                  ? "border-[#13344F] bg-[#edf3f7] text-[#13344F]"
-                  : "border-[#e4e8ec] bg-white text-[#5f6d7e] hover:border-[#cdd6df]"
+                  ? "border-dashboard-primary bg-dashboard-soft text-dashboard-primary"
+                  : "border-dashboard-line bg-white text-dashboard-muted hover:border-dashboard-line-hover"
               }`}
             >
               <span className="block text-[11px] font-bold uppercase tracking-wide">{item.label}</span>
@@ -934,9 +1006,9 @@ const PipelineBoard = ({
           ))}
         </div>
         <label className="relative w-full sm:w-[320px]">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#8e99a8]" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-dashboard-subtle" />
           <input
-            className="h-10 w-full rounded-lg border border-[#e4e8ec] bg-white pl-9 pr-3 text-sm outline-none transition focus:border-[#13344F]"
+            className="h-10 w-full rounded-lg border border-dashboard-line bg-white pl-9 pr-3 text-sm outline-none transition focus:border-dashboard-primary"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Buscar paciente, telefono o asesora"
@@ -974,24 +1046,23 @@ const PipelineBoard = ({
                   void handleDrop(stage.id);
                 }}
                 className={`flex h-full w-[min(86vw,300px)] shrink-0 flex-col rounded-lg border p-3 transition md:w-[300px] ${
-                  isOver ? "border-[#13344F] bg-[#edf3f7]" : "border-[#e4e8ec] bg-[#f9fafb]"
+                  isOver ? "border-dashboard-primary bg-dashboard-soft" : "border-dashboard-line bg-dashboard-surface"
                 }`}
               >
                 <header className="mb-3 shrink-0">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex min-w-0 items-center gap-2">
                       <span
-                        className="grid h-8 w-8 shrink-0 place-items-center rounded-lg"
-                        style={{ background: visual.soft, color: visual.color }}
+                        className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${visual.iconBackgroundClassName} ${visual.iconClassName}`}
                       >
                         <Icon className="h-4 w-4" />
                       </span>
                       <div className="min-w-0">
-                        <h2 className="truncate text-sm font-bold text-[#1a2332]">{stage.label}</h2>
-                        <p className="text-xs font-semibold text-[#8e99a8]">{formatCompactMoney(total)}</p>
+                        <h2 className="truncate text-sm font-bold text-dashboard-ink">{stage.label}</h2>
+                        <p className="text-xs font-semibold text-dashboard-subtle">{formatCompactMoney(total)}</p>
                       </div>
                     </div>
-                    <span className="rounded-md bg-white px-2 py-1 text-xs font-bold text-[#5f6d7e]">
+                    <span className="rounded-md bg-white px-2 py-1 text-xs font-bold text-dashboard-muted">
                       {stageLeads.length}
                     </span>
                   </div>
@@ -999,7 +1070,7 @@ const PipelineBoard = ({
                 <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
                   {stageLeads.map((lead) => renderLeadCard(lead, stage))}
                   {stageLeads.length === 0 ? (
-                    <div className="rounded-lg border border-dashed border-[#d9e0e5] bg-white/70 p-4 text-sm font-medium text-[#8e99a8]">
+                    <div className="rounded-lg border border-dashed border-dashboard-line-strong bg-white/70 p-4 text-sm font-medium text-dashboard-subtle">
                       Suelta una oportunidad aqui.
                     </div>
                   ) : null}
@@ -1023,12 +1094,12 @@ const PipelineBoard = ({
                     onSelect(lead);
                   }
                 }}
-                className="rounded-lg border border-[#e4e8ec] bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+                className="rounded-lg border border-dashboard-line bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <h3 className="truncate text-sm font-bold text-[#1a2332]">{lead.fullName}</h3>
-                    <p className="mt-1 truncate text-xs text-[#5f6d7e]">
+                    <h3 className="truncate text-sm font-bold text-dashboard-ink">{lead.fullName}</h3>
+                    <p className="mt-1 truncate text-xs text-dashboard-muted">
                       {lead.procedureInterest || "Evaluacion"}
                     </p>
                   </div>
@@ -1042,15 +1113,15 @@ const PipelineBoard = ({
                     {view === "won" ? "Ganada" : "Perdida"}
                   </span>
                 </div>
-                <strong className="mt-3 block text-xl font-bold text-[#1a2332]">
+                <strong className="mt-3 block text-xl font-bold text-dashboard-ink">
                   {formatCurrency(lead.pipelineValue)}
                 </strong>
-                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-[#8e99a8]">
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-dashboard-subtle">
                   <span>{lead.assignedAgentName || "Sin asesora"}</span>
                   <span>{formatDate(lead.createdAt)}</span>
                 </div>
                 {view === "lost" && lead.pipelineOutcomeReason ? (
-                  <p className="mt-3 line-clamp-2 text-xs leading-5 text-[#5f6d7e]">
+                  <p className="mt-3 line-clamp-2 text-xs leading-5 text-dashboard-muted">
                     {lead.pipelineOutcomeReason}
                   </p>
                 ) : null}
@@ -1061,7 +1132,7 @@ const PipelineBoard = ({
                       event.stopPropagation();
                       void onOutcome(lead.id, "active");
                     }}
-                    className="rounded-md border border-[#e4e8ec] px-3 py-1.5 text-xs font-bold text-[#13344F]"
+                    className="rounded-md border border-dashboard-line px-3 py-1.5 text-xs font-bold text-dashboard-primary"
                   >
                     Reabrir
                   </button>
@@ -1070,7 +1141,7 @@ const PipelineBoard = ({
             ))}
           </div>
           {filteredLeads.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-[#d9e0e5] bg-white p-6 text-sm font-medium text-[#8e99a8]">
+            <div className="rounded-lg border border-dashed border-dashboard-line-strong bg-white p-6 text-sm font-medium text-dashboard-subtle">
               No hay oportunidades para esta vista.
             </div>
           ) : null}
@@ -1080,24 +1151,24 @@ const PipelineBoard = ({
       {winLead ? (
         <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4" onClick={() => setWinLead(null)}>
           <div className="w-full max-w-md rounded-lg bg-white shadow-xl" onClick={(event) => event.stopPropagation()}>
-            <div className="flex items-center justify-between border-b border-[#e4e8ec] px-5 py-4">
-              <h2 className="text-base font-bold text-[#1a2332]">Marcar como ganada</h2>
+            <div className="flex items-center justify-between border-b border-dashboard-line px-5 py-4">
+              <h2 className="text-base font-bold text-dashboard-ink">Marcar como ganada</h2>
               <button type="button" className="rounded-md p-1.5 hover:bg-slate-100" onClick={() => setWinLead(null)}>
-                <XCircle className="h-5 w-5 text-[#5f6d7e]" />
+                <XCircle className="h-5 w-5 text-dashboard-muted" />
               </button>
             </div>
             <div className="space-y-3 p-5">
-              <p className="text-sm leading-6 text-[#5f6d7e]">
+              <p className="text-sm leading-6 text-dashboard-muted">
                 {winLead.fullName} saldra del pipeline activo y quedara registrada en Ganadas.
               </p>
               <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-3 text-sm font-semibold text-emerald-800">
                 Valor comercial: {formatCurrency(winLead.pipelineValue)}
               </div>
             </div>
-            <div className="flex justify-end gap-2 border-t border-[#e4e8ec] px-5 py-4">
+            <div className="flex justify-end gap-2 border-t border-dashboard-line px-5 py-4">
               <button
                 type="button"
-                className="rounded-md border border-[#e4e8ec] px-3 py-2 text-sm font-bold text-[#5f6d7e]"
+                className="rounded-md border border-dashboard-line px-3 py-2 text-sm font-bold text-dashboard-muted"
                 onClick={() => setWinLead(null)}
               >
                 Cancelar
@@ -1117,18 +1188,18 @@ const PipelineBoard = ({
       {lossLead ? (
         <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4" onClick={() => setLossLead(null)}>
           <div className="w-full max-w-md rounded-lg bg-white shadow-xl" onClick={(event) => event.stopPropagation()}>
-            <div className="flex items-center justify-between border-b border-[#e4e8ec] px-5 py-4">
-              <h2 className="text-base font-bold text-[#1a2332]">Marcar como perdida</h2>
+            <div className="flex items-center justify-between border-b border-dashboard-line px-5 py-4">
+              <h2 className="text-base font-bold text-dashboard-ink">Marcar como perdida</h2>
               <button type="button" className="rounded-md p-1.5 hover:bg-slate-100" onClick={() => setLossLead(null)}>
-                <XCircle className="h-5 w-5 text-[#5f6d7e]" />
+                <XCircle className="h-5 w-5 text-dashboard-muted" />
               </button>
             </div>
             <div className="space-y-3 p-5">
-              <p className="text-sm leading-6 text-[#5f6d7e]">
+              <p className="text-sm leading-6 text-dashboard-muted">
                 {lossLead.fullName} saldra del pipeline activo y quedara registrada en Perdidas.
               </p>
               <textarea
-                className="min-h-28 w-full rounded-lg border border-[#e4e8ec] px-3 py-2 text-sm outline-none focus:border-[#13344F]"
+                className="min-h-28 w-full rounded-lg border border-dashboard-line px-3 py-2 text-sm outline-none focus:border-dashboard-primary"
                 value={lossReason}
                 onChange={(event) => {
                   setLossReason(event.target.value);
@@ -1140,10 +1211,10 @@ const PipelineBoard = ({
                 <p className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">{lossError}</p>
               ) : null}
             </div>
-            <div className="flex justify-end gap-2 border-t border-[#e4e8ec] px-5 py-4">
+            <div className="flex justify-end gap-2 border-t border-dashboard-line px-5 py-4">
               <button
                 type="button"
-                className="rounded-md border border-[#e4e8ec] px-3 py-2 text-sm font-bold text-[#5f6d7e]"
+                className="rounded-md border border-dashboard-line px-3 py-2 text-sm font-bold text-dashboard-muted"
                 onClick={() => setLossLead(null)}
               >
                 Cancelar
@@ -1271,9 +1342,9 @@ const LeadsTable = ({
     <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
       <div className="flex flex-col gap-3 border-b border-slate-200 p-4 lg:flex-row lg:items-center">
         <label className="relative min-w-[240px] flex-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#8e99a8]" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-dashboard-subtle" />
           <input
-            className="h-10 w-full rounded-lg border border-[#e4e8ec] bg-white pl-9 pr-3 text-sm outline-none transition focus:border-[#13344F]"
+            className="h-10 w-full rounded-lg border border-dashboard-line bg-white pl-9 pr-3 text-sm outline-none transition focus:border-dashboard-primary"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Buscar paciente, telefono, procedimiento o asesora"
@@ -1283,7 +1354,7 @@ const LeadsTable = ({
           <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
             Estado
             <select
-              className="mt-1 h-10 w-full rounded-lg border border-[#e4e8ec] bg-white px-3 text-sm font-normal normal-case text-slate-900 outline-none focus:border-[#13344F]"
+              className="mt-1 h-10 w-full rounded-lg border border-dashboard-line bg-white px-3 text-sm font-normal normal-case text-slate-900 outline-none focus:border-dashboard-primary"
               value={statusFilter}
               onChange={(event) => setStatusFilter(event.target.value)}
             >
@@ -1298,7 +1369,7 @@ const LeadsTable = ({
           <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
             Asesora
             <select
-              className="mt-1 h-10 w-full rounded-lg border border-[#e4e8ec] bg-white px-3 text-sm font-normal normal-case text-slate-900 outline-none focus:border-[#13344F]"
+              className="mt-1 h-10 w-full rounded-lg border border-dashboard-line bg-white px-3 text-sm font-normal normal-case text-slate-900 outline-none focus:border-dashboard-primary"
               value={agentFilter}
               onChange={(event) => setAgentFilter(event.target.value)}
             >
@@ -1816,9 +1887,11 @@ const Detail = ({ label, value }: { label: string; value: string }) => (
 const TeamSettings = ({
   settings,
   onRefresh,
+  onSessionExpired,
 }: {
   settings: AgentSettings | null;
   onRefresh: () => void;
+  onSessionExpired: () => Promise<void>;
 }) => {
   const [draft, setDraft] = useState<AgentSettings>(
     settings || {
@@ -1857,6 +1930,11 @@ const TeamSettings = ({
       setDraft(data);
       onRefresh();
     } catch (saveError) {
+      if (isSessionExpiredError(saveError)) {
+        await onSessionExpired();
+        return;
+      }
+
       setError(saveError instanceof Error ? saveError.message : "No pudimos guardar.");
     } finally {
       setIsSaving(false);
@@ -1877,6 +1955,11 @@ const TeamSettings = ({
       setDraft(data);
       onRefresh();
     } catch (saveError) {
+      if (isSessionExpiredError(saveError)) {
+        await onSessionExpired();
+        return;
+      }
+
       setError(saveError instanceof Error ? saveError.message : "No pudimos cambiar la cola.");
     } finally {
       setIsSaving(false);
@@ -1973,6 +2056,7 @@ const Cirugia360Dashboard = () => {
   const [settings, setSettings] = useState<AgentSettings | null>(null);
   const [selectedLead, setSelectedLead] = useState<DashboardLead | null>(null);
   const [error, setError] = useState("");
+  const [authBanner, setAuthBanner] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [updatingPipelineLeadId, setUpdatingPipelineLeadId] = useState<string | null>(null);
   const [callingLeadId, setCallingLeadId] = useState<string | null>(null);
@@ -2000,7 +2084,20 @@ const Cirugia360Dashboard = () => {
 
     return subscribeDashboardSession((nextSession) => {
       setSession(nextSession);
+      if (nextSession) {
+        setAuthBanner("");
+      }
     });
+  }, []);
+
+  const expireDashboardSession = useCallback(async () => {
+    setAuthBanner("Tu sesión expiró, vuelve a iniciar.");
+    setError("");
+    setSnapshot(null);
+    setSettings(null);
+    setSelectedLead(null);
+    setSession(null);
+    await getDashboardSupabase().auth.signOut();
   }, []);
 
   const dashboardDateRange = useMemo(() => getDashboardDateRange(period, customRange), [customRange, period]);
@@ -2038,11 +2135,16 @@ const Cirugia360Dashboard = () => {
         currentLead ? dashboardData.leads.find((lead) => lead.id === currentLead.id) || null : null,
       );
     } catch (loadError) {
+      if (isSessionExpiredError(loadError)) {
+        await expireDashboardSession();
+        return;
+      }
+
       setError(loadError instanceof Error ? loadError.message : "No pudimos cargar el dashboard.");
     } finally {
       setIsLoading(false);
     }
-  }, [dashboardDateRange.dateFrom, dashboardDateRange.dateTo, session]);
+  }, [dashboardDateRange.dateFrom, dashboardDateRange.dateTo, expireDashboardSession, session]);
 
   useEffect(() => {
     void refresh();
@@ -2050,6 +2152,7 @@ const Cirugia360Dashboard = () => {
 
   const signOut = async () => {
     await getDashboardSupabase().auth.signOut();
+    setAuthBanner("");
     setSnapshot(null);
     setSettings(null);
   };
@@ -2122,6 +2225,11 @@ const Cirugia360Dashboard = () => {
       }
       return true;
     } catch (stageError) {
+      if (isSessionExpiredError(stageError)) {
+        await expireDashboardSession();
+        return false;
+      }
+
       const message = stageError instanceof Error ? stageError.message : "No pudimos actualizar la etapa.";
       setError(message);
       await reconcileAfterFailure(previousSnapshot);
@@ -2165,6 +2273,11 @@ const Cirugia360Dashboard = () => {
       }
       return true;
     } catch (callError) {
+      if (isSessionExpiredError(callError)) {
+        await expireDashboardSession();
+        return false;
+      }
+
       const message = callError instanceof Error ? callError.message : "No pudimos iniciar la llamada.";
       setError(message);
       await reconcileAfterFailure(previousSnapshot);
@@ -2225,6 +2338,11 @@ const Cirugia360Dashboard = () => {
       }
       return true;
     } catch (outcomeError) {
+      if (isSessionExpiredError(outcomeError)) {
+        await expireDashboardSession();
+        return false;
+      }
+
       const message = outcomeError instanceof Error ? outcomeError.message : "No pudimos actualizar la oportunidad.";
       setError(message);
       await reconcileAfterFailure(previousSnapshot);
@@ -2258,6 +2376,11 @@ const Cirugia360Dashboard = () => {
       }
       return true;
     } catch (valueError) {
+      if (isSessionExpiredError(valueError)) {
+        await expireDashboardSession();
+        return false;
+      }
+
       const message = valueError instanceof Error ? valueError.message : "No pudimos guardar el valor.";
       setError(message);
       await reconcileAfterFailure(previousSnapshot);
@@ -2339,6 +2462,11 @@ const Cirugia360Dashboard = () => {
       }
       return true;
     } catch (noteError) {
+      if (isSessionExpiredError(noteError)) {
+        await expireDashboardSession();
+        return false;
+      }
+
       const message = noteError instanceof Error ? noteError.message : "No pudimos guardar la nota.";
       setError(message);
       await reconcileAfterFailure(previousSnapshot);
@@ -2352,14 +2480,14 @@ const Cirugia360Dashboard = () => {
 
   if (!isAuthReady) {
     return (
-      <main className="grid min-h-screen place-items-center bg-[#f5f7f8] text-slate-950">
+      <main className="grid min-h-screen place-items-center bg-dashboard-page-muted text-slate-950">
         <RefreshCcw className="h-6 w-6 animate-spin" />
       </main>
     );
   }
 
   if (!session) {
-    return <LoginPanel onReady={setSession} />;
+    return <LoginPanel onReady={setSession} banner={authBanner} />;
   }
 
   const leads = snapshot?.leads || [];
@@ -2367,11 +2495,11 @@ const Cirugia360Dashboard = () => {
   const activeNavItem = navItems.find((item) => item.id === activeView);
 
   return (
-    <main className="min-h-screen bg-[#f6f8fa] text-[#1a2332] lg:pl-[220px]">
-      <aside className="hidden lg:fixed lg:inset-y-0 lg:left-0 lg:z-40 lg:flex lg:w-[220px] lg:flex-col lg:border-r lg:border-[#e8ecf0] lg:bg-white">
-        <div className="border-b border-[#e8ecf0] px-5 py-5">
-          <p className="text-[15px] font-bold tracking-[-0.01em] text-[#13344F]">Cirugia360</p>
-          <p className="mt-0.5 text-[10px] font-medium uppercase tracking-[0.15em] text-[#8e99a8]">
+    <main className="min-h-screen bg-dashboard-page text-dashboard-ink lg:pl-[220px]">
+      <aside className="hidden lg:fixed lg:inset-y-0 lg:left-0 lg:z-40 lg:flex lg:w-[220px] lg:flex-col lg:border-r lg:border-dashboard-line-soft lg:bg-white">
+        <div className="border-b border-dashboard-line-soft px-5 py-5">
+          <p className="text-[15px] font-bold tracking-[-0.01em] text-dashboard-primary">Cirugia360</p>
+          <p className="mt-0.5 text-[10px] font-medium uppercase tracking-[0.15em] text-dashboard-subtle">
             Lead system
           </p>
         </div>
@@ -2386,8 +2514,8 @@ const Cirugia360Dashboard = () => {
                 type="button"
                 className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-[13px] transition ${
                   active
-                    ? "bg-[#edf3f7] font-semibold text-[#13344F]"
-                    : "font-normal text-[#5f6d7e] hover:bg-[#f5f7f9] hover:text-[#13344F]"
+                    ? "bg-dashboard-soft font-semibold text-dashboard-primary"
+                    : "font-normal text-dashboard-muted hover:bg-dashboard-hover hover:text-dashboard-primary"
                 }`}
                 onClick={() => setActiveView(item.id)}
               >
@@ -2397,32 +2525,32 @@ const Cirugia360Dashboard = () => {
             );
           })}
         </nav>
-        <div className="border-t border-[#e8ecf0] px-5 py-4 text-[11px] text-[#8e99a8]">
+        <div className="border-t border-dashboard-line-soft px-5 py-4 text-[11px] text-dashboard-subtle">
           Dashboard comercial
         </div>
       </aside>
 
-      <header className="sticky top-0 z-30 border-b border-[#e8ecf0] bg-white/95 backdrop-blur lg:bg-white">
+      <header className="sticky top-0 z-30 border-b border-dashboard-line-soft bg-white/95 backdrop-blur lg:bg-white">
         <div className="flex flex-wrap items-center gap-3 px-4 py-3 lg:px-6">
           <div className="min-w-0 flex-1">
-            <p className="text-xs font-semibold uppercase tracking-wide text-[#8e99a8] lg:hidden">Cirugia360</p>
-            <h1 className="truncate text-lg font-bold tracking-[-0.01em] text-[#1a2332]">
+            <p className="text-xs font-semibold uppercase tracking-wide text-dashboard-subtle lg:hidden">Cirugia360</p>
+            <h1 className="truncate text-lg font-bold tracking-[-0.01em] text-dashboard-ink">
               {activeNavItem?.label || "Dashboard comercial"}
             </h1>
-            <p className="mt-0.5 truncate text-xs font-medium text-[#8e99a8]">
+            <p className="mt-0.5 truncate text-xs font-medium text-dashboard-subtle">
               {snapshot?.dateRange?.label || dashboardDateRange.label}
             </p>
           </div>
           <div className="ml-auto flex shrink-0 flex-wrap items-center gap-2">
-            <div className="flex rounded-[10px] border border-[#e8ecf0] bg-white p-1">
+            <div className="flex rounded-[10px] border border-dashboard-line-soft bg-white p-1">
               {periodOptions.map((option) => (
                 <button
                   key={option.id}
                   type="button"
                   className={`rounded-md px-2.5 py-1.5 text-xs font-bold transition ${
                     period === option.id
-                      ? "bg-[#edf3f7] text-[#13344F]"
-                      : "text-[#5f6d7e] hover:text-[#13344F]"
+                      ? "bg-dashboard-soft text-dashboard-primary"
+                      : "text-dashboard-muted hover:text-dashboard-primary"
                   }`}
                   onClick={() => setPeriod(option.id)}
                 >
@@ -2434,13 +2562,13 @@ const Cirugia360Dashboard = () => {
               <div className="flex items-center gap-2">
                 <input
                   type="date"
-                  className="h-9 rounded-[10px] border border-[#e8ecf0] bg-white px-2 text-xs font-semibold text-[#5f6d7e] outline-none focus:border-[#13344F]"
+                  className="h-9 rounded-[10px] border border-dashboard-line-soft bg-white px-2 text-xs font-semibold text-dashboard-muted outline-none focus:border-dashboard-primary"
                   value={customRange.dateFrom}
                   onChange={(event) => setCustomRange((current) => ({ ...current, dateFrom: event.target.value }))}
                 />
                 <input
                   type="date"
-                  className="h-9 rounded-[10px] border border-[#e8ecf0] bg-white px-2 text-xs font-semibold text-[#5f6d7e] outline-none focus:border-[#13344F]"
+                  className="h-9 rounded-[10px] border border-dashboard-line-soft bg-white px-2 text-xs font-semibold text-dashboard-muted outline-none focus:border-dashboard-primary"
                   value={customRange.dateTo}
                   onChange={(event) => setCustomRange((current) => ({ ...current, dateTo: event.target.value }))}
                 />
@@ -2449,7 +2577,7 @@ const Cirugia360Dashboard = () => {
             <button
               type="button"
               onClick={refresh}
-              className="inline-flex items-center gap-2 rounded-[10px] border border-[#e8ecf0] bg-white px-3 py-2 text-sm font-bold text-[#5f6d7e] transition hover:text-[#13344F]"
+              className="inline-flex items-center gap-2 rounded-[10px] border border-dashboard-line-soft bg-white px-3 py-2 text-sm font-bold text-dashboard-muted transition hover:text-dashboard-primary"
             >
               <RefreshCcw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
               Actualizar
@@ -2457,7 +2585,7 @@ const Cirugia360Dashboard = () => {
             <button
               type="button"
               onClick={signOut}
-              className="inline-flex items-center gap-2 rounded-[10px] border border-[#e8ecf0] bg-white px-3 py-2 text-sm font-bold text-[#5f6d7e] transition hover:text-[#13344F]"
+              className="inline-flex items-center gap-2 rounded-[10px] border border-dashboard-line-soft bg-white px-3 py-2 text-sm font-bold text-dashboard-muted transition hover:text-dashboard-primary"
             >
               <LogOut className="h-4 w-4" />
               Salir
@@ -2466,7 +2594,7 @@ const Cirugia360Dashboard = () => {
         </div>
         <nav
           aria-label="Secciones del dashboard"
-          className="flex gap-1 overflow-x-auto border-t border-[#e8ecf0] bg-white px-4 py-2 lg:hidden"
+          className="flex gap-1 overflow-x-auto border-t border-dashboard-line-soft bg-white px-4 py-2 lg:hidden"
         >
           {navItems.map((item) => {
             const Icon = item.icon;
@@ -2477,7 +2605,7 @@ const Cirugia360Dashboard = () => {
                 key={item.id}
                 type="button"
                 className={`flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-[13px] font-semibold transition ${
-                  active ? "bg-[#edf3f7] text-[#13344F]" : "text-[#5f6d7e] hover:bg-[#f5f7f9]"
+                  active ? "bg-dashboard-soft text-dashboard-primary" : "text-dashboard-muted hover:bg-dashboard-hover"
                 }`}
                 onClick={() => setActiveView(item.id)}
               >
@@ -2570,7 +2698,7 @@ const Cirugia360Dashboard = () => {
           ) : null}
 
           {activeView === "team" ? (
-            <TeamSettings settings={settings} onRefresh={refresh} />
+            <TeamSettings settings={settings} onRefresh={refresh} onSessionExpired={expireDashboardSession} />
           ) : null}
 
           {!snapshot && !error ? (
@@ -2599,3 +2727,4 @@ const Cirugia360Dashboard = () => {
 };
 
 export default Cirugia360Dashboard;
+
