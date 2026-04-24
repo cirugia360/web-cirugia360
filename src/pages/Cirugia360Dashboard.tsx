@@ -2351,7 +2351,16 @@ const TeamSettings = ({
   };
 
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+    <section className="relative rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      {isSavingAny ? (
+        <div className="absolute inset-0 z-10 grid place-items-center rounded-lg bg-white/60 backdrop-blur-[1px]">
+          <div className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm">
+            <RefreshCcw className="h-4 w-4 animate-spin" />
+            Guardando cambios...
+          </div>
+        </div>
+      ) : null}
+
       {hasUnsavedChanges ? (
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
           <span className="font-medium">
@@ -2565,6 +2574,7 @@ const Cirugia360Dashboard = () => {
   const [error, setError] = useState("");
   const [authBanner, setAuthBanner] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isTeamSettingsDirty, setIsTeamSettingsDirty] = useState(false);
   const [updatingPipelineLeadId, setUpdatingPipelineLeadId] = useState<string | null>(null);
   const [callingLeadId, setCallingLeadId] = useState<string | null>(null);
   const [period, setPeriod] = useState<DashboardPeriod>("7d");
@@ -2576,18 +2586,26 @@ const Cirugia360Dashboard = () => {
   const pollingTimerRef = useRef<number | null>(null);
   const realtimeRefreshTimerRef = useRef<number | null>(null);
   const sessionUserIdRef = useRef<string | null>(null);
+  const isTeamSettingsDirtyRef = useRef(false);
   const userId = session?.user.id || null;
 
   const resetDashboardState = useCallback(() => {
+    isTeamSettingsDirtyRef.current = false;
     setSnapshot(null);
     setSettings(null);
     setSelectedLead(null);
     setIsCreateLeadOpen(false);
     setError("");
     setIsLoading(false);
+    setIsTeamSettingsDirty(false);
     setUpdatingPipelineLeadId(null);
     setCallingLeadId(null);
     setActiveView("overview");
+  }, []);
+
+  const handleTeamDirtyChange = useCallback((hasUnsavedChanges: boolean) => {
+    isTeamSettingsDirtyRef.current = hasUnsavedChanges;
+    setIsTeamSettingsDirty(hasUnsavedChanges);
   }, []);
 
   useEffect(() => {
@@ -2629,6 +2647,13 @@ const Cirugia360Dashboard = () => {
 
   const refresh = useCallback(async (options: RefreshOptions = {}) => {
     if (!userId) {
+      return;
+    }
+
+    if (isTeamSettingsDirtyRef.current && !options.force) {
+      if (!options.silent) {
+        showActionToast("warning", "Tenés cambios sin guardar.", "Guarda o descarta los cambios de Equipo antes de actualizar.");
+      }
       return;
     }
 
@@ -2701,6 +2726,23 @@ const Cirugia360Dashboard = () => {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    if (!isTeamSettingsDirty) {
+      return undefined;
+    }
+
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "Tenés cambios sin guardar, ¿salir de todos modos?";
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [isTeamSettingsDirty]);
 
   useEffect(() => {
     if (!userId) {
@@ -3685,6 +3727,7 @@ const Cirugia360Dashboard = () => {
               agentPerformance={snapshot?.agentPerformance || []}
               onRefresh={refresh}
               onSessionExpired={expireDashboardSession}
+              onDirtyChange={handleTeamDirtyChange}
             />
           ) : null}
 
@@ -3732,4 +3775,3 @@ const Cirugia360DashboardWithBoundary = () => (
 );
 
 export default Cirugia360DashboardWithBoundary;
-
