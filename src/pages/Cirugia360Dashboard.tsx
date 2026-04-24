@@ -131,6 +131,13 @@ type LeadCallResult = {
   warning?: string;
 };
 
+type ToastTone = "success" | "warning" | "error";
+
+type ActionOptions = {
+  skipToast?: boolean;
+  skipUndoToast?: boolean;
+};
+
 const navItems = [
   { id: "overview", label: "Resumen", icon: LayoutDashboard },
   { id: "pipeline", label: "Pipeline", icon: Target },
@@ -195,6 +202,25 @@ const apiRequest = async <T,>(path: string, options: RequestInit = {}) => {
   }
 
   return (payload.data ?? payload) as T;
+};
+
+const showActionToast = (tone: ToastTone, title: string, description?: string) => {
+  const options = {
+    description,
+    duration: 4000,
+  };
+
+  if (tone === "success") {
+    toast.success(title, options);
+    return;
+  }
+
+  if (tone === "warning") {
+    toast.warning(title, options);
+    return;
+  }
+
+  toast.error(title, options);
 };
 
 const buildSpeedMetrics = (leads: DashboardLead[]): DashboardMetric[] => {
@@ -374,22 +400,111 @@ const MetricTile = ({ metric }: { metric: DashboardMetric }) => (
   </article>
 );
 
+const STATUS_LABELS: Record<string, { label: string; className: string }> = {
+  received: {
+    label: "Recibido",
+    className: "border-sky-200 bg-sky-50 text-sky-700",
+  },
+  scheduled: {
+    label: "Rellamada programada",
+    className: "border-amber-200 bg-amber-50 text-amber-700",
+  },
+  queued: {
+    label: "En cola",
+    className: "border-amber-200 bg-amber-50 text-amber-700",
+  },
+  dispatching: {
+    label: "Llamando",
+    className: "border-blue-200 bg-blue-50 text-blue-700",
+  },
+  queue_dispatching: {
+    label: "Llamando",
+    className: "border-blue-200 bg-blue-50 text-blue-700",
+  },
+  connecting_customer: {
+    label: "Conectando",
+    className: "border-blue-200 bg-blue-50 text-blue-700",
+  },
+  customer_connected: {
+    label: "Contactado",
+    className: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  },
+  completed: {
+    label: "Completada",
+    className: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  },
+  payment_confirmed: {
+    label: "Pago confirmado",
+    className: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  },
+  callback_requested: {
+    label: "Rellamada solicitada",
+    className: "border-amber-200 bg-amber-50 text-amber-700",
+  },
+  customer_unreachable: {
+    label: "No contestó",
+    className: "border-red-200 bg-red-50 text-red-700",
+  },
+  missed: {
+    label: "No contestó",
+    className: "border-red-200 bg-red-50 text-red-700",
+  },
+  dispatch_failed: {
+    label: "Error de llamada",
+    className: "border-red-200 bg-red-50 text-red-700",
+  },
+  failed: {
+    label: "Error",
+    className: "border-red-200 bg-red-50 text-red-700",
+  },
+  exhausted: {
+    label: "Sin intentos",
+    className: "border-red-200 bg-red-50 text-red-700",
+  },
+  prompting: {
+    label: "Confirmando",
+    className: "border-blue-200 bg-blue-50 text-blue-700",
+  },
+  initiated: {
+    label: "Llamando",
+    className: "border-blue-200 bg-blue-50 text-blue-700",
+  },
+  ringing: {
+    label: "Sonando",
+    className: "border-blue-200 bg-blue-50 text-blue-700",
+  },
+  answered: {
+    label: "Contestó",
+    className: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  },
+  "in-progress": {
+    label: "En llamada",
+    className: "border-blue-200 bg-blue-50 text-blue-700",
+  },
+};
+
+const FALLBACK_STATUS_CLASSNAME = "border-slate-200 bg-slate-50 text-slate-700";
+
+const humanizeStatus = (status: string) =>
+  status
+    .split(/[_-]+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ") || "Sin estado";
+
 const LeadStatusBadge = ({ lead }: { lead: DashboardLead }) => {
-  const connected = Boolean(lead.customerConnectedAt);
-  const failed = Boolean(lead.lastError);
-  const queued = ["scheduled", "dispatching"].includes(lead.status);
-  const label = connected ? "Contactado" : failed ? "Atencion" : queued ? "En cola" : lead.status;
-  const className = connected
-    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-    : failed
-      ? "border-red-200 bg-red-50 text-red-700"
-      : queued
-        ? "border-amber-200 bg-amber-50 text-amber-700"
-        : "border-slate-200 bg-slate-50 text-slate-700";
+  const statusKey =
+    lead.customerConnectedAt && ["received", "scheduled", "dispatching", "connecting_customer"].includes(lead.status)
+      ? "customer_connected"
+      : lead.status;
+  const status = STATUS_LABELS[statusKey] || {
+    label: lead.lastError ? "Atención" : humanizeStatus(statusKey),
+    className: lead.lastError ? STATUS_LABELS.failed.className : FALLBACK_STATUS_CLASSNAME,
+  };
 
   return (
-    <span className={`inline-flex rounded-md border px-2 py-1 text-xs font-medium ${className}`}>
-      {label}
+    <span className={`inline-flex rounded-md border px-2 py-1 text-xs font-medium ${status.className}`}>
+      {status.label}
     </span>
   );
 };
@@ -434,9 +549,9 @@ const PipelineBoard = ({
   leads: DashboardLead[];
   stages: PipelineStage[];
   onSelect: (lead: DashboardLead) => void;
-  onStage: (leadId: string, stage: string) => Promise<void>;
-  onCall: (leadId: string) => Promise<void>;
-  onOutcome: (leadId: string, outcome: "active" | "lost" | "won", reason?: string) => Promise<boolean>;
+  onStage: (leadId: string, stage: string, options?: ActionOptions) => Promise<boolean>;
+  onCall: (leadId: string, options?: ActionOptions) => Promise<boolean>;
+  onOutcome: (leadId: string, outcome: "active" | "lost" | "won", reason?: string, options?: ActionOptions) => Promise<boolean>;
   updatingLeadId: string | null;
   callingLeadId: string | null;
 }) => {
@@ -983,30 +1098,51 @@ const LeadDetail = ({
   lead: DashboardLead;
   stages: PipelineStage[];
   onClose: () => void;
-  onStage: (leadId: string, stage: string) => Promise<void>;
-  onValue: (leadId: string, pipelineValue: number) => Promise<boolean>;
-  onOutcome: (leadId: string, outcome: "active" | "lost" | "won", reason?: string) => Promise<boolean>;
-  onNote: (leadId: string, body: string) => Promise<boolean>;
-  onCall: (leadId: string) => void;
+  onStage: (leadId: string, stage: string, options?: ActionOptions) => Promise<boolean>;
+  onValue: (leadId: string, pipelineValue: number, options?: ActionOptions) => Promise<boolean>;
+  onOutcome: (leadId: string, outcome: "active" | "lost" | "won", reason?: string, options?: ActionOptions) => Promise<boolean>;
+  onNote: (leadId: string, body: string, options?: ActionOptions) => Promise<boolean>;
+  onCall: (leadId: string, options?: ActionOptions) => Promise<boolean>;
 }) => {
   const [note, setNote] = useState("");
   const [value, setValue] = useState(String(Math.round(lead.pipelineValue || 0)));
   const [reason, setReason] = useState(lead.pipelineOutcomeReason || "");
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
+  const [drawerToast, setDrawerToast] = useState<{ id: number; tone: ToastTone; title: string; detail?: string } | null>(null);
+
+  const showDrawerToast = (tone: ToastTone, title: string, detail?: string) => {
+    const id = Date.now();
+    setDrawerToast({ id, tone, title, detail });
+    window.setTimeout(() => {
+      setDrawerToast((currentToast) => (currentToast?.id === id ? null : currentToast));
+    }, 4000);
+  };
+
+  const drawerToastClassName =
+    drawerToast?.tone === "success"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+      : drawerToast?.tone === "warning"
+        ? "border-amber-200 bg-amber-50 text-amber-900"
+        : "border-red-200 bg-red-50 text-red-900";
 
   const saveValue = async () => {
     setIsSaving(true);
     setError("");
 
     try {
-      const saved = await onValue(lead.id, Number(value || 0));
+      const saved = await onValue(lead.id, Number(value || 0), { skipToast: true });
 
       if (!saved) {
         setError("No pudimos guardar.");
+        showDrawerToast("error", "No pudimos guardar el valor.");
+      } else {
+        showDrawerToast("success", "Valor comercial guardado.");
       }
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "No pudimos guardar.");
+      const message = saveError instanceof Error ? saveError.message : "No pudimos guardar.";
+      setError(message);
+      showDrawerToast("error", message);
     } finally {
       setIsSaving(false);
     }
@@ -1017,13 +1153,19 @@ const LeadDetail = ({
     setError("");
 
     try {
-      const saved = await onOutcome(lead.id, outcome, reason);
+      const saved = await onOutcome(lead.id, outcome, reason, { skipToast: true, skipUndoToast: true });
 
       if (!saved) {
         setError("No pudimos guardar.");
+        showDrawerToast("error", "No pudimos guardar.");
+      } else {
+        const outcomeText = outcome === "won" ? "ganada" : outcome === "lost" ? "perdida" : "activa";
+        showDrawerToast("success", `Oportunidad ${outcomeText}.`);
       }
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "No pudimos guardar.");
+      const message = saveError instanceof Error ? saveError.message : "No pudimos guardar.";
+      setError(message);
+      showDrawerToast("error", message);
     } finally {
       setIsSaving(false);
     }
@@ -1038,17 +1180,41 @@ const LeadDetail = ({
     setError("");
 
     try {
-      const saved = await onNote(lead.id, note);
+      const saved = await onNote(lead.id, note, { skipToast: true });
 
       if (saved) {
         setNote("");
+        showDrawerToast("success", "Nota guardada.");
       } else {
         setError("No pudimos guardar la nota.");
+        showDrawerToast("error", "No pudimos guardar la nota.");
       }
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "No pudimos guardar la nota.");
+      const message = saveError instanceof Error ? saveError.message : "No pudimos guardar la nota.";
+      setError(message);
+      showDrawerToast("error", message);
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const updateDrawerStage = async (stage: string) => {
+    const saved = await onStage(lead.id, stage, { skipToast: true });
+
+    if (saved) {
+      showDrawerToast("success", "Etapa actualizada.");
+    } else {
+      showDrawerToast("error", "No pudimos actualizar la etapa.");
+    }
+  };
+
+  const callFromDrawer = async () => {
+    const called = await onCall(lead.id, { skipToast: true });
+
+    if (called) {
+      showDrawerToast("success", "Llamada solicitada.");
+    } else {
+      showDrawerToast("error", "No pudimos iniciar la llamada.");
     }
   };
 
@@ -1065,10 +1231,17 @@ const LeadDetail = ({
       </div>
 
       <div className="space-y-5 p-5">
+        {drawerToast ? (
+          <div className={`sticky top-[73px] z-20 rounded-lg border px-4 py-3 text-sm shadow-sm ${drawerToastClassName}`}>
+            <p className="font-semibold">{drawerToast.title}</p>
+            {drawerToast.detail ? <p className="mt-1 text-xs opacity-80">{drawerToast.detail}</p> : null}
+          </div>
+        ) : null}
+
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            onClick={() => onCall(lead.id)}
+            onClick={() => void callFromDrawer()}
             className="inline-flex items-center gap-2 rounded-md bg-teal-700 px-3 py-2 text-sm font-semibold text-white"
           >
             <Phone className="h-4 w-4" />
@@ -1094,7 +1267,7 @@ const LeadDetail = ({
               <select
                 className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2"
                 value={lead.pipelineStage}
-                onChange={(event) => onStage(lead.id, event.target.value)}
+                onChange={(event) => void updateDrawerStage(event.target.value)}
               >
                 {stages.map((stage) => (
                   <option key={stage.id} value={stage.id}>
@@ -1450,7 +1623,7 @@ const Cirugia360Dashboard = () => {
     [refresh, restoreSnapshot],
   );
 
-  const updateStage = async (leadId: string, stage: string) => {
+  const updateStage = async (leadId: string, stage: string, options: ActionOptions = {}) => {
     setError("");
     setUpdatingPipelineLeadId(leadId);
     const previousSnapshot = snapshot;
@@ -1465,17 +1638,25 @@ const Cirugia360Dashboard = () => {
           stage,
         }),
       });
+      if (!options.skipToast) {
+        showActionToast("success", "Etapa actualizada.");
+      }
+      return true;
     } catch (stageError) {
       const message = stageError instanceof Error ? stageError.message : "No pudimos actualizar la etapa.";
       setError(message);
       await reconcileAfterFailure(previousSnapshot);
       setError(message);
+      if (!options.skipToast) {
+        showActionToast("error", "No pudimos actualizar la etapa.", message);
+      }
+      return false;
     } finally {
       setUpdatingPipelineLeadId(null);
     }
   };
 
-  const callLead = async (leadId: string) => {
+  const callLead = async (leadId: string, options: ActionOptions = {}) => {
     setError("");
     setCallingLeadId(leadId);
     const previousSnapshot = snapshot;
@@ -1496,11 +1677,23 @@ const Cirugia360Dashboard = () => {
         dispatchScheduledAt: result.dispatchScheduledAt || null,
         ...(result.assignedAgent ? { assignedAgentName: result.assignedAgent } : {}),
       });
+      if (!options.skipToast) {
+        showActionToast(
+          result.warning ? "warning" : "success",
+          result.queued ? "Llamada reprogramada." : "Llamada solicitada.",
+          result.warning,
+        );
+      }
+      return true;
     } catch (callError) {
       const message = callError instanceof Error ? callError.message : "No pudimos iniciar la llamada.";
       setError(message);
       await reconcileAfterFailure(previousSnapshot);
       setError(message);
+      if (!options.skipToast) {
+        showActionToast("error", "No pudimos iniciar la llamada.", message);
+      }
+      return false;
     } finally {
       setCallingLeadId(null);
     }
@@ -1510,7 +1703,7 @@ const Cirugia360Dashboard = () => {
     leadId: string,
     outcome: "active" | "lost" | "won",
     reason = "",
-    options: { skipUndoToast?: boolean } = {},
+    options: ActionOptions = {},
   ) => {
     setError("");
     setUpdatingPipelineLeadId(leadId);
@@ -1533,14 +1726,14 @@ const Cirugia360Dashboard = () => {
           reason: outcome === "lost" ? reason : null,
         }),
       });
-      if (!options.skipUndoToast && previousLead && previousOutcome !== outcome) {
+      if (!options.skipToast && !options.skipUndoToast && previousLead && previousOutcome !== outcome) {
         const outcomeLabels: Record<"active" | "lost" | "won", string> = {
           active: "activa",
           lost: "perdida",
           won: "ganada",
         };
 
-        toast(`Oportunidad ${outcomeLabels[outcome]}`, {
+        toast.success(`Oportunidad ${outcomeLabels[outcome]}`, {
           description: previousLead.fullName,
           duration: 6000,
           action: {
@@ -1557,13 +1750,16 @@ const Cirugia360Dashboard = () => {
       setError(message);
       await reconcileAfterFailure(previousSnapshot);
       setError(message);
+      if (!options.skipToast) {
+        showActionToast("error", "No pudimos actualizar la oportunidad.", message);
+      }
       return false;
     } finally {
       setUpdatingPipelineLeadId(null);
     }
   };
 
-  const updatePipelineValue = async (leadId: string, pipelineValue: number) => {
+  const updatePipelineValue = async (leadId: string, pipelineValue: number, options: ActionOptions = {}) => {
     setError("");
     setUpdatingPipelineLeadId(leadId);
     const previousSnapshot = snapshot;
@@ -1578,19 +1774,25 @@ const Cirugia360Dashboard = () => {
           pipelineValue,
         }),
       });
+      if (!options.skipToast) {
+        showActionToast("success", "Valor comercial guardado.");
+      }
       return true;
     } catch (valueError) {
       const message = valueError instanceof Error ? valueError.message : "No pudimos guardar el valor.";
       setError(message);
       await reconcileAfterFailure(previousSnapshot);
       setError(message);
+      if (!options.skipToast) {
+        showActionToast("error", "No pudimos guardar el valor.", message);
+      }
       return false;
     } finally {
       setUpdatingPipelineLeadId(null);
     }
   };
 
-  const addLeadNote = async (leadId: string, body: string) => {
+  const addLeadNote = async (leadId: string, body: string, options: ActionOptions = {}) => {
     const trimmedBody = body.trim();
 
     if (!trimmedBody) {
@@ -1653,12 +1855,18 @@ const Cirugia360Dashboard = () => {
             }
           : currentLead,
       );
+      if (!options.skipToast) {
+        showActionToast("success", "Nota guardada.");
+      }
       return true;
     } catch (noteError) {
       const message = noteError instanceof Error ? noteError.message : "No pudimos guardar la nota.";
       setError(message);
       await reconcileAfterFailure(previousSnapshot);
       setError(message);
+      if (!options.skipToast) {
+        showActionToast("error", "No pudimos guardar la nota.", message);
+      }
       return false;
     }
   };
