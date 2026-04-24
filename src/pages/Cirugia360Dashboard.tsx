@@ -1,5 +1,4 @@
 import {
-  Activity,
   AlertCircle,
   ArrowUpDown,
   BarChart3,
@@ -30,7 +29,7 @@ import {
   Video,
   XCircle,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { Component, useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
 import {
   ContextMenu,
@@ -46,153 +45,33 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { toast } from "@/components/ui/sonner";
 import {
-  getDashboardAccessToken,
   getDashboardSupabase,
   getDashboardSupabaseConfigError,
   subscribeDashboardSession,
 } from "@/lib/dashboardSupabase";
-
-type DashboardMetric = {
-  id: string;
-  label: string;
-  value: number | null;
-  format?: "currency" | "duration";
-  tone?: string;
-};
-
-type PipelineStage = {
-  id: string;
-  label: string;
-};
-
-type LeadNote = {
-  id: number;
-  createdAt: string;
-  updatedAt?: string | null;
-  authorEmail: string | null;
-  editedByEmail?: string | null;
-  body: string;
-};
-
-type DashboardLead = {
-  id: string;
-  createdAt: string;
-  status: string;
-  salesCallStatus: string | null;
-  customerCallStatus: string | null;
-  fullName: string;
-  phone: string;
-  email: string | null;
-  procedureInterest: string | null;
-  message: string | null;
-  sourceUrl: string | null;
-  assignedAgentName: string | null;
-  assignedAgentEmail: string | null;
-  agentAttempts: number;
-  dispatchScheduledAt: string | null;
-  callbackContext: string | null;
-  customerConnectedAt: string | null;
-  completedAt: string | null;
-  lastError: string | null;
-  pipelineStage: string;
-  pipelineOutcome: string;
-  pipelineOutcomeReasonCode: string | null;
-  pipelineOutcomeReason: string | null;
-  pipelineValue: number;
-  recordingUrl: string | null;
-  transcriptionText: string | null;
-  notes: LeadNote[];
-};
-
-type AgentSettings = {
-  businessTimeZone: string;
-  queuePaused: boolean;
-  agents: Array<{
-    id: string;
-    name: string;
-    phone: string;
-    email?: string | null;
-    active?: boolean;
-  }>;
-};
-
-type DashboardSnapshot = {
-  dateRange?: {
-    dateFrom: string | null;
-    dateTo: string | null;
-    label: string;
-  };
-  generatedAt: string;
-  pipelineStages: PipelineStage[];
-  speedMetrics: DashboardMetric[];
-  funnelMetrics: Array<{ id: string; label: string; count: number; value: number }>;
-  callMetrics: Array<{ id: string; label: string; value: number }>;
-  agentPerformance?: Array<{
-    id: string;
-    name: string;
-    email: string | null;
-    assigned: number;
-    contacted: number;
-    evaluations: number;
-    surgeries: number;
-    won: number;
-    answeredCalls: number;
-    conversionRate: number;
-    averageTimeToContactSeconds: number | null;
-  }>;
-  leads: DashboardLead[];
-};
-
-type ApiResult<T> = {
-  success: boolean;
-  data?: T;
-  error?: string;
-  [key: string]: unknown;
-};
-
-class SessionExpiredError extends Error {
-  constructor() {
-    super("Tu sesión expiró, vuelve a iniciar.");
-    this.name = "SessionExpiredError";
-  }
-}
-
-type LeadCallResult = {
-  leadId: string;
-  callStarted?: boolean;
-  queued?: boolean;
-  dispatchScheduledAt?: string | null;
-  assignedAgent?: string | null;
-  warning?: string;
-};
-
-type CreateLeadPayload = {
-  fullName: string;
-  phone: string;
-  procedureInterest: string;
-  assignedAgentId: string;
-  pipelineValue: number;
-};
-
-type ToastTone = "success" | "warning" | "error";
-
-type ActionOptions = {
-  skipToast?: boolean;
-  skipUndoToast?: boolean;
-  reasonCode?: LossReasonCode | null;
-};
-
-type RefreshOptions = {
-  silent?: boolean;
-};
-
-type LeadSortKey = "createdAt" | "fullName" | "procedureInterest" | "assignedAgentName" | "status";
-
-type SortDirection = "asc" | "desc";
-
-type DashboardPeriod = "today" | "7d" | "30d" | "month" | "custom";
-
-type LossReasonCode = "no_responde" | "precio" | "no_califica_medicamente" | "eligio_otra_clinica" | "otro";
+import { LoginPanel } from "./cirugia360/components/LoginPanel";
+import { LeadStatusBadge } from "./cirugia360/components/LeadStatusBadge";
+import { MetricTile } from "./cirugia360/components/MetricTile";
+import { apiRequest, getDashboardErrorMessage, isSessionExpiredError } from "./cirugia360/lib/api";
+import { formatCurrency, formatMetric } from "./cirugia360/lib/format";
+import { getLeadStatus } from "./cirugia360/lib/status";
+import type {
+  ActionOptions,
+  AgentSettings,
+  CreateLeadPayload,
+  DashboardLead,
+  DashboardMetric,
+  DashboardPeriod,
+  DashboardSnapshot,
+  LeadCallResult,
+  LeadNote,
+  LeadSortKey,
+  LossReasonCode,
+  PipelineStage,
+  RefreshOptions,
+  SortDirection,
+  ToastTone,
+} from "./cirugia360/lib/types";
 
 const navItems = [
   { id: "overview", label: "Resumen", icon: LayoutDashboard },
@@ -293,13 +172,6 @@ const getDashboardDateRange = (
   };
 };
 
-const formatCurrency = (value: number | null) =>
-  new Intl.NumberFormat("es-CL", {
-    style: "currency",
-    currency: "CLP",
-    maximumFractionDigits: 0,
-  }).format(value || 0);
-
 const formatDate = (value: string | null) =>
   value
     ? new Intl.DateTimeFormat("es-CL", {
@@ -333,62 +205,6 @@ const dateTimeLocalToIso = (value: string) => {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 };
 
-const formatMetric = (metric: DashboardMetric) => {
-  if (metric.format === "currency") {
-    return formatCurrency(metric.value || 0);
-  }
-
-  if (metric.format === "duration") {
-    if (metric.value === null) {
-      return "Sin dato";
-    }
-
-    if (metric.value < 60) {
-      return `${metric.value}s`;
-    }
-
-    return `${Math.round(metric.value / 60)} min`;
-  }
-
-  return String(metric.value ?? 0);
-};
-
-const apiRequest = async <T,>(path: string, options: RequestInit = {}, hasRetriedAuth = false): Promise<T> => {
-  const token = await getDashboardAccessToken();
-  const headers = new Headers(options.headers);
-
-  headers.set("Accept", "application/json");
-  headers.set("Authorization", `Bearer ${token}`);
-
-  if (options.body && !headers.has("Content-Type")) {
-    headers.set("Content-Type", "application/json");
-  }
-
-  const response = await fetch(path, {
-    ...options,
-    headers,
-  });
-  const payload = (await response.json().catch(() => null)) as ApiResult<T> | null;
-
-  if (response.status === 401) {
-    if (!hasRetriedAuth) {
-      const { data, error } = await getDashboardSupabase().auth.refreshSession();
-
-      if (!error && data.session) {
-        return apiRequest<T>(path, options, true);
-      }
-    }
-
-    throw new SessionExpiredError();
-  }
-
-  if (!response.ok || !payload?.success) {
-    throw new Error(payload?.error || "No pudimos completar la accion.");
-  }
-
-  return (payload.data ?? payload) as T;
-};
-
 const showActionToast = (tone: ToastTone, title: string, description?: string) => {
   const options = {
     description,
@@ -408,7 +224,51 @@ const showActionToast = (tone: ToastTone, title: string, description?: string) =
   toast.error(title, options);
 };
 
-const isSessionExpiredError = (error: unknown) => error instanceof SessionExpiredError;
+class DashboardErrorBoundary extends Component<
+  { children: ReactNode },
+  { error: Error | null }
+> {
+  state: { error: Error | null } = { error: null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <main className="grid min-h-screen place-items-center bg-dashboard-page px-4 text-dashboard-ink">
+          <section className="w-full max-w-lg rounded-lg border border-red-200 bg-white p-6 shadow-sm">
+            <div className="mb-4 flex items-center gap-2 text-red-700">
+              <AlertCircle className="h-5 w-5" />
+              <h1 className="text-lg font-bold">No pudimos renderizar el dashboard</h1>
+            </div>
+            <p className="text-sm leading-6 text-slate-600">
+              Recarga el dashboard. Si vuelve a ocurrir, contacta soporte con la hora del error.
+            </p>
+            <div className="mt-5 flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="rounded-md bg-dashboard-primary px-3 py-2 text-sm font-bold text-white"
+                onClick={() => window.location.reload()}
+              >
+                Recargar dashboard
+              </button>
+              <a
+                className="rounded-md border border-slate-200 px-3 py-2 text-sm font-bold text-dashboard-muted"
+                href="mailto:soporte@cirugia360.cl"
+              >
+                Contactar soporte
+              </a>
+            </div>
+          </section>
+        </main>
+      );
+    }
+
+    return this.props.children;
+  }
+}
 
 const buildSpeedMetrics = (leads: DashboardLead[]): DashboardMetric[] => {
   const connected = leads.filter((lead) => lead.customerConnectedAt).length;
@@ -480,315 +340,6 @@ const withLeads = (snapshot: DashboardSnapshot, leads: DashboardLead[]): Dashboa
     callMetrics: buildCallMetrics(leads),
     leads,
   };
-};
-
-const LoginPanel = ({ onReady, banner }: { onReady: (session: Session) => void; banner?: string }) => {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const configError = getDashboardSupabaseConfigError();
-
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setError("");
-    setIsSubmitting(true);
-
-    try {
-      const supabase = getDashboardSupabase();
-      const { data, error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      if (signInError || !data.session) {
-        throw signInError || new Error("No pudimos iniciar sesion.");
-      }
-
-      onReady(data.session);
-    } catch (signInError) {
-      setError(signInError instanceof Error ? signInError.message : "No pudimos iniciar sesion.");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  return (
-    <main className="min-h-screen bg-dashboard-page-muted px-4 py-12 text-slate-950">
-      <section className="mx-auto grid min-h-[calc(100vh-6rem)] max-w-md place-items-center">
-        <form
-          onSubmit={handleSubmit}
-          className="w-full rounded-lg border border-slate-200 bg-white p-6 shadow-sm"
-        >
-          <div className="mb-6">
-            <p className="text-sm font-semibold uppercase tracking-wide text-teal-700">
-              Cirugia360
-            </p>
-            <h1 className="mt-2 text-2xl font-semibold">Dashboard comercial</h1>
-          </div>
-
-          {banner ? (
-            <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm font-medium text-amber-900">
-              {banner}
-            </div>
-          ) : null}
-
-          {configError ? (
-            <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-              {configError}
-            </div>
-          ) : null}
-
-          <label className="mb-3 block text-sm font-medium">
-            Email
-            <input
-              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 outline-none focus:border-teal-600"
-              type="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              autoComplete="email"
-              required
-            />
-          </label>
-
-          <label className="mb-4 block text-sm font-medium">
-            Password
-            <input
-              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 outline-none focus:border-teal-600"
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              autoComplete="current-password"
-              required
-            />
-          </label>
-
-          {error ? (
-            <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
-              {error}
-            </div>
-          ) : null}
-
-          <button
-            type="submit"
-            disabled={Boolean(configError) || isSubmitting}
-            className="flex w-full items-center justify-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {isSubmitting ? <RefreshCcw className="h-4 w-4 animate-spin" /> : <LayoutDashboard className="h-4 w-4" />}
-            Entrar
-          </button>
-        </form>
-      </section>
-    </main>
-  );
-};
-
-const MetricTile = ({ metric }: { metric: DashboardMetric }) => (
-  <article className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-    <p className="text-sm text-slate-500">{metric.label}</p>
-    <div className="mt-3 flex items-end justify-between gap-3">
-      <strong className="text-2xl font-semibold text-slate-950">{formatMetric(metric)}</strong>
-      <Activity className="h-5 w-5 text-teal-700" />
-    </div>
-  </article>
-);
-
-const STATUS_LABELS: Record<string, { label: string; className: string }> = {
-  received: {
-    label: "Recibido",
-    className: "border-sky-200 bg-sky-50 text-sky-700",
-  },
-  scheduled: {
-    label: "Rellamada programada",
-    className: "border-amber-200 bg-amber-50 text-amber-700",
-  },
-  queued: {
-    label: "En cola",
-    className: "border-amber-200 bg-amber-50 text-amber-700",
-  },
-  dispatching: {
-    label: "Llamando",
-    className: "border-blue-200 bg-blue-50 text-blue-700",
-  },
-  queue_dispatching: {
-    label: "Llamando",
-    className: "border-blue-200 bg-blue-50 text-blue-700",
-  },
-  connecting_customer: {
-    label: "Conectando",
-    className: "border-blue-200 bg-blue-50 text-blue-700",
-  },
-  customer_connected: {
-    label: "Contactado",
-    className: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  },
-  completed: {
-    label: "Completada",
-    className: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  },
-  payment_confirmed: {
-    label: "Pago confirmado",
-    className: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  },
-  callback_requested: {
-    label: "Rellamada solicitada",
-    className: "border-amber-200 bg-amber-50 text-amber-700",
-  },
-  customer_unreachable: {
-    label: "No contestó",
-    className: "border-red-200 bg-red-50 text-red-700",
-  },
-  missed: {
-    label: "No contestó",
-    className: "border-red-200 bg-red-50 text-red-700",
-  },
-  dispatch_failed: {
-    label: "Error de llamada",
-    className: "border-red-200 bg-red-50 text-red-700",
-  },
-  failed: {
-    label: "Error",
-    className: "border-red-200 bg-red-50 text-red-700",
-  },
-  exhausted: {
-    label: "Sin intentos",
-    className: "border-red-200 bg-red-50 text-red-700",
-  },
-  prompting: {
-    label: "Confirmando",
-    className: "border-blue-200 bg-blue-50 text-blue-700",
-  },
-  initiated: {
-    label: "Llamando",
-    className: "border-blue-200 bg-blue-50 text-blue-700",
-  },
-  ringing: {
-    label: "Sonando",
-    className: "border-blue-200 bg-blue-50 text-blue-700",
-  },
-  answered: {
-    label: "Contestó",
-    className: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  },
-  "in-progress": {
-    label: "En llamada",
-    className: "border-blue-200 bg-blue-50 text-blue-700",
-  },
-};
-
-const FALLBACK_STATUS_CLASSNAME = "border-slate-200 bg-slate-50 text-slate-700";
-
-const humanizeStatus = (status: string) =>
-  status
-    .split(/[_-]+/)
-    .filter(Boolean)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ") || "Sin estado";
-
-const getLeadStatus = (lead: DashboardLead) => {
-  const statusKey =
-    lead.customerConnectedAt && ["received", "scheduled", "dispatching", "connecting_customer"].includes(lead.status)
-      ? "customer_connected"
-      : lead.status;
-
-  return STATUS_LABELS[statusKey] || {
-    label: lead.lastError ? "Atención" : humanizeStatus(statusKey),
-    className: lead.lastError ? STATUS_LABELS.failed.className : FALLBACK_STATUS_CLASSNAME,
-  };
-};
-
-const leadMatchesSearch = (lead: DashboardLead, search: string) => {
-  const normalizedSearch = search.trim().toLowerCase();
-
-  if (!normalizedSearch) {
-    return true;
-  }
-
-  return [
-    lead.fullName,
-    lead.phone,
-    lead.email,
-    lead.procedureInterest,
-    lead.assignedAgentName,
-    lead.assignedAgentEmail,
-    getLossReasonLabel(lead.pipelineOutcomeReasonCode),
-    lead.pipelineOutcomeReason,
-    getLeadStatus(lead).label,
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase()
-    .includes(normalizedSearch);
-};
-
-const escapeCsvValue = (value: string | number | null | undefined) => {
-  const rawValue = String(value ?? "");
-  const escapedValue = rawValue.replace(/"/g, '""');
-
-  return /[",\n\r]/.test(escapedValue) ? `"${escapedValue}"` : escapedValue;
-};
-
-const exportLeadsCsv = (leads: DashboardLead[], filenamePrefix: string) => {
-  const headers = [
-    "ID",
-    "Creado",
-    "Paciente",
-    "Telefono",
-    "Email",
-    "Procedimiento",
-    "Asesora",
-    "Estado",
-    "Etapa",
-    "Outcome",
-    "Motivo perdida",
-    "Detalle perdida",
-    "Valor pipeline",
-    "Fuente",
-    "Intentos",
-    "Ultimo error",
-  ];
-  const rows = leads.map((lead) => [
-    lead.id,
-    lead.createdAt,
-    lead.fullName,
-    lead.phone,
-    lead.email,
-    lead.procedureInterest || "Evaluacion",
-    lead.assignedAgentName || "Sin asignar",
-    getLeadStatus(lead).label,
-    lead.pipelineStage,
-    lead.pipelineOutcome || "active",
-    getLossReasonLabel(lead.pipelineOutcomeReasonCode),
-    lead.pipelineOutcomeReason || "",
-    lead.pipelineValue,
-    lead.sourceUrl || "",
-    lead.agentAttempts,
-    lead.lastError || "",
-  ]);
-  const csv = [headers, ...rows]
-    .map((row) => row.map((value) => escapeCsvValue(value)).join(","))
-    .join("\r\n");
-  const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  const dateStamp = toDateInputValue(new Date());
-
-  link.href = url;
-  link.download = `${filenamePrefix}-${dateStamp}.csv`;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
-};
-
-const LeadStatusBadge = ({ lead }: { lead: DashboardLead }) => {
-  const status = getLeadStatus(lead);
-
-  return (
-    <span className={`inline-flex rounded-md border px-2 py-1 text-xs font-medium ${status.className}`}>
-      {status.label}
-    </span>
-  );
 };
 
 const stageVisuals: Record<
@@ -1145,7 +696,7 @@ const PipelineBoard = ({
   };
 
   return (
-    <section className="flex h-[calc(100dvh-74px)] min-h-[640px] flex-col overflow-hidden">
+    <section className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-dashboard-line-soft bg-dashboard-page px-4 py-3 lg:px-6">
         <div className="flex min-w-[260px] flex-1 flex-wrap items-center gap-2">
           {viewButtons.map((item) => (
@@ -1740,55 +1291,6 @@ const LeadsTable = ({
   );
 };
 
-const LeadCard = ({
-  lead,
-  stages,
-  onSelect,
-  onStage,
-  onCall,
-}: {
-  lead: DashboardLead;
-  stages: PipelineStage[];
-  onSelect: (lead: DashboardLead) => void;
-  onStage: (leadId: string, stage: string) => void;
-  onCall: (leadId: string) => void;
-}) => (
-  <article className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
-    <div className="flex items-start justify-between gap-3">
-      <button className="min-w-0 text-left" type="button" onClick={() => onSelect(lead)}>
-        <h3 className="truncate text-sm font-semibold text-slate-950">{lead.fullName}</h3>
-        <p className="mt-1 truncate text-xs text-slate-500">{lead.procedureInterest || "Evaluacion"}</p>
-      </button>
-      <LeadStatusBadge lead={lead} />
-    </div>
-    <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-500">
-      <span>{formatDate(lead.createdAt)}</span>
-      <span>{lead.assignedAgentName || "Sin asesora"}</span>
-    </div>
-    <div className="mt-3 flex gap-2">
-      <button
-        type="button"
-        onClick={() => onCall(lead.id)}
-        className="inline-flex items-center gap-1 rounded-md border border-teal-200 bg-teal-50 px-2 py-1.5 text-xs font-semibold text-teal-800"
-      >
-        <Phone className="h-3.5 w-3.5" />
-        Llamar
-      </button>
-      <select
-        value={lead.pipelineStage}
-        onChange={(event) => onStage(lead.id, event.target.value)}
-        className="min-w-0 flex-1 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs"
-      >
-        {stages.map((stage) => (
-          <option key={stage.id} value={stage.id}>
-            {stage.label}
-          </option>
-        ))}
-      </select>
-    </div>
-  </article>
-);
-
 const LeadDetail = ({
   lead,
   stages,
@@ -2175,8 +1677,8 @@ const LeadDetail = ({
               </span>
             ) : null}
           </label>
-          <Detail label="Intentos" value={String(lead.agentAttempts || 0)} />
-          <Detail label="Ultimo error" value={lead.lastError || "Sin error"} />
+          <Detail label="Intentos" value={lead.agentAttempts ? String(lead.agentAttempts) : "Sin intentos"} />
+          <Detail label="Ultimo error" value={lead.lastError || "Sin error"} tone={lead.lastError ? "danger" : "default"} />
         </section>
 
         <section className="rounded-lg border border-slate-200 p-4">
@@ -2400,12 +1902,30 @@ const LeadDetail = ({
   );
 };
 
-const Detail = ({ label, value }: { label: string; value: string }) => (
+const Detail = ({
+  label,
+  value,
+  tone = "default",
+}: {
+  label: string;
+  value?: string | number | null;
+  tone?: "default" | "warning" | "danger";
+}) => {
+  const displayValue = value === null || value === undefined || String(value).trim() === "" ? "Sin dato" : String(value);
+  const valueClassName =
+    tone === "danger"
+      ? "text-red-700"
+      : tone === "warning"
+        ? "text-amber-700"
+        : "text-slate-900";
+
+  return (
   <div>
     <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
-    <p className="mt-1 break-words text-sm text-slate-900">{value}</p>
+    <p className={`mt-1 break-words text-sm font-medium ${valueClassName}`}>{displayValue}</p>
   </div>
-);
+  );
+};
 
 const CreateLeadModal = ({
   settings,
@@ -2877,6 +2397,20 @@ const Cirugia360Dashboard = () => {
   const leadDetailReturnFocusRef = useRef<HTMLElement | null>(null);
   const pollingTimerRef = useRef<number | null>(null);
   const realtimeRefreshTimerRef = useRef<number | null>(null);
+  const sessionUserIdRef = useRef<string | null>(null);
+  const userId = session?.user.id || null;
+
+  const resetDashboardState = useCallback(() => {
+    setSnapshot(null);
+    setSettings(null);
+    setSelectedLead(null);
+    setIsCreateLeadOpen(false);
+    setError("");
+    setIsLoading(false);
+    setUpdatingPipelineLeadId(null);
+    setCallingLeadId(null);
+    setActiveView("overview");
+  }, []);
 
   useEffect(() => {
     const configError = getDashboardSupabaseConfigError();
@@ -2886,35 +2420,37 @@ const Cirugia360Dashboard = () => {
       return;
     }
 
-    const supabase = getDashboardSupabase();
-
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setIsAuthReady(true);
-    });
-
     return subscribeDashboardSession((nextSession) => {
-      setSession(nextSession);
+      setIsAuthReady(true);
+      const nextUserId = nextSession?.user.id || null;
+
+      if (sessionUserIdRef.current !== nextUserId) {
+        resetDashboardState();
+        sessionUserIdRef.current = nextUserId;
+      }
+
+      setSession((currentSession) => {
+        const currentUserId = currentSession?.user.id || null;
+
+        return currentUserId === nextUserId ? currentSession : nextSession;
+      });
       if (nextSession) {
         setAuthBanner("");
       }
     });
-  }, []);
+  }, [resetDashboardState]);
 
   const expireDashboardSession = useCallback(async () => {
     setAuthBanner("Tu sesión expiró, vuelve a iniciar.");
-    setError("");
-    setSnapshot(null);
-    setSettings(null);
-    setSelectedLead(null);
+    resetDashboardState();
     setSession(null);
     await getDashboardSupabase().auth.signOut();
-  }, []);
+  }, [resetDashboardState]);
 
   const dashboardDateRange = useMemo(() => getDashboardDateRange(period, customRange), [customRange, period]);
 
   const refresh = useCallback(async (options: RefreshOptions = {}) => {
-    if (!session) {
+    if (!userId) {
       return;
     }
 
@@ -2937,36 +2473,59 @@ const Cirugia360Dashboard = () => {
       const dashboardPath = `/api/cirugia360-speed/dashboard${
         dashboardParams.toString() ? `?${dashboardParams.toString()}` : ""
       }`;
-      const [dashboardData, settingsData] = await Promise.all([
+      const [dashboardResult, settingsResult] = await Promise.allSettled([
         apiRequest<DashboardSnapshot>(dashboardPath),
         apiRequest<AgentSettings>("/api/cirugia360-speed/dashboard?resource=sales-agents"),
       ]);
 
-      setSnapshot(dashboardData);
-      setSettings(settingsData);
-      setSelectedLead((currentLead) =>
-        currentLead ? dashboardData.leads.find((lead) => lead.id === currentLead.id) || null : null,
-      );
+      if (dashboardResult.status === "rejected" && isSessionExpiredError(dashboardResult.reason)) {
+        await expireDashboardSession();
+        return;
+      }
+
+      if (settingsResult.status === "rejected" && isSessionExpiredError(settingsResult.reason)) {
+        await expireDashboardSession();
+        return;
+      }
+
+      if (dashboardResult.status === "fulfilled") {
+        setSnapshot(dashboardResult.value);
+        setSelectedLead((currentLead) =>
+          currentLead ? dashboardResult.value.leads.find((lead) => lead.id === currentLead.id) || null : null,
+        );
+      }
+
+      if (settingsResult.status === "fulfilled") {
+        setSettings(settingsResult.value);
+      }
+
+      if (dashboardResult.status === "rejected") {
+        throw dashboardResult.reason;
+      }
+
+      if (settingsResult.status === "rejected") {
+        setError(`No pudimos cargar Equipo: ${getDashboardErrorMessage(settingsResult.reason, "Revisa la configuracion de asesoras.")}`);
+      }
     } catch (loadError) {
       if (isSessionExpiredError(loadError)) {
         await expireDashboardSession();
         return;
       }
 
-      setError(loadError instanceof Error ? loadError.message : "No pudimos cargar el dashboard.");
+      setError(getDashboardErrorMessage(loadError, "No pudimos cargar el dashboard."));
     } finally {
       if (!options.silent) {
         setIsLoading(false);
       }
     }
-  }, [dashboardDateRange.dateFrom, dashboardDateRange.dateTo, expireDashboardSession, session]);
+  }, [dashboardDateRange.dateFrom, dashboardDateRange.dateTo, expireDashboardSession, userId]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
   useEffect(() => {
-    if (!session) {
+    if (!userId) {
       return undefined;
     }
 
@@ -2997,10 +2556,10 @@ const Cirugia360Dashboard = () => {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       clearPollingTimer();
     };
-  }, [refresh, session]);
+  }, [refresh, userId]);
 
   useEffect(() => {
-    if (!session) {
+    if (!userId) {
       return undefined;
     }
 
@@ -3034,13 +2593,12 @@ const Cirugia360Dashboard = () => {
 
       void supabase.removeChannel(channel);
     };
-  }, [refresh, session]);
+  }, [refresh, userId]);
 
   const signOut = async () => {
+    resetDashboardState();
     await getDashboardSupabase().auth.signOut();
     setAuthBanner("");
-    setSnapshot(null);
-    setSettings(null);
   };
 
   const openLeadDetail = useCallback((lead: DashboardLead) => {
@@ -3116,7 +2674,7 @@ const Cirugia360Dashboard = () => {
         return false;
       }
 
-      const message = stageError instanceof Error ? stageError.message : "No pudimos actualizar la etapa.";
+      const message = getDashboardErrorMessage(stageError, "No pudimos actualizar la etapa.");
       setError(message);
       await reconcileAfterFailure(previousSnapshot);
       setError(message);
@@ -3164,7 +2722,7 @@ const Cirugia360Dashboard = () => {
         return false;
       }
 
-      const message = callError instanceof Error ? callError.message : "No pudimos iniciar la llamada.";
+      const message = getDashboardErrorMessage(callError, "No pudimos iniciar la llamada.");
       setError(message);
       await reconcileAfterFailure(previousSnapshot);
       setError(message);
@@ -3200,7 +2758,7 @@ const Cirugia360Dashboard = () => {
         return false;
       }
 
-      const message = createError instanceof Error ? createError.message : "No se pudo crear el lead.";
+      const message = getDashboardErrorMessage(createError, "No se pudo crear el lead.");
       setError(message);
       showActionToast("error", "No se pudo crear el lead.", message);
       return false;
@@ -3266,7 +2824,7 @@ const Cirugia360Dashboard = () => {
         return false;
       }
 
-      const message = outcomeError instanceof Error ? outcomeError.message : "No pudimos actualizar la oportunidad.";
+      const message = getDashboardErrorMessage(outcomeError, "No pudimos actualizar la oportunidad.");
       setError(message);
       await reconcileAfterFailure(previousSnapshot);
       setError(message);
@@ -3304,7 +2862,7 @@ const Cirugia360Dashboard = () => {
         return false;
       }
 
-      const message = valueError instanceof Error ? valueError.message : "No pudimos guardar el valor.";
+      const message = getDashboardErrorMessage(valueError, "No pudimos guardar el valor.");
       setError(message);
       await reconcileAfterFailure(previousSnapshot);
       setError(message);
@@ -3347,7 +2905,7 @@ const Cirugia360Dashboard = () => {
         return false;
       }
 
-      const message = agentError instanceof Error ? agentError.message : "No pudimos actualizar la asesora.";
+      const message = getDashboardErrorMessage(agentError, "No pudimos actualizar la asesora.");
       setError(message);
       await reconcileAfterFailure(previousSnapshot);
       setError(message);
@@ -3411,7 +2969,7 @@ const Cirugia360Dashboard = () => {
         return false;
       }
 
-      const message = callbackError instanceof Error ? callbackError.message : "No pudimos guardar la rellamada.";
+      const message = getDashboardErrorMessage(callbackError, "No pudimos guardar la rellamada.");
       setError(message);
       await reconcileAfterFailure(previousSnapshot);
       setError(message);
@@ -3497,7 +3055,7 @@ const Cirugia360Dashboard = () => {
         return false;
       }
 
-      const message = noteError instanceof Error ? noteError.message : "No pudimos guardar la nota.";
+      const message = getDashboardErrorMessage(noteError, "No pudimos guardar la nota.");
       setError(message);
       await reconcileAfterFailure(previousSnapshot);
       setError(message);
@@ -3573,7 +3131,7 @@ const Cirugia360Dashboard = () => {
         return false;
       }
 
-      const message = noteError instanceof Error ? noteError.message : "No pudimos actualizar la nota.";
+      const message = getDashboardErrorMessage(noteError, "No pudimos actualizar la nota.");
       setError(message);
       await reconcileAfterFailure(previousSnapshot);
       setError(message);
@@ -3657,7 +3215,7 @@ const Cirugia360Dashboard = () => {
                 );
                 showActionToast("success", "Nota restaurada.");
               } catch (restoreError) {
-                const message = restoreError instanceof Error ? restoreError.message : "No pudimos restaurar la nota.";
+                const message = getDashboardErrorMessage(restoreError, "No pudimos restaurar la nota.");
                 showActionToast("error", "No pudimos restaurar la nota.", message);
               }
             },
@@ -3674,7 +3232,7 @@ const Cirugia360Dashboard = () => {
         return false;
       }
 
-      const message = noteError instanceof Error ? noteError.message : "No pudimos eliminar la nota.";
+      const message = getDashboardErrorMessage(noteError, "No pudimos eliminar la nota.");
       setError(message);
       await reconcileAfterFailure(previousSnapshot);
       setError(message);
@@ -3689,8 +3247,32 @@ const Cirugia360Dashboard = () => {
 
   if (!isAuthReady) {
     return (
-      <main className="grid min-h-screen place-items-center bg-dashboard-page-muted text-slate-950">
-        <RefreshCcw className="h-6 w-6 animate-spin" />
+      <main className="min-h-screen bg-dashboard-page text-dashboard-ink lg:pl-[220px]">
+        <aside className="hidden lg:fixed lg:inset-y-0 lg:left-0 lg:z-40 lg:flex lg:w-[220px] lg:flex-col lg:border-r lg:border-dashboard-line-soft lg:bg-white">
+          <div className="border-b border-dashboard-line-soft px-5 py-5">
+            <p className="text-[15px] font-bold tracking-[-0.01em] text-dashboard-primary">Cirugia360</p>
+            <div className="mt-2 h-2 w-24 rounded bg-slate-100" />
+          </div>
+        </aside>
+        <header className="sticky top-0 z-30 border-b border-dashboard-line-soft bg-white/95">
+          <div className="flex items-center gap-3 px-4 py-3 lg:px-6">
+            <div className="min-w-0 flex-1">
+              <div className="h-5 w-40 rounded bg-slate-100" />
+              <div className="mt-2 h-3 w-28 rounded bg-slate-100" />
+            </div>
+            <RefreshCcw className="h-5 w-5 animate-spin text-dashboard-muted" />
+          </div>
+        </header>
+        <div className="px-4 py-4 lg:px-6">
+          <section className="mx-auto grid max-w-7xl gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {[0, 1, 2, 3].map((item) => (
+              <div key={item} className="h-28 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="h-3 w-24 rounded bg-slate-100" />
+                <div className="mt-5 h-8 w-20 rounded bg-slate-100" />
+              </div>
+            ))}
+          </section>
+        </div>
       </main>
     );
   }
@@ -3705,7 +3287,7 @@ const Cirugia360Dashboard = () => {
   const currentUserEmail = session.user.email?.toLowerCase() || null;
 
   return (
-    <main className="min-h-screen bg-dashboard-page text-dashboard-ink lg:pl-[220px]">
+    <main className="grid min-h-screen grid-rows-[auto_1fr] bg-dashboard-page text-dashboard-ink lg:pl-[220px]">
       <aside className="hidden lg:fixed lg:inset-y-0 lg:left-0 lg:z-40 lg:flex lg:w-[220px] lg:flex-col lg:border-r lg:border-dashboard-line-soft lg:bg-white">
         <div className="border-b border-dashboard-line-soft px-5 py-5">
           <p className="text-[15px] font-bold tracking-[-0.01em] text-dashboard-primary">Cirugia360</p>
@@ -3794,7 +3376,7 @@ const Cirugia360Dashboard = () => {
             ) : null}
             <button
               type="button"
-              onClick={refresh}
+              onClick={() => void refresh()}
               className="inline-flex items-center gap-2 rounded-[10px] border border-dashboard-line-soft bg-white px-3 py-2 text-sm font-bold text-dashboard-muted transition hover:text-dashboard-primary"
             >
               <RefreshCcw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
@@ -3835,8 +3417,8 @@ const Cirugia360Dashboard = () => {
         </nav>
       </header>
 
-      <div className={activeView === "pipeline" ? "min-w-0" : "px-4 py-4 lg:px-6"}>
-        <section className={activeView === "pipeline" ? "min-w-0" : "mx-auto max-w-7xl min-w-0 space-y-4"}>
+      <div className={activeView === "pipeline" ? "flex min-h-0 min-w-0" : "min-h-0 px-4 py-4 lg:px-6"}>
+        <section className={activeView === "pipeline" ? "flex min-h-0 min-w-0 flex-1" : "mx-auto max-w-7xl min-w-0 space-y-4"}>
           {error ? (
             <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
               <AlertCircle className="h-4 w-4" />
@@ -3965,5 +3547,11 @@ const Cirugia360Dashboard = () => {
   );
 };
 
-export default Cirugia360Dashboard;
+const Cirugia360DashboardWithBoundary = () => (
+  <DashboardErrorBoundary>
+    <Cirugia360Dashboard />
+  </DashboardErrorBoundary>
+);
+
+export default Cirugia360DashboardWithBoundary;
 
