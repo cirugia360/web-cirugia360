@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { getCirugia360SpeedConfig } from "../../../_cirugia360-speed-config.js";
+import { getCirugia360SpeedConfigWithSettings } from "../../../_cirugia360-speed-config.js";
 import {
   getFirstQueryValue,
   methodNotAllowed,
@@ -55,7 +55,7 @@ const getFinalAgentMessage = (dialStatus) => {
 };
 
 const handleSalesIntro = async (request, response, form) => {
-  const config = getCirugia360SpeedConfig(request, {
+  const config = await getCirugia360SpeedConfigWithSettings(request, {
     requireTwilio: true,
   });
 
@@ -107,7 +107,7 @@ const handleSalesIntro = async (request, response, form) => {
 };
 
 const handleSalesDecision = async (request, response, form) => {
-  const config = getCirugia360SpeedConfig(request, {
+  const config = await getCirugia360SpeedConfigWithSettings(request, {
     requireTwilio: true,
   });
 
@@ -170,7 +170,7 @@ const handleSalesDecision = async (request, response, form) => {
 };
 
 const handleCustomerComplete = async (request, response, form) => {
-  const config = getCirugia360SpeedConfig(request, {
+  const config = await getCirugia360SpeedConfigWithSettings(request, {
     requireTwilio: true,
   });
 

@@ -6,6 +6,7 @@ import {
   parseOptionalPositiveIntegerEnv,
   resolveAppUrl,
 } from "./_cirugia360-speed-shared.js";
+import { mergeRuntimeSettingsIntoConfig } from "./_cirugia360-speed-settings.js";
 
 const DEFAULT_BUSINESS_TIME_ZONE = "America/Santiago";
 const DEFAULT_RETRY_DELAY_SECONDS = 180;
@@ -148,4 +149,15 @@ export const getCirugia360SpeedConfig = (request, options = {}) => {
     salesAgents: parseSalesAgents(defaultCountryDialCode, options.requireAgents !== false),
     ...resolveTwilioConfig(defaultCountryDialCode, Boolean(options.requireTwilio)),
   };
+};
+
+export const getCirugia360SpeedConfigWithSettings = async (request, options = {}) => {
+  const baseConfig = getCirugia360SpeedConfig(request, {
+    ...options,
+    requireAgents: false,
+  });
+
+  return mergeRuntimeSettingsIntoConfig(baseConfig, {
+    requireAgents: options.requireAgents !== false,
+  });
 };

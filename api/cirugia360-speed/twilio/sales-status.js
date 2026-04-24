@@ -1,4 +1,4 @@
-import { getCirugia360SpeedConfig } from "../../_cirugia360-speed-config.js";
+import { getCirugia360SpeedConfigWithSettings } from "../../_cirugia360-speed-config.js";
 import {
   getFirstQueryValue,
   methodNotAllowed,
@@ -74,7 +74,7 @@ export default async function handler(request, response) {
 
   try {
     const form = await readFormBody(request);
-    const config = getCirugia360SpeedConfig(request, {
+    const config = await getCirugia360SpeedConfigWithSettings(request, {
       requireTwilio: true,
     });
 

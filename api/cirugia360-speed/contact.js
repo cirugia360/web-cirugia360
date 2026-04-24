@@ -1,5 +1,5 @@
 import { ZodError, z } from "zod";
-import { getCirugia360SpeedConfig } from "../_cirugia360-speed-config.js";
+import { getCirugia360SpeedConfigWithSettings } from "../_cirugia360-speed-config.js";
 import { methodNotAllowed, readJsonBody, sendJson } from "../_cirugia360-speed-shared.js";
 import { createContactLead } from "../_cirugia360-speed-workflow.js";
 
@@ -40,7 +40,7 @@ export default async function handler(request, response) {
     }
 
     const payload = contactSchema.parse(rawPayload);
-    const config = getCirugia360SpeedConfig(request, {
+    const config = await getCirugia360SpeedConfigWithSettings(request, {
       requireTwilio: true,
     });
     const result = await createContactLead(payload, config);

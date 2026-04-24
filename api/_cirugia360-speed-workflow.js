@@ -690,6 +690,86 @@ export const createBookingLeadFromBooking = async ({
   }
 };
 
+export const triggerLeadPhoneCall = async (leadId, config, options = {}) => {
+  const lead = await getSpeedLeadById(leadId);
+
+  if (!lead) {
+    return {
+      found: false,
+      lead: null,
+    };
+  }
+
+  const preparedLead = await updateSpeedLead(lead.id, {
+    status: "received",
+    sales_call_status: "queued",
+    customer_call_status: null,
+    twilio_sales_call_sid: null,
+    twilio_customer_call_sid: null,
+    completed_at: null,
+    last_error: null,
+  });
+  const nextAttempt = await scheduleLeadForNextAttempt(preparedLead, config, {
+    reason: normalizeText(options.reason) || "Llamada solicitada desde dashboard.",
+  });
+
+  if (nextAttempt.kind === "scheduled") {
+    return {
+      found: true,
+      lead: nextAttempt.lead,
+      callStarted: false,
+      queued: true,
+      dispatchScheduledAt: nextAttempt.scheduledAt,
+      warning: "No habia una asesora libre en este instante. El lead quedo en cola.",
+    };
+  }
+
+  if (nextAttempt.kind === "exhausted") {
+    return {
+      found: true,
+      lead: nextAttempt.lead,
+      callStarted: false,
+      queued: false,
+      dispatchScheduledAt: null,
+      warning: "No encontramos una asesora disponible para este lead.",
+    };
+  }
+
+  try {
+    const dispatchedLead = await dispatchLeadToAssignedAgent(nextAttempt.lead, config, {
+      source: "dashboard_manual_call",
+    });
+
+    return {
+      found: true,
+      lead: dispatchedLead,
+      callStarted: true,
+      queued: false,
+      dispatchScheduledAt: dispatchedLead.dispatch_scheduled_at,
+      warning: null,
+    };
+  } catch (error) {
+    const rescheduledLead = await scheduleLeadRetryDelay(
+      nextAttempt.lead,
+      config,
+      error instanceof Error ? error.message : "No pudimos iniciar la llamada ahora mismo.",
+      getAssignedAgent(config, nextAttempt.lead),
+    );
+
+    return {
+      found: true,
+      lead: rescheduledLead,
+      callStarted: false,
+      queued: true,
+      dispatchScheduledAt: rescheduledLead.dispatch_scheduled_at,
+      warning:
+        error instanceof Error
+          ? error.message
+          : "No pudimos iniciar la llamada ahora mismo.",
+    };
+  }
+};
+
 export const isPositivePaymentStatus = (value) =>
   POSITIVE_PAYMENT_STATUSES.has(normalizeText(value).toLowerCase());
 

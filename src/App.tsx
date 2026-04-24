@@ -19,6 +19,7 @@ import MarcacionPage from "./pages/MarcacionPage";
 import RhinoplastyPage from "./pages/RhinoplastyPage";
 import SubcisionPage from "./pages/SubcisionPage";
 import GenericProcedurePage from "./pages/GenericProcedurePage";
+import Cirugia360Dashboard from "./pages/Cirugia360Dashboard";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -48,6 +49,7 @@ const App = () => (
             <Route path="/resultados" element={<ResultsPage />} />
             <Route path="/tecnologia" element={<TechnologyPage />} />
             <Route path="/blog" element={<BlogPage />} />
+            <Route path="/dashboard" element={<Cirugia360Dashboard />} />
             <Route path="/blog/:slug" element={<BlogPostPage />} />
             <Route path="/marcacion-nivel-dios" element={<MarcacionPage />} />
             <Route path="/torres-rhinoplasty" element={<RhinoplastyPage />} />

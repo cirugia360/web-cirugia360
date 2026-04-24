@@ -14,7 +14,7 @@ const ACTIVE_AGENT_STATUSES = [
   "customer_connected",
 ];
 
-const getAdminClient = () => {
+export const getSpeedAdminClient = () => {
   const supabaseUrl = normalizeText(process.env.SUPABASE_URL);
   const serviceRoleKey = normalizeText(process.env.SUPABASE_SERVICE_ROLE_KEY);
 
@@ -44,7 +44,7 @@ const throwIfError = (error, fallbackMessage) => {
 };
 
 export const insertSpeedLead = async (lead) => {
-  const client = getAdminClient();
+  const client = getSpeedAdminClient();
   const { data, error } = await client.from(LEADS_TABLE).insert(lead).select("*").single();
 
   throwIfError(error, "No se pudo guardar el lead.");
@@ -56,7 +56,7 @@ export const getSpeedLeadById = async (leadId) => {
     return null;
   }
 
-  const client = getAdminClient();
+  const client = getSpeedAdminClient();
   const { data, error } = await client.from(LEADS_TABLE).select("*").eq("id", leadId).maybeSingle();
 
   throwIfError(error, "No se pudo cargar el lead.");
@@ -64,7 +64,7 @@ export const getSpeedLeadById = async (leadId) => {
 };
 
 export const updateSpeedLead = async (leadId, updates) => {
-  const client = getAdminClient();
+  const client = getSpeedAdminClient();
   const payload = {
     ...updates,
     updated_at: new Date().toISOString(),
@@ -81,7 +81,7 @@ export const updateSpeedLead = async (leadId, updates) => {
 };
 
 export const insertSpeedLeadEvent = async (leadId, eventType, payload = {}) => {
-  const client = getAdminClient();
+  const client = getSpeedAdminClient();
   const { error } = await client.from(EVENTS_TABLE).insert({
     lead_id: leadId,
     event_type: eventType,
@@ -92,7 +92,7 @@ export const insertSpeedLeadEvent = async (leadId, eventType, payload = {}) => {
 };
 
 export const claimDueSpeedLeads = async (limit = 20) => {
-  const client = getAdminClient();
+  const client = getSpeedAdminClient();
   const { data, error } = await client.rpc(CLAIM_RPC, {
     p_limit: limit,
     p_now: new Date().toISOString(),
@@ -108,7 +108,7 @@ export const hasActiveLeadForAgent = async ({
   cooldownSeconds = 0,
   referenceTimeIso = new Date().toISOString(),
 }) => {
-  const client = getAdminClient();
+  const client = getSpeedAdminClient();
   let activeQuery = client
     .from(LEADS_TABLE)
     .select("id")
@@ -157,7 +157,7 @@ export const findLeadForPaymentCallback = async ({
   paymentReference = "",
   bookingReference = "",
 }) => {
-  const client = getAdminClient();
+  const client = getSpeedAdminClient();
 
   if (normalizeText(leadId)) {
     const { data, error } = await client
@@ -209,7 +209,7 @@ export const findLeadForPaymentCallback = async ({
 };
 
 export const getLeadBySalesCallSid = async (callSid) => {
-  const client = getAdminClient();
+  const client = getSpeedAdminClient();
   const { data, error } = await client
     .from(LEADS_TABLE)
     .select("*")
@@ -223,7 +223,7 @@ export const getLeadBySalesCallSid = async (callSid) => {
 };
 
 export const getLeadByCustomerCallSid = async (callSid) => {
-  const client = getAdminClient();
+  const client = getSpeedAdminClient();
   const { data, error } = await client
     .from(LEADS_TABLE)
     .select("*")

@@ -88,8 +88,37 @@ create table if not exists public.c360_speed_leads (
   twilio_sales_call_sid text,
   twilio_customer_call_sid text,
   last_error text,
+  pipeline_stage text not null default 'nuevo',
+  pipeline_outcome text,
+  pipeline_outcome_reason text,
+  pipeline_outcome_at timestamptz,
+  pipeline_value numeric(12, 2),
+  evaluation_scheduled_at timestamptz,
+  surgery_booked_at timestamptz,
+  recording_sid text,
+  recording_url text,
+  recording_duration integer,
+  recording_status text,
+  transcription_sid text,
+  transcription_text text,
+  transcription_status text,
   metadata jsonb not null default '{}'::jsonb
 );
+
+alter table public.c360_speed_leads add column if not exists pipeline_stage text not null default 'nuevo';
+alter table public.c360_speed_leads add column if not exists pipeline_outcome text;
+alter table public.c360_speed_leads add column if not exists pipeline_outcome_reason text;
+alter table public.c360_speed_leads add column if not exists pipeline_outcome_at timestamptz;
+alter table public.c360_speed_leads add column if not exists pipeline_value numeric(12, 2);
+alter table public.c360_speed_leads add column if not exists evaluation_scheduled_at timestamptz;
+alter table public.c360_speed_leads add column if not exists surgery_booked_at timestamptz;
+alter table public.c360_speed_leads add column if not exists recording_sid text;
+alter table public.c360_speed_leads add column if not exists recording_url text;
+alter table public.c360_speed_leads add column if not exists recording_duration integer;
+alter table public.c360_speed_leads add column if not exists recording_status text;
+alter table public.c360_speed_leads add column if not exists transcription_sid text;
+alter table public.c360_speed_leads add column if not exists transcription_text text;
+alter table public.c360_speed_leads add column if not exists transcription_status text;
 
 create table if not exists public.c360_speed_lead_events (
   id bigserial primary key,
@@ -97,6 +126,37 @@ create table if not exists public.c360_speed_lead_events (
   created_at timestamptz not null default timezone('utc', now()),
   event_type text not null,
   payload jsonb not null default '{}'::jsonb
+);
+
+create table if not exists public.c360_speed_lead_notes (
+  id bigserial primary key,
+  lead_id uuid not null references public.c360_speed_leads(id) on delete cascade,
+  created_at timestamptz not null default timezone('utc', now()),
+  author_email text,
+  body text not null
+);
+
+create table if not exists public.c360_speed_tracking_events (
+  id bigserial primary key,
+  created_at timestamptz not null default timezone('utc', now()),
+  lead_id uuid references public.c360_speed_leads(id) on delete set null,
+  event_name text not null,
+  event_source text not null default 'browser',
+  source_url text,
+  client_ip text,
+  client_user_agent text,
+  metadata jsonb not null default '{}'::jsonb,
+  meta_event_id text,
+  meta_dispatched_at timestamptz,
+  meta_success boolean,
+  meta_response jsonb
+);
+
+create table if not exists public.c360_speed_settings (
+  key text primary key,
+  value jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default timezone('utc', now()),
+  updated_by text
 );
 
 create index if not exists c360_speed_leads_status_idx
@@ -120,8 +180,23 @@ create index if not exists c360_speed_leads_sales_call_sid_idx
 create index if not exists c360_speed_leads_customer_call_sid_idx
   on public.c360_speed_leads (twilio_customer_call_sid);
 
+create index if not exists c360_speed_leads_pipeline_stage_idx
+  on public.c360_speed_leads (pipeline_stage);
+
+create index if not exists c360_speed_leads_pipeline_outcome_idx
+  on public.c360_speed_leads (pipeline_outcome);
+
 create index if not exists c360_speed_lead_events_lead_id_idx
   on public.c360_speed_lead_events (lead_id, created_at desc);
+
+create index if not exists c360_speed_lead_notes_lead_id_idx
+  on public.c360_speed_lead_notes (lead_id, created_at desc);
+
+create index if not exists c360_speed_tracking_events_lead_id_idx
+  on public.c360_speed_tracking_events (lead_id, created_at desc);
+
+create index if not exists c360_speed_tracking_events_event_name_idx
+  on public.c360_speed_tracking_events (event_name, created_at desc);
 
 create or replace function public.c360_claim_due_speed_leads(
   p_limit integer default 20,

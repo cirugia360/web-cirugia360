@@ -1,5 +1,5 @@
 import { parseRawBody, sendJson } from "./_blog-shared.js";
-import { getCirugia360SpeedConfig } from "./_cirugia360-speed-config.js";
+import { getCirugia360SpeedConfigWithSettings } from "./_cirugia360-speed-config.js";
 import { createBookingLeadFromBooking } from "./_cirugia360-speed-workflow.js";
 import { createReservoBooking, validateBookingPayload } from "./_reservo.js";
 
@@ -48,7 +48,7 @@ export default async function handler(request, response) {
     let bookingFollowUp = null;
 
     try {
-      const speedConfig = getCirugia360SpeedConfig(request, {
+      const speedConfig = await getCirugia360SpeedConfigWithSettings(request, {
         requireAgents: true,
         requireTwilio: false,
       });

@@ -1,48 +1,82 @@
 # Cirugia360 Speed To Lead
 
-Backend independiente para Cirugia360 inspirado en la logica de `Speed-to-Lead`, sin depender del proyecto `Mommy Makeover`.
+Backend y dashboard independiente para Cirugia360 inspirado en Medystetic, usando tablas propias `c360_speed_*`.
 
 ## Flujos cubiertos
 
 1. `POST /api/cirugia360-speed/contact`
    Crea un lead de contacto inmediato y llama a la asesora por Twilio.
 2. `POST /api/bookings`
-   Crea la reserva en Reservo y, si la reserva sale bien, crea un lead de seguimiento para llamar a la asesora independiente de si el paciente paga o no.
+   Crea la reserva en Reservo y llama a la asesora independiente de si el paciente paga o no.
 3. `GET|POST /api/cirugia360-speed/queue-dispatch`
-   Procesa la cola de leads pendientes y dispara llamadas cuando una asesora queda disponible.
+   Procesa la cola de leads pendientes desde Vercel Cron.
 4. `POST /api/cirugia360-speed/twilio/*`
-   Endpoints internos para el flujo de voz con Twilio.
+   Endpoints internos para voz, estado de llamadas, grabaciones y transcripciones.
+5. `/dashboard`
+   Dashboard con login Supabase Auth, metricas, pipeline, leads, notas, equipo y botones de llamada.
 
-## Integracion con Reservo
+## Dashboard
 
-`POST /api/bookings` mantiene el flujo actual de Reservo y agrega el seguimiento telefonico automatico.
+Ruta:
 
-La respuesta agrega:
-
-```json
-{
-  "bookingFollowUp": {
-    "leadId": "uuid",
-    "callStarted": true,
-    "queued": false,
-    "dispatchScheduledAt": "2026-04-23T20:00:00.000Z",
-    "bookingReference": "..."
-  }
-}
+```text
+/dashboard
 ```
 
-Si la asesora esta ocupada, Twilio no responde o se alcanza el cooldown, el lead queda en cola y `queue-dispatch` lo reintenta.
+El dashboard usa Supabase Auth. Debes crear al menos un usuario en Supabase:
 
-## Variables nuevas
+```text
+Supabase > Authentication > Users > Add user
+```
+
+El frontend necesita:
 
 ```env
+VITE_SUPABASE_URL=
+VITE_SUPABASE_ANON_KEY=
+```
+
+El backend valida el token del dashboard con:
+
+```env
+SUPABASE_URL=
+SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+```
+
+`SUPABASE_SERVICE_ROLE_KEY` debe ser la service role real. Una publishable/anon key no sirve para escribir leads, pipeline, notas ni settings.
+
+## Botones de llamada
+
+Los botones `Llamar` del dashboard no usan llamadas desde navegador. Todos llaman a:
+
+```text
+POST /api/cirugia360-speed/dashboard?resource=lead-call
+```
+
+Ese endpoint reutiliza el flujo normal:
+
+1. backend llama a la asesora por Twilio
+2. la asesora escucha el resumen
+3. presiona `1`
+4. Twilio conecta con el paciente
+
+## Variables principales
+
+```env
+SUPABASE_URL=
+SUPABASE_SERVICE_ROLE_KEY=
+SUPABASE_ANON_KEY=
+VITE_SUPABASE_URL=
+VITE_SUPABASE_ANON_KEY=
+
 TWILIO_ACCOUNT_SID=
 TWILIO_AUTH_TOKEN=
 TWILIO_PHONE_NUMBER=
 TWILIO_VALIDATE_SIGNATURE=true
+
 CRON_SECRET=
 DEFAULT_COUNTRY_DIAL_CODE=56
-
 CIRUGIA360_STL_BUSINESS_TIME_ZONE=America/Santiago
 CIRUGIA360_STL_RETRY_DELAY_SECONDS=180
 CIRUGIA360_STL_AGENT_CALL_COOLDOWN_SECONDS=180
@@ -50,25 +84,41 @@ CIRUGIA360_STL_QUEUE_PAUSED=false
 CIRUGIA360_STL_AGENTS_JSON=[{"id":"agent-1","name":"Asesora 1","phone":"+56912345678"}]
 ```
 
+Las asesoras se pueden guardar desde el dashboard. Si existen settings guardados, tienen prioridad sobre `CIRUGIA360_STL_AGENTS_JSON`.
+
+## Meta opcional
+
+```env
+META_ACCESS_TOKEN=
+META_PIXEL_ID=
+META_AD_ACCOUNT_ID=
+META_API_VERSION=v23.0
+META_TEST_EVENT_CODE=
+META_EVENT_NAME_LEAD=ProspectCaptured
+META_EVENT_NAME_CONTACT=ProspectReached
+META_EVENT_NAME_SCHEDULE=ProspectQualified
+META_EVENT_NAME_PURCHASE=CustomerConfirmed
+```
+
+Si `META_ACCESS_TOKEN` y `META_PIXEL_ID` no estan definidos, el tracking queda guardado en Supabase pero no se envia a Meta.
+
 ## Base de datos
 
-Se agregaron estas entidades a `supabase/schema.sql`:
+Aplica `supabase/schema.sql` despues de estos cambios. Agrega:
 
-- `public.c360_speed_leads`
-- `public.c360_speed_lead_events`
+- columnas de pipeline en `public.c360_speed_leads`
+- columnas de grabacion/transcripcion en `public.c360_speed_leads`
+- `public.c360_speed_lead_notes`
+- `public.c360_speed_tracking_events`
+- `public.c360_speed_settings`
 - `public.c360_claim_due_speed_leads(...)`
-
-Antes de usar el backend nuevo, aplica ese schema en la base de Supabase de Cirugia360.
 
 ## Operacion recomendada
 
-1. Configurar Twilio y al menos una asesora.
-2. Aplicar `supabase/schema.sql`.
-3. Ejecutar `queue-dispatch` cada minuto desde un scheduler externo o desde un cron compatible con esa frecuencia.
-4. Probar una reserva real desde la pagina y confirmar que `bookingFollowUp.callStarted` o `bookingFollowUp.queued` vuelva en la respuesta.
-
-## Supuestos actuales
-
-- El backend de Cirugia360 es independiente y usa sus propias tablas.
-- Toda persona que agenda desde la pagina genera llamada a asesora, pague o no pague.
-- La distribucion entre asesoras usa el orden configurado y rota al siguiente intento si la actual no responde o esta ocupada.
+1. Aplicar `supabase/schema.sql`.
+2. Configurar variables en Vercel.
+3. Crear usuario en Supabase Auth.
+4. Entrar a `/dashboard`.
+5. Guardar asesoras reales en `Equipo`.
+6. Confirmar que Vercel Cron ejecute `/api/cirugia360-speed/queue-dispatch` cada minuto.
+7. Probar una reserva real y confirmar que aparece en el dashboard.

@@ -60,6 +60,9 @@ export const dialLeadFromActiveCall = (response, config, lead, conversationId = 
   const customerStatusUrl = `${config.appUrl}/api/cirugia360-speed/twilio/customer-status?leadId=${encodeURIComponent(
     lead.id,
   )}&conversationId=${encodeURIComponent(conversationId)}`;
+  const recordingStatusUrl = `${config.appUrl}/api/cirugia360-speed/twilio/recording-status?leadId=${encodeURIComponent(
+    lead.id,
+  )}&conversationId=${encodeURIComponent(conversationId)}`;
   const customerCompleteUrl = `${config.appUrl}/api/cirugia360-speed/twilio/voice/customer-complete?leadId=${encodeURIComponent(
     lead.id,
   )}&conversationId=${encodeURIComponent(conversationId)}`;
@@ -68,6 +71,10 @@ export const dialLeadFromActiveCall = (response, config, lead, conversationId = 
     answerOnBridge: true,
     action: customerCompleteUrl,
     method: "POST",
+    record: "record-from-answer-dual",
+    recordingStatusCallback: recordingStatusUrl,
+    recordingStatusCallbackMethod: "POST",
+    recordingStatusCallbackEvent: "completed",
   });
 
   dial.number(
