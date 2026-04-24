@@ -68,7 +68,9 @@ type PipelineStage = {
 type LeadNote = {
   id: number;
   createdAt: string;
+  updatedAt?: string | null;
   authorEmail: string | null;
+  editedByEmail?: string | null;
   body: string;
 };
 
@@ -1576,6 +1578,8 @@ const LeadDetail = ({
   onValue,
   onOutcome,
   onNote,
+  onUpdateNote,
+  onDeleteNote,
   onAgent,
   onCall,
 }: {
@@ -1587,6 +1591,8 @@ const LeadDetail = ({
   onValue: (leadId: string, pipelineValue: number, options?: ActionOptions) => Promise<boolean>;
   onOutcome: (leadId: string, outcome: "active" | "lost" | "won", reason?: string, options?: ActionOptions) => Promise<boolean>;
   onNote: (leadId: string, body: string, options?: ActionOptions) => Promise<boolean>;
+  onUpdateNote: (leadId: string, noteId: number, body: string, options?: ActionOptions) => Promise<boolean>;
+  onDeleteNote: (leadId: string, noteId: number, options?: ActionOptions) => Promise<boolean>;
   onAgent: (leadId: string, assignedAgentId: string, options?: ActionOptions) => Promise<boolean>;
   onCall: (leadId: string, options?: ActionOptions) => Promise<boolean>;
 }) => {
@@ -1595,6 +1601,8 @@ const LeadDetail = ({
   const [reason, setReason] = useState(lead.pipelineOutcomeReason || "");
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
+  const [editingNoteId, setEditingNoteId] = useState<number | null>(null);
+  const [editingNoteBody, setEditingNoteBody] = useState("");
   const [drawerToast, setDrawerToast] = useState<{ id: number; tone: ToastTone; title: string; detail?: string } | null>(null);
   const drawerRef = useRef<HTMLElement | null>(null);
   const activeAgents = (settings?.agents || []).filter((agent) => agent.active !== false);
@@ -1602,6 +1610,13 @@ const LeadDetail = ({
     activeAgents.find(
       (agent) => agent.name === lead.assignedAgentName,
     )?.id || "";
+  const sortedNotes = useMemo(
+    () =>
+      [...lead.notes].sort(
+        (firstNote, secondNote) => Date.parse(secondNote.createdAt) - Date.parse(firstNote.createdAt),
+      ),
+    [lead.notes],
+  );
 
   const showDrawerToast = (tone: ToastTone, title: string, detail?: string) => {
     const id = Date.now();
@@ -1770,6 +1785,47 @@ const LeadDetail = ({
     }
   };
 
+  const startEditingNote = (leadNote: LeadNote) => {
+    setEditingNoteId(leadNote.id);
+    setEditingNoteBody(leadNote.body);
+  };
+
+  const saveEditedNote = async () => {
+    if (!editingNoteId || !editingNoteBody.trim()) {
+      return;
+    }
+
+    setIsSaving(true);
+    const saved = await onUpdateNote(lead.id, editingNoteId, editingNoteBody, { skipToast: true });
+    setIsSaving(false);
+
+    if (saved) {
+      setEditingNoteId(null);
+      setEditingNoteBody("");
+      showDrawerToast("success", "Nota actualizada.");
+    } else {
+      showDrawerToast("error", "No pudimos actualizar la nota.");
+    }
+  };
+
+  const deleteNote = async (leadNote: LeadNote) => {
+    const confirmed = window.confirm("¿Eliminar esta nota? Quedará registrada en auditoría.");
+
+    if (!confirmed) {
+      return;
+    }
+
+    setIsSaving(true);
+    const deleted = await onDeleteNote(lead.id, leadNote.id, { skipToast: true });
+    setIsSaving(false);
+
+    if (deleted) {
+      showDrawerToast("success", "Nota eliminada.");
+    } else {
+      showDrawerToast("error", "No pudimos eliminar la nota.");
+    }
+  };
+
   return (
     <div
       className="fixed inset-0 z-40 bg-slate-950/20"
@@ -1925,12 +1981,61 @@ const LeadDetail = ({
             Guardar nota
           </button>
           <div className="mt-4 space-y-3">
-            {lead.notes.map((leadNote) => (
+            {sortedNotes.map((leadNote) => (
               <div key={leadNote.id} className="rounded-md bg-slate-50 p-3 text-sm">
-                <p className="text-slate-800">{leadNote.body}</p>
+                {editingNoteId === leadNote.id ? (
+                  <div className="space-y-2">
+                    <textarea
+                      className="min-h-20 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+                      value={editingNoteBody}
+                      onChange={(event) => setEditingNoteBody(event.target.value)}
+                    />
+                    <div className="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        className="rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-600"
+                        onClick={() => {
+                          setEditingNoteId(null);
+                          setEditingNoteBody("");
+                        }}
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded-md bg-slate-950 px-2 py-1 text-xs font-semibold text-white"
+                        onClick={() => void saveEditedNote()}
+                        disabled={isSaving}
+                      >
+                        Guardar
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="whitespace-pre-wrap text-slate-800">{leadNote.body}</p>
+                )}
                 <p className="mt-2 text-xs text-slate-500">
                   {formatDate(leadNote.createdAt)} - {leadNote.authorEmail || "Dashboard"}
+                  {leadNote.updatedAt ? ` · Editada ${formatDate(leadNote.updatedAt)}` : ""}
                 </p>
+                {editingNoteId !== leadNote.id ? (
+                  <div className="mt-2 flex justify-end gap-2">
+                    <button
+                      type="button"
+                      className="text-xs font-semibold text-dashboard-primary"
+                      onClick={() => startEditingNote(leadNote)}
+                    >
+                      Editar
+                    </button>
+                    <button
+                      type="button"
+                      className="text-xs font-semibold text-red-700"
+                      onClick={() => void deleteNote(leadNote)}
+                    >
+                      Eliminar
+                    </button>
+                  </div>
+                ) : null}
               </div>
             ))}
           </div>
@@ -2854,6 +2959,134 @@ const Cirugia360Dashboard = () => {
     }
   };
 
+  const updateLeadNote = async (leadId: string, noteId: number, body: string, options: ActionOptions = {}) => {
+    const trimmedBody = body.trim();
+
+    if (!trimmedBody) {
+      return false;
+    }
+
+    setError("");
+    const previousSnapshot = snapshot;
+    const patchNote = (leadNote: LeadNote): LeadNote =>
+      leadNote.id === noteId ? { ...leadNote, body: trimmedBody, updatedAt: new Date().toISOString() } : leadNote;
+
+    setSnapshot((currentSnapshot) => {
+      if (!currentSnapshot) {
+        return currentSnapshot;
+      }
+
+      const nextLeads = currentSnapshot.leads.map((lead) =>
+        lead.id === leadId ? { ...lead, notes: lead.notes.map(patchNote) } : lead,
+      );
+
+      return withLeads(currentSnapshot, nextLeads);
+    });
+    setSelectedLead((currentLead) =>
+      currentLead?.id === leadId ? { ...currentLead, notes: currentLead.notes.map(patchNote) } : currentLead,
+    );
+
+    try {
+      const savedNote = await apiRequest<LeadNote>("/api/cirugia360-speed/dashboard?resource=lead-note", {
+        method: "PATCH",
+        body: JSON.stringify({
+          noteId,
+          body: trimmedBody,
+        }),
+      });
+      setSnapshot((currentSnapshot) => {
+        if (!currentSnapshot) {
+          return currentSnapshot;
+        }
+
+        const nextLeads = currentSnapshot.leads.map((lead) =>
+          lead.id === leadId
+            ? { ...lead, notes: lead.notes.map((leadNote) => (leadNote.id === noteId ? savedNote : leadNote)) }
+            : lead,
+        );
+
+        return withLeads(currentSnapshot, nextLeads);
+      });
+      setSelectedLead((currentLead) =>
+        currentLead?.id === leadId
+          ? { ...currentLead, notes: currentLead.notes.map((leadNote) => (leadNote.id === noteId ? savedNote : leadNote)) }
+          : currentLead,
+      );
+
+      if (!options.skipToast) {
+        showActionToast("success", "Nota actualizada.");
+      }
+
+      return true;
+    } catch (noteError) {
+      if (isSessionExpiredError(noteError)) {
+        await expireDashboardSession();
+        return false;
+      }
+
+      const message = noteError instanceof Error ? noteError.message : "No pudimos actualizar la nota.";
+      setError(message);
+      await reconcileAfterFailure(previousSnapshot);
+      setError(message);
+
+      if (!options.skipToast) {
+        showActionToast("error", "No pudimos actualizar la nota.", message);
+      }
+
+      return false;
+    }
+  };
+
+  const deleteLeadNote = async (leadId: string, noteId: number, options: ActionOptions = {}) => {
+    setError("");
+    const previousSnapshot = snapshot;
+    const removeNote = (notes: LeadNote[]) => notes.filter((leadNote) => leadNote.id !== noteId);
+
+    setSnapshot((currentSnapshot) => {
+      if (!currentSnapshot) {
+        return currentSnapshot;
+      }
+
+      const nextLeads = currentSnapshot.leads.map((lead) =>
+        lead.id === leadId ? { ...lead, notes: removeNote(lead.notes) } : lead,
+      );
+
+      return withLeads(currentSnapshot, nextLeads);
+    });
+    setSelectedLead((currentLead) =>
+      currentLead?.id === leadId ? { ...currentLead, notes: removeNote(currentLead.notes) } : currentLead,
+    );
+
+    try {
+      await apiRequest<{ id: number }>("/api/cirugia360-speed/dashboard?resource=lead-note", {
+        method: "DELETE",
+        body: JSON.stringify({ noteId }),
+      });
+
+      if (!options.skipToast) {
+        showActionToast("success", "Nota eliminada.");
+      }
+
+      return true;
+    } catch (noteError) {
+      if (isSessionExpiredError(noteError)) {
+        await expireDashboardSession();
+        return false;
+      }
+
+      const message = noteError instanceof Error ? noteError.message : "No pudimos eliminar la nota.";
+      setError(message);
+      await reconcileAfterFailure(previousSnapshot);
+      setError(message);
+
+      if (!options.skipToast) {
+        showActionToast("error", "No pudimos eliminar la nota.", message);
+      }
+
+      return false;
+    }
+  };
+
   if (!isAuthReady) {
     return (
       <main className="grid min-h-screen place-items-center bg-dashboard-page-muted text-slate-950">
@@ -3106,6 +3339,8 @@ const Cirugia360Dashboard = () => {
           onValue={updatePipelineValue}
           onOutcome={updateOutcome}
           onNote={addLeadNote}
+          onUpdateNote={updateLeadNote}
+          onDeleteNote={deleteLeadNote}
           onAgent={updateAssignedAgent}
           onCall={callLead}
         />

@@ -2,8 +2,10 @@ import { requireDashboardAuth } from "../_cirugia360-dashboard-auth.js";
 import {
   addLeadNote,
   buildDashboardSnapshot,
+  deleteLeadNote,
   dispatchMetaEvent,
   insertTrackingEvent,
+  updateLeadNote,
 } from "../_cirugia360-dashboard-data.js";
 import {
   getCirugia360SpeedConfig,
@@ -107,8 +109,62 @@ const handleQueueControl = async (request, response, user) => {
 
 const handleLeadNote = async (request, response, user) => {
   const body = await readJsonBody(request);
+  const noteId = Number(body.noteId || 0);
   const leadId = normalizeText(body.leadId);
   const noteBody = normalizeText(body.body);
+
+  if (request.method === "PATCH") {
+    if (!noteId || !noteBody) {
+      return sendJson(response, 400, {
+        success: false,
+        error: "Selecciona una nota y escribe el texto actualizado.",
+      });
+    }
+
+    const note = await updateLeadNote({
+      noteId,
+      body: noteBody,
+      authorEmail: user.email,
+    });
+
+    if (!note) {
+      return sendJson(response, 404, {
+        success: false,
+        error: "No encontramos esa nota.",
+      });
+    }
+
+    return sendJson(response, 200, {
+      success: true,
+      data: note,
+    });
+  }
+
+  if (request.method === "DELETE") {
+    if (!noteId) {
+      return sendJson(response, 400, {
+        success: false,
+        error: "Selecciona una nota para eliminar.",
+      });
+    }
+
+    const note = await deleteLeadNote({
+      noteId,
+      authorEmail: user.email,
+    });
+
+    if (!note) {
+      return sendJson(response, 404, {
+        success: false,
+        error: "No encontramos esa nota.",
+      });
+    }
+
+    return sendJson(response, 200, {
+      success: true,
+      data: note,
+    });
+  }
 
   if (!leadId || !noteBody) {
     return sendJson(response, 400, {
@@ -241,8 +297,8 @@ export default async function handler(request, response) {
     }
 
     if (resource === "lead-note") {
-      if (request.method !== "POST") {
-        return methodNotAllowed(response, ["POST"]);
+      if (!["POST", "PATCH", "DELETE"].includes(request.method || "")) {
+        return methodNotAllowed(response, ["POST", "PATCH", "DELETE"]);
       }
 
       return handleLeadNote(request, response, user);

@@ -132,9 +132,18 @@ create table if not exists public.c360_speed_lead_notes (
   id bigserial primary key,
   lead_id uuid not null references public.c360_speed_leads(id) on delete cascade,
   created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz,
+  deleted_at timestamptz,
   author_email text,
+  edited_by_email text,
+  deleted_by_email text,
   body text not null
 );
+
+alter table public.c360_speed_lead_notes add column if not exists updated_at timestamptz;
+alter table public.c360_speed_lead_notes add column if not exists deleted_at timestamptz;
+alter table public.c360_speed_lead_notes add column if not exists edited_by_email text;
+alter table public.c360_speed_lead_notes add column if not exists deleted_by_email text;
 
 create table if not exists public.c360_speed_tracking_events (
   id bigserial primary key,
@@ -191,6 +200,10 @@ create index if not exists c360_speed_lead_events_lead_id_idx
 
 create index if not exists c360_speed_lead_notes_lead_id_idx
   on public.c360_speed_lead_notes (lead_id, created_at desc);
+
+create index if not exists c360_speed_lead_notes_active_idx
+  on public.c360_speed_lead_notes (lead_id, created_at desc)
+  where deleted_at is null;
 
 create index if not exists c360_speed_tracking_events_lead_id_idx
   on public.c360_speed_tracking_events (lead_id, created_at desc);

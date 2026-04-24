@@ -107,6 +107,7 @@ const getLeadNotes = async (leadIds) => {
     .from(NOTES_TABLE)
     .select("*")
     .in("lead_id", leadIds)
+    .is("deleted_at", null)
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -120,7 +121,9 @@ const getLeadNotes = async (leadIds) => {
     currentNotes.push({
       id: note.id,
       createdAt: note.created_at,
+      updatedAt: note.updated_at,
       authorEmail: note.author_email,
+      editedByEmail: note.edited_by_email,
       body: note.body,
     });
     notesByLead.set(note.lead_id, currentNotes);
@@ -351,9 +354,100 @@ export const addLeadNote = async ({ leadId, body, authorEmail = null }) => {
   return {
     id: data.id,
     createdAt: data.created_at,
+    updatedAt: data.updated_at,
     authorEmail: data.author_email,
+    editedByEmail: data.edited_by_email,
     body: data.body,
   };
+};
+
+export const updateLeadNote = async ({ noteId, body, authorEmail = null }) => {
+  const client = getSpeedAdminClient();
+  const noteBody = normalizeText(body);
+
+  const { data: existingNote, error: loadError } = await client
+    .from(NOTES_TABLE)
+    .select("*")
+    .eq("id", noteId)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (loadError) {
+    throw new Error(loadError.message || "No se pudo cargar la nota.");
+  }
+
+  if (!existingNote) {
+    return null;
+  }
+
+  const { data, error } = await client
+    .from(NOTES_TABLE)
+    .update({
+      body: noteBody,
+      updated_at: new Date().toISOString(),
+      edited_by_email: normalizeEmail(authorEmail),
+    })
+    .eq("id", existingNote.id)
+    .select("*")
+    .single();
+
+  if (error) {
+    throw new Error(error.message || "No se pudo actualizar la nota.");
+  }
+
+  await insertSpeedLeadEvent(existingNote.lead_id, "lead.note_updated", {
+    noteId: data.id,
+    authorEmail: normalizeEmail(authorEmail),
+  });
+
+  return {
+    id: data.id,
+    createdAt: data.created_at,
+    updatedAt: data.updated_at,
+    authorEmail: data.author_email,
+    editedByEmail: data.edited_by_email,
+    body: data.body,
+  };
+};
+
+export const deleteLeadNote = async ({ noteId, authorEmail = null }) => {
+  const client = getSpeedAdminClient();
+  const deletedAt = new Date().toISOString();
+
+  const { data: existingNote, error: loadError } = await client
+    .from(NOTES_TABLE)
+    .select("*")
+    .eq("id", noteId)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (loadError) {
+    throw new Error(loadError.message || "No se pudo cargar la nota.");
+  }
+
+  if (!existingNote) {
+    return null;
+  }
+
+  const { error } = await client
+    .from(NOTES_TABLE)
+    .update({
+      deleted_at: deletedAt,
+      deleted_by_email: normalizeEmail(authorEmail),
+    })
+    .eq("id", existingNote.id);
+
+  if (error) {
+    throw new Error(error.message || "No se pudo eliminar la nota.");
+  }
+
+  await insertSpeedLeadEvent(existingNote.lead_id, "lead.note_deleted", {
+    noteId: existingNote.id,
+    authorEmail: normalizeEmail(authorEmail),
+    deletedAt,
+  });
+
+  return { id: existingNote.id };
 };
 
 export const insertTrackingEvent = async ({
