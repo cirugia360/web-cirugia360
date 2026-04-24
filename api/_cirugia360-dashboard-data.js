@@ -64,6 +64,7 @@ export const toPublicLead = (lead, notes = []) => ({
   assignedAgentEmail: lead.assigned_agent_email,
   agentAttempts: lead.agent_attempts,
   dispatchScheduledAt: lead.dispatch_scheduled_at,
+  callbackContext: lead.metadata?.dashboardCallback?.context || lead.metadata?.callbackContext || null,
   firstAttemptAt: lead.first_attempt_at,
   customerConnectedAt: lead.customer_connected_at,
   completedAt: lead.completed_at,
@@ -530,6 +531,53 @@ export const deleteLeadNote = async ({ noteId, authorEmail = null }) => {
   });
 
   return { id: existingNote.id };
+};
+
+export const restoreLeadNote = async ({ noteId, authorEmail = null }) => {
+  const client = getSpeedAdminClient();
+
+  const { data: existingNote, error: loadError } = await client
+    .from(NOTES_TABLE)
+    .select("*")
+    .eq("id", noteId)
+    .not("deleted_at", "is", null)
+    .maybeSingle();
+
+  if (loadError) {
+    throw new Error(loadError.message || "No se pudo cargar la nota.");
+  }
+
+  if (!existingNote) {
+    return null;
+  }
+
+  const { data, error } = await client
+    .from(NOTES_TABLE)
+    .update({
+      deleted_at: null,
+      deleted_by_email: null,
+    })
+    .eq("id", existingNote.id)
+    .select("*")
+    .single();
+
+  if (error) {
+    throw new Error(error.message || "No se pudo restaurar la nota.");
+  }
+
+  await insertSpeedLeadEvent(existingNote.lead_id, "lead.note_restored", {
+    noteId: data.id,
+    authorEmail: normalizeEmail(authorEmail),
+  });
+
+  return {
+    id: data.id,
+    createdAt: data.created_at,
+    updatedAt: data.updated_at,
+    authorEmail: data.author_email,
+    editedByEmail: data.edited_by_email,
+    body: data.body,
+  };
 };
 
 export const insertTrackingEvent = async ({

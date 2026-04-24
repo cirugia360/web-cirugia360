@@ -23,7 +23,12 @@ const createLeadSchema = z.object({
 const updateLeadSchema = z.object({
   leadId: z.string().uuid(),
   assignedAgentId: z.string().trim().optional().nullable(),
+  callbackTime: z.string().datetime().optional().nullable(),
+  callbackContext: z.string().trim().max(1000).optional().nullable(),
 });
+
+const isPlainObject = (value) =>
+  Boolean(value) && typeof value === "object" && !Array.isArray(value);
 
 const findAssignedAgent = (agents, assignedAgentId) => {
   const normalizedId = normalizeText(assignedAgentId);
@@ -51,7 +56,8 @@ export default async function handler(request, response) {
 
   try {
     if (request.method === "PATCH") {
-      const payload = updateLeadSchema.parse(await readJsonBody(request));
+      const rawPayload = await readJsonBody(request);
+      const payload = updateLeadSchema.parse(rawPayload);
       const lead = await getSpeedLeadById(payload.leadId);
 
       if (!lead) {
@@ -65,18 +71,89 @@ export default async function handler(request, response) {
         requireAgents: false,
         requireTwilio: false,
       });
-      const assignedAgent = findAssignedAgent(config.salesAgents || [], payload.assignedAgentId);
-      const updatedLead = await updateSpeedLead(lead.id, {
-        assigned_agent_name: assignedAgent?.name || null,
-        assigned_agent_phone: assignedAgent?.phone || null,
-        assigned_agent_email: assignedAgent?.email || null,
-      });
+      const updates = {};
+      const events = [];
 
-      await insertSpeedLeadEvent(lead.id, "lead.assigned_agent_changed", {
-        previousAgentName: lead.assigned_agent_name || null,
-        assignedAgentName: assignedAgent?.name || null,
-        changedBy: user.email || null,
-      });
+      if (Object.prototype.hasOwnProperty.call(rawPayload, "assignedAgentId")) {
+        const assignedAgent = findAssignedAgent(config.salesAgents || [], payload.assignedAgentId);
+
+        updates.assigned_agent_name = assignedAgent?.name || null;
+        updates.assigned_agent_phone = assignedAgent?.phone || null;
+        updates.assigned_agent_email = assignedAgent?.email || null;
+        events.push([
+          "lead.assigned_agent_changed",
+          {
+            previousAgentName: lead.assigned_agent_name || null,
+            assignedAgentName: assignedAgent?.name || null,
+            changedBy: user.email || null,
+          },
+        ]);
+      }
+
+      if (
+        Object.prototype.hasOwnProperty.call(rawPayload, "callbackTime") ||
+        Object.prototype.hasOwnProperty.call(rawPayload, "callbackContext")
+      ) {
+        const metadata = isPlainObject(lead.metadata) ? lead.metadata : {};
+        const callbackContext = normalizeText(payload.callbackContext) || null;
+
+        if (payload.callbackTime) {
+          updates.dispatch_scheduled_at = payload.callbackTime;
+          updates.status = "scheduled";
+          updates.sales_call_status = "scheduled";
+          updates.twilio_sales_call_sid = null;
+          updates.last_error = null;
+          updates.metadata = {
+            ...metadata,
+            dashboardCallback: {
+              scheduledAt: payload.callbackTime,
+              context: callbackContext,
+              scheduledBy: user.email || null,
+            },
+          };
+          events.push([
+            "lead.callback_scheduled",
+            {
+              scheduledAt: payload.callbackTime,
+              context: callbackContext,
+              scheduledBy: user.email || null,
+            },
+          ]);
+        } else {
+          const nextMetadata = { ...metadata };
+          delete nextMetadata.dashboardCallback;
+          delete nextMetadata.callbackContext;
+
+          updates.dispatch_scheduled_at = null;
+          updates.metadata = nextMetadata;
+
+          if (lead.status === "scheduled") {
+            updates.status = "received";
+            updates.sales_call_status = null;
+          }
+
+          events.push([
+            "lead.callback_cleared",
+            {
+              previousScheduledAt: lead.dispatch_scheduled_at || null,
+              clearedBy: user.email || null,
+            },
+          ]);
+        }
+      }
+
+      if (Object.keys(updates).length === 0) {
+        return sendJson(response, 400, {
+          success: false,
+          error: "No hay cambios para guardar.",
+        });
+      }
+
+      const updatedLead = await updateSpeedLead(lead.id, updates);
+
+      for (const [eventType, eventPayload] of events) {
+        await insertSpeedLeadEvent(lead.id, eventType, eventPayload);
+      }
 
       return sendJson(response, 200, {
         success: true,

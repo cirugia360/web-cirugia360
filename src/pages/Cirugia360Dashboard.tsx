@@ -90,6 +90,7 @@ type DashboardLead = {
   assignedAgentEmail: string | null;
   agentAttempts: number;
   dispatchScheduledAt: string | null;
+  callbackContext: string | null;
   customerConnectedAt: string | null;
   completedAt: string | null;
   lastError: string | null;
@@ -306,6 +307,31 @@ const formatDate = (value: string | null) =>
         timeStyle: "short",
       }).format(new Date(value))
     : "Sin dato";
+
+const toDateTimeLocalValue = (value: string | null) => {
+  if (!value) {
+    return "";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  const offsetDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return offsetDate.toISOString().slice(0, 16);
+};
+
+const dateTimeLocalToIso = (value: string) => {
+  if (!value) {
+    return null;
+  }
+
+  const date = new Date(value);
+
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+};
 
 const formatMetric = (metric: DashboardMetric) => {
   if (metric.format === "currency") {
@@ -1775,6 +1801,7 @@ const LeadDetail = ({
   onUpdateNote,
   onDeleteNote,
   onAgent,
+  onCallback,
   onCall,
 }: {
   lead: DashboardLead;
@@ -1788,12 +1815,15 @@ const LeadDetail = ({
   onUpdateNote: (leadId: string, noteId: number, body: string, options?: ActionOptions) => Promise<boolean>;
   onDeleteNote: (leadId: string, noteId: number, options?: ActionOptions) => Promise<boolean>;
   onAgent: (leadId: string, assignedAgentId: string, options?: ActionOptions) => Promise<boolean>;
+  onCallback: (leadId: string, callbackTime: string | null, callbackContext: string, options?: ActionOptions) => Promise<boolean>;
   onCall: (leadId: string, options?: ActionOptions) => Promise<boolean>;
 }) => {
   const [note, setNote] = useState("");
   const [value, setValue] = useState(String(Math.round(lead.pipelineValue || 0)));
   const [reasonCode, setReasonCode] = useState<LossReasonCode | "">((lead.pipelineOutcomeReasonCode as LossReasonCode) || "");
   const [reason, setReason] = useState(lead.pipelineOutcomeReason || "");
+  const [callbackTime, setCallbackTime] = useState(toDateTimeLocalValue(lead.dispatchScheduledAt));
+  const [callbackContext, setCallbackContext] = useState(lead.callbackContext || "");
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
   const [editingNoteId, setEditingNoteId] = useState<number | null>(null);
@@ -1912,8 +1942,8 @@ const LeadDetail = ({
 
     try {
       const saved = await onOutcome(lead.id, outcome, reason.trim(), {
-        skipToast: true,
-        skipUndoToast: true,
+        skipToast: outcome === "active",
+        skipUndoToast: outcome === "active",
         reasonCode: outcome === "lost" ? reasonCode : null,
       });
 
@@ -1990,6 +2020,50 @@ const LeadDetail = ({
     }
   };
 
+  const saveCallback = async () => {
+    const callbackTimeIso = dateTimeLocalToIso(callbackTime);
+
+    if (!callbackTimeIso) {
+      setError("Selecciona fecha y hora para volver a llamar.");
+      showDrawerToast("warning", "Selecciona fecha y hora para volver a llamar.");
+      return;
+    }
+
+    if (Date.parse(callbackTimeIso) <= Date.now() - 60000) {
+      setError("La hora de rellamada debe ser futura.");
+      showDrawerToast("warning", "La hora de rellamada debe ser futura.");
+      return;
+    }
+
+    setIsSaving(true);
+    setError("");
+
+    const saved = await onCallback(lead.id, callbackTimeIso, callbackContext, { skipToast: true });
+    setIsSaving(false);
+
+    if (saved) {
+      showDrawerToast("success", "Rellamada programada.", formatDate(callbackTimeIso));
+    } else {
+      showDrawerToast("error", "No pudimos programar la rellamada.");
+    }
+  };
+
+  const clearCallback = async () => {
+    setIsSaving(true);
+    setError("");
+
+    const saved = await onCallback(lead.id, null, "", { skipToast: true });
+    setIsSaving(false);
+
+    if (saved) {
+      setCallbackTime("");
+      setCallbackContext("");
+      showDrawerToast("success", "Rellamada cancelada.");
+    } else {
+      showDrawerToast("error", "No pudimos cancelar la rellamada.");
+    }
+  };
+
   const startEditingNote = (leadNote: LeadNote) => {
     setEditingNoteId(leadNote.id);
     setEditingNoteBody(leadNote.body);
@@ -2021,7 +2095,7 @@ const LeadDetail = ({
     }
 
     setIsSaving(true);
-    const deleted = await onDeleteNote(lead.id, leadNote.id, { skipToast: true });
+    const deleted = await onDeleteNote(lead.id, leadNote.id);
     setIsSaving(false);
 
     if (deleted) {
@@ -2098,6 +2172,57 @@ const LeadDetail = ({
           </label>
           <Detail label="Intentos" value={String(lead.agentAttempts || 0)} />
           <Detail label="Ultimo error" value={lead.lastError || "Sin error"} />
+        </section>
+
+        <section className="rounded-lg border border-slate-200 p-4">
+          <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <h3 className="text-sm font-semibold">Volver a llamar</h3>
+              {lead.dispatchScheduledAt ? (
+                <p className="mt-1 text-xs text-slate-500">Programada para {formatDate(lead.dispatchScheduledAt)}</p>
+              ) : null}
+            </div>
+            {lead.dispatchScheduledAt ? (
+              <button
+                type="button"
+                className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600"
+                onClick={() => void clearCallback()}
+                disabled={isSaving}
+              >
+                Cancelar
+              </button>
+            ) : null}
+          </div>
+          <div className="grid gap-3">
+            <label className="text-sm">
+              Fecha y hora
+              <input
+                type="datetime-local"
+                className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+                value={callbackTime}
+                onChange={(event) => setCallbackTime(event.target.value)}
+              />
+            </label>
+            <label className="text-sm">
+              Contexto
+              <textarea
+                className="mt-1 min-h-20 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+                value={callbackContext}
+                onChange={(event) => setCallbackContext(event.target.value)}
+                placeholder="Ej: Prefiere llamada despues de las 17:00, preguntar por disponibilidad de pabellon."
+              />
+            </label>
+            <div className="flex justify-end">
+              <button
+                type="button"
+                className="rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white"
+                onClick={() => void saveCallback()}
+                disabled={isSaving}
+              >
+                Programar rellamada
+              </button>
+            </div>
+          </div>
         </section>
 
         <section className="rounded-lg border border-slate-200 p-4">
@@ -3230,6 +3355,70 @@ const Cirugia360Dashboard = () => {
     }
   };
 
+  const updateCallback = async (
+    leadId: string,
+    callbackTime: string | null,
+    callbackContext: string,
+    options: ActionOptions = {},
+  ) => {
+    setError("");
+    const previousSnapshot = snapshot;
+    const previousLead = previousSnapshot?.leads.find((lead) => lead.id === leadId) || null;
+    const nextPatch: Partial<DashboardLead> = {
+      dispatchScheduledAt: callbackTime,
+      callbackContext: callbackTime ? callbackContext.trim() || null : null,
+      status: callbackTime ? "scheduled" : previousLead?.status === "scheduled" ? "received" : previousLead?.status || "received",
+      salesCallStatus: callbackTime ? "scheduled" : previousLead?.status === "scheduled" ? null : previousLead?.salesCallStatus || null,
+      lastError: callbackTime ? null : previousLead?.lastError || null,
+    };
+
+    patchLead(leadId, nextPatch);
+
+    try {
+      const updatedLead = await apiRequest<DashboardLead>("/api/cirugia360-speed/lead", {
+        method: "PATCH",
+        body: JSON.stringify({
+          leadId,
+          callbackTime,
+          callbackContext: callbackContext.trim() || null,
+        }),
+      });
+      patchLead(leadId, {
+        dispatchScheduledAt: updatedLead.dispatchScheduledAt,
+        callbackContext: updatedLead.callbackContext,
+        status: updatedLead.status,
+        salesCallStatus: updatedLead.salesCallStatus,
+        lastError: updatedLead.lastError,
+      });
+
+      if (!options.skipToast) {
+        showActionToast(
+          "success",
+          callbackTime ? "Rellamada programada." : "Rellamada cancelada.",
+          callbackTime ? formatDate(callbackTime) : undefined,
+        );
+      }
+
+      return true;
+    } catch (callbackError) {
+      if (isSessionExpiredError(callbackError)) {
+        await expireDashboardSession();
+        return false;
+      }
+
+      const message = callbackError instanceof Error ? callbackError.message : "No pudimos guardar la rellamada.";
+      setError(message);
+      await reconcileAfterFailure(previousSnapshot);
+      setError(message);
+
+      if (!options.skipToast) {
+        showActionToast("error", "No pudimos guardar la rellamada.", message);
+      }
+
+      return false;
+    }
+  };
+
   const addLeadNote = async (leadId: string, body: string, options: ActionOptions = {}) => {
     const trimmedBody = body.trim();
 
@@ -3395,6 +3584,10 @@ const Cirugia360Dashboard = () => {
   const deleteLeadNote = async (leadId: string, noteId: number, options: ActionOptions = {}) => {
     setError("");
     const previousSnapshot = snapshot;
+    const deletedNote =
+      previousSnapshot?.leads.find((lead) => lead.id === leadId)?.notes.find((leadNote) => leadNote.id === noteId) ||
+      selectedLead?.notes.find((leadNote) => leadNote.id === noteId) ||
+      null;
     const removeNote = (notes: LeadNote[]) => notes.filter((leadNote) => leadNote.id !== noteId);
 
     setSnapshot((currentSnapshot) => {
@@ -3418,7 +3611,54 @@ const Cirugia360Dashboard = () => {
         body: JSON.stringify({ noteId }),
       });
 
-      if (!options.skipToast) {
+      if (!options.skipToast && !options.skipUndoToast && deletedNote) {
+        toast.success("Nota eliminada.", {
+          description: "Puedes deshacer esta accion durante unos segundos.",
+          duration: 6000,
+          action: {
+            label: "Deshacer",
+            onClick: async () => {
+              try {
+                const restoredNote = await apiRequest<LeadNote>("/api/cirugia360-speed/dashboard?resource=lead-note", {
+                  method: "PATCH",
+                  body: JSON.stringify({
+                    action: "restore",
+                    noteId,
+                  }),
+                });
+                const addRestoredNote = (notes: LeadNote[]) => {
+                  if (notes.some((leadNote) => leadNote.id === restoredNote.id)) {
+                    return notes;
+                  }
+
+                  return [restoredNote, ...notes].sort(
+                    (firstNote, secondNote) => Date.parse(secondNote.createdAt) - Date.parse(firstNote.createdAt),
+                  );
+                };
+
+                setSnapshot((currentSnapshot) => {
+                  if (!currentSnapshot) {
+                    return currentSnapshot;
+                  }
+
+                  const nextLeads = currentSnapshot.leads.map((lead) =>
+                    lead.id === leadId ? { ...lead, notes: addRestoredNote(lead.notes) } : lead,
+                  );
+
+                  return withLeads(currentSnapshot, nextLeads);
+                });
+                setSelectedLead((currentLead) =>
+                  currentLead?.id === leadId ? { ...currentLead, notes: addRestoredNote(currentLead.notes) } : currentLead,
+                );
+                showActionToast("success", "Nota restaurada.");
+              } catch (restoreError) {
+                const message = restoreError instanceof Error ? restoreError.message : "No pudimos restaurar la nota.";
+                showActionToast("error", "No pudimos restaurar la nota.", message);
+              }
+            },
+          },
+        });
+      } else if (!options.skipToast) {
         showActionToast("success", "Nota eliminada.");
       }
 
@@ -3705,6 +3945,7 @@ const Cirugia360Dashboard = () => {
           onUpdateNote={updateLeadNote}
           onDeleteNote={deleteLeadNote}
           onAgent={updateAssignedAgent}
+          onCallback={updateCallback}
           onCall={callLead}
         />
       ) : null}

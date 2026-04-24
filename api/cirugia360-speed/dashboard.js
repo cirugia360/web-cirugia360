@@ -5,6 +5,7 @@ import {
   deleteLeadNote,
   dispatchMetaEvent,
   insertTrackingEvent,
+  restoreLeadNote,
   updateLeadNote,
 } from "../_cirugia360-dashboard-data.js";
 import {
@@ -112,8 +113,35 @@ const handleLeadNote = async (request, response, user) => {
   const noteId = Number(body.noteId || 0);
   const leadId = normalizeText(body.leadId);
   const noteBody = normalizeText(body.body);
+  const action = normalizeText(body.action).toLowerCase();
 
   if (request.method === "PATCH") {
+    if (action === "restore") {
+      if (!noteId) {
+        return sendJson(response, 400, {
+          success: false,
+          error: "Selecciona una nota para restaurar.",
+        });
+      }
+
+      const note = await restoreLeadNote({
+        noteId,
+        authorEmail: user.email,
+      });
+
+      if (!note) {
+        return sendJson(response, 404, {
+          success: false,
+          error: "No encontramos esa nota.",
+        });
+      }
+
+      return sendJson(response, 200, {
+        success: true,
+        data: note,
+      });
+    }
+
     if (!noteId || !noteBody) {
       return sendJson(response, 400, {
         success: false,
