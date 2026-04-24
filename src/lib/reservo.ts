@@ -67,8 +67,29 @@ export type ReservoBookingResponse = {
   source: unknown;
 };
 
+export type Cirugia360ContactPayload = {
+  fullName: string;
+  phone: string;
+  email?: string | null;
+  procedure?: string | null;
+  message?: string | null;
+  sourceUrl?: string | null;
+  metadata?: Record<string, unknown>;
+};
+
+export type Cirugia360ContactResponse = {
+  success: true;
+  leadId: string;
+  callStarted: boolean;
+  queued: boolean;
+  dispatchScheduledAt: string | null;
+  assignedAgent?: string | null;
+  warning?: string | null;
+};
+
 type ApiErrorPayload = {
   ok?: false;
+  success?: false;
   error?: string;
 };
 
@@ -100,3 +121,13 @@ export const createReservoBooking = (payload: ReservoBookingPayload) =>
     },
     body: JSON.stringify(payload),
   }).then((response) => readJson<ReservoBookingResponse>(response));
+
+export const createCirugia360ContactLead = (payload: Cirugia360ContactPayload) =>
+  fetch("/api/cirugia360-speed/contact", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(payload),
+  }).then((response) => readJson<Cirugia360ContactResponse>(response));

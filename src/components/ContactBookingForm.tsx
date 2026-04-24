@@ -6,20 +6,24 @@ import {
   ChevronRight,
   LoaderCircle,
   MapPin,
+  PhoneCall,
 } from "lucide-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Calendar } from "@/components/ui/calendar";
 import { toast } from "@/components/ui/sonner";
 import {
+  createCirugia360ContactLead,
   createReservoBooking,
   fetchReservoAvailability,
   type AppointmentType,
+  type Cirugia360ContactResponse,
   type ReservoBookingOption,
   type ReservoPaymentRedirect,
   type ReservoBookingResponse,
 } from "@/lib/reservo";
 
 type Step = 1 | 2 | 3 | 4;
+type FlowIntent = "contact" | "booking";
 
 type FormState = {
   rut: string;
@@ -40,6 +44,26 @@ const appointmentCard: {
   procedureName: "Consulta Medica Dr. Sebastian Torres - Presencial o a Distancia",
 };
 
+const flowCopy: Record<
+  FlowIntent,
+  {
+    label: string;
+    eyebrow: string;
+    description: string;
+  }
+> = {
+  contact: {
+    label: "Ser contactado por una asesora",
+    eyebrow: "Contacto inmediato",
+    description: "Dejanos tus datos y una asesora intentara llamarte para resolver dudas.",
+  },
+  booking: {
+    label: "Agendar y pagar evaluacion",
+    eyebrow: "Reserva online",
+    description: "Elige una hora real de Reservo y completa el pago de la evaluacion.",
+  },
+};
+
 const fields: Array<{
   key: keyof FormState;
   label: string;
@@ -53,6 +77,10 @@ const fields: Array<{
   { key: "correo", label: "Correo Electronico", placeholder: "correo@ejemplo.com", type: "email" },
   { key: "telefono", label: "Telefono", placeholder: "+56 9 1234 5678", type: "tel" },
 ];
+
+const contactFields = fields.filter(({ key }) =>
+  ["nombre", "apellido", "correo", "telefono"].includes(key),
+);
 
 const formatDateKey = (date: Date) => {
   const year = date.getFullYear();
@@ -208,6 +236,7 @@ const continueToPayment = (
 
 const ContactBookingForm = () => {
   const [step, setStep] = useState<Step>(1);
+  const [flowIntent, setFlowIntent] = useState<FlowIntent | null>(null);
   const [showDetailErrors, setShowDetailErrors] = useState(false);
   const [form, setForm] = useState<FormState>({
     rut: "",
@@ -220,13 +249,30 @@ const ContactBookingForm = () => {
   const [selectedDate, setSelectedDate] = useState("");
   const [selectedTime, setSelectedTime] = useState("");
   const [confirmedBooking, setConfirmedBooking] = useState<ReservoBookingResponse | null>(null);
+  const [contactLead, setContactLead] = useState<Cirugia360ContactResponse | null>(null);
   const appointmentType: AppointmentType = "presencial";
 
   const availabilityQuery = useQuery({
     queryKey: ["reservo-availability", appointmentType],
     queryFn: () => fetchReservoAvailability(appointmentType),
-    enabled: true,
+    enabled: flowIntent === "booking",
     staleTime: 60_000,
+  });
+
+  const contactMutation = useMutation({
+    mutationFn: createCirugia360ContactLead,
+    onSuccess: (response) => {
+      setContactLead(response);
+      setStep(4);
+      toast.success(
+        response.callStarted
+          ? "Solicitud recibida. Estamos llamando a la asesora."
+          : "Solicitud recibida. La asesora te contactara a la brevedad.",
+      );
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "No se pudo solicitar el contacto.");
+    },
   });
 
   const bookingMutation = useMutation({
@@ -291,21 +337,34 @@ const ContactBookingForm = () => {
   }, [availabilityQuery.data, selectedDate, selectedTime]);
 
   const activeCard = appointmentCard;
+  const isContactFlow = flowIntent === "contact";
+  const isBookingFlow = flowIntent === "booking";
+  const visibleFields = isContactFlow ? contactFields : fields;
+  const progressStepIds: Step[] = isContactFlow ? [1, 2, 4] : [1, 2, 3, 4];
+  const activeProgressIndex = Math.max(progressStepIds.indexOf(step), 0);
   const activeOption: ReservoBookingOption | null = availabilityQuery.data?.option || null;
   const availability = availabilityQuery.data?.availability || {};
   const availableDates = Object.keys(availability);
   const availableTimes = selectedDate ? availability[selectedDate] || [] : [];
 
-  const canContinueFromDetails = Boolean(
-    isValidRut(form.rut) &&
-      form.nombre.trim() &&
-      form.apellido.trim() &&
-      form.segundoApellido.trim() &&
-      isValidEmail(form.correo) &&
-      isValidPhone(form.telefono),
-  );
+  const canContinueFromDetails = isContactFlow
+    ? Boolean(
+        form.nombre.trim() &&
+          form.apellido.trim() &&
+          isValidEmail(form.correo) &&
+          isValidPhone(form.telefono),
+      )
+    : Boolean(
+        isValidRut(form.rut) &&
+          form.nombre.trim() &&
+          form.apellido.trim() &&
+          form.segundoApellido.trim() &&
+          isValidEmail(form.correo) &&
+          isValidPhone(form.telefono),
+      );
 
   const canConfirmBooking =
+    isBookingFlow &&
     Boolean(selectedDate) &&
     Boolean(selectedTime) &&
     !availabilityQuery.isPending &&
@@ -341,8 +400,35 @@ const ContactBookingForm = () => {
     }
   };
 
+  const buildFullName = () =>
+    [form.nombre, form.apellido, form.segundoApellido]
+      .map((value) => value.trim())
+      .filter(Boolean)
+      .join(" ");
+
+  const submitContactRequest = () => {
+    contactMutation.mutate({
+      fullName: buildFullName(),
+      phone: form.telefono,
+      email: form.correo,
+      procedure: activeCard.procedureName,
+      message: "Paciente eligio ser contactado por una asesora antes de agendar evaluacion.",
+      sourceUrl: window.location.href,
+      metadata: {
+        flow: "contact_option",
+        form: "contact_booking_modal",
+        pageTitle: document.title,
+      },
+    });
+  };
+
   const handlePrimaryAction = () => {
     if (step === 1) {
+      if (!flowIntent) {
+        toast.error("Elige si prefieres ser contactado o agendar la evaluacion.");
+        return;
+      }
+
       setStep(2);
       return;
     }
@@ -354,6 +440,11 @@ const ContactBookingForm = () => {
       }
 
       setShowDetailErrors(false);
+      if (isContactFlow) {
+        submitContactRequest();
+        return;
+      }
+
       setStep(3);
       return;
     }
@@ -380,54 +471,151 @@ const ContactBookingForm = () => {
     });
   };
 
-  const primaryButtonDisabled = step === 3 && !canConfirmBooking;
+  const handleBack = () => {
+    if (bookingMutation.isPending || contactMutation.isPending) {
+      return;
+    }
+
+    if (step === 3) {
+      setStep(2);
+      return;
+    }
+
+    if (step === 2) {
+      setStep(1);
+    }
+  };
+
+  const primaryButtonDisabled =
+    (step === 1 && !flowIntent) ||
+    (step === 2 && contactMutation.isPending) ||
+    (step === 3 && !canConfirmBooking);
+
+  const primaryButtonContent =
+    step === 2 && contactMutation.isPending ? (
+      <span className="inline-flex items-center gap-2">
+        <LoaderCircle size={14} className="animate-spin" />
+        Solicitando...
+      </span>
+    ) : step === 2 && isContactFlow ? (
+      "Solicitar contacto"
+    ) : step === 3 ? (
+      bookingMutation.isPending ? (
+        <span className="inline-flex items-center gap-2">
+          <LoaderCircle size={14} className="animate-spin" />
+          Confirmando...
+        </span>
+      ) : (
+        "Confirmar y pagar"
+      )
+    ) : (
+      <span className="inline-flex items-center gap-2">
+        Siguiente <ChevronRight size={14} />
+      </span>
+    );
 
   return (
     <div className="card-premium p-5 sm:p-7">
       <div className="mb-6 flex items-center gap-2 sm:mb-8">
-        {[1, 2, 3, 4].map((currentStep) => (
-          <div key={currentStep} className="flex flex-1 items-center gap-2">
-            <div
-              className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-sans font-medium transition-colors ${
-                currentStep <= step ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
-              }`}
-            >
-              {currentStep < step ? <CheckCircle size={14} /> : currentStep}
+        {progressStepIds.map((currentStep, index) => {
+          const isActiveStep = index <= activeProgressIndex;
+          const isCompleteStep = index < activeProgressIndex;
+
+          return (
+            <div key={currentStep} className="flex flex-1 items-center gap-2">
+              <div
+                className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-sans font-medium transition-colors ${
+                  isActiveStep ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                }`}
+              >
+                {isCompleteStep ? <CheckCircle size={14} /> : index + 1}
+              </div>
+              {index < progressStepIds.length - 1 && (
+                <div className={`h-px flex-1 ${isCompleteStep ? "bg-primary" : "bg-border"}`} />
+              )}
             </div>
-            {currentStep < 4 && (
-              <div className={`h-px flex-1 ${currentStep < step ? "bg-primary" : "bg-border"}`} />
-            )}
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {step === 1 && (
         <div>
-          <h3 className="mb-2 font-serif text-xl font-medium text-foreground">Evaluacion Disponible</h3>
+          <h3 className="mb-2 font-serif text-xl font-medium text-foreground">Como quieres avanzar?</h3>
           <p className="mb-6 text-sm text-muted-foreground">
-            La reserva disponible corresponde solo a la evaluacion con el Dr. Torres por $100.000.
+            Puedes pedir que una asesora te contacte o reservar directamente la evaluacion con el Dr. Torres.
           </p>
-          <div className="rounded-sm border-2 border-primary bg-primary/5 p-5 text-left">
-            <p className="font-serif text-lg font-medium text-foreground">{activeCard.label}</p>
-            <p className="mt-1 text-sm text-muted-foreground">{activeCard.description}</p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={() => setFlowIntent("contact")}
+              className={`rounded-sm border-2 p-5 text-left transition-all ${
+                flowIntent === "contact"
+                  ? "border-primary bg-primary/5"
+                  : "border-border bg-background hover:border-primary/40"
+              }`}
+            >
+              <span className="mb-4 flex h-11 w-11 items-center justify-center rounded-full bg-primary/10 text-primary">
+                <PhoneCall size={20} />
+              </span>
+              <span className="block text-xs font-sans uppercase tracking-[0.2em] text-muted-foreground">
+                {flowCopy.contact.eyebrow}
+              </span>
+              <span className="mt-2 block font-serif text-lg font-medium text-foreground">
+                {flowCopy.contact.label}
+              </span>
+              <span className="mt-2 block text-sm text-muted-foreground">
+                {flowCopy.contact.description}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setFlowIntent("booking")}
+              className={`rounded-sm border-2 p-5 text-left transition-all ${
+                flowIntent === "booking"
+                  ? "border-primary bg-primary/5"
+                  : "border-border bg-background hover:border-primary/40"
+              }`}
+            >
+              <span className="mb-4 flex h-11 w-11 items-center justify-center rounded-full bg-primary/10 text-primary">
+                <CalendarIcon size={20} />
+              </span>
+              <span className="block text-xs font-sans uppercase tracking-[0.2em] text-muted-foreground">
+                {flowCopy.booking.eyebrow}
+              </span>
+              <span className="mt-2 block font-serif text-lg font-medium text-foreground">
+                {flowCopy.booking.label}
+              </span>
+              <span className="mt-2 block text-sm text-muted-foreground">
+                {flowCopy.booking.description}
+              </span>
+              <span className="mt-4 block rounded-sm bg-muted px-3 py-2 text-xs text-muted-foreground">
+                {activeCard.description}
+              </span>
+            </button>
           </div>
         </div>
       )}
 
       {step === 2 && (
         <div>
-          <h3 className="mb-2 font-serif text-xl font-medium text-foreground">Datos Personales</h3>
+          <h3 className="mb-2 font-serif text-xl font-medium text-foreground">
+            {isContactFlow ? "Datos de Contacto" : "Datos Personales"}
+          </h3>
           <p className="mb-6 text-sm text-muted-foreground">
-            Completa tus datos para reservar en {activeCard?.label.toLowerCase()}.
+            {isContactFlow
+              ? "Completa tus datos y activaremos el contacto con una asesora."
+              : `Completa tus datos para reservar en ${activeCard?.label.toLowerCase()}.`}
           </p>
           <div className="mb-5 rounded-sm border border-border bg-background/70 p-4">
             <p className="text-xs font-sans uppercase tracking-[0.2em] text-muted-foreground">
-              Tratamiento
+              {isContactFlow ? "Solicitud" : "Tratamiento"}
             </p>
-            <p className="mt-2 text-sm text-foreground">{activeCard?.procedureName}</p>
+            <p className="mt-2 text-sm text-foreground">
+              {isContactFlow ? flowCopy.contact.label : activeCard?.procedureName}
+            </p>
           </div>
           <div className="space-y-4">
-            {fields.map((field) => {
+            {visibleFields.map((field) => {
               const fieldError = getFieldError(field.key);
 
               return (
@@ -566,6 +754,35 @@ const ContactBookingForm = () => {
         </div>
       )}
 
+      {step === 4 && contactLead && (
+        <div className="py-8 text-center">
+          <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
+            <CheckCircle className="text-primary" size={32} />
+          </div>
+          <h3 className="mb-3 font-serif text-2xl font-medium text-foreground">Solicitud Recibida</h3>
+          <p className="mx-auto mb-6 max-w-md text-sm text-muted-foreground">
+            Guardamos tus datos y el sistema Speed-to-Lead ya activo el flujo para que una asesora pueda
+            contactarte al telefono indicado.
+          </p>
+          <div className="rounded-sm border border-border bg-background/70 px-5 py-4 text-left">
+            <p className="text-xs font-sans uppercase tracking-[0.2em] text-muted-foreground">
+              Resumen
+            </p>
+            <p className="mt-3 text-sm font-medium text-foreground">{buildFullName()}</p>
+            <p className="mt-2 text-sm text-muted-foreground">{form.telefono}</p>
+            <p className="mt-2 text-sm text-muted-foreground">{form.correo}</p>
+            {contactLead.assignedAgent && (
+              <p className="mt-3 text-sm text-foreground">Asesora asignada: {contactLead.assignedAgent}</p>
+            )}
+            {contactLead.queued && (
+              <p className="mt-3 text-sm text-muted-foreground">
+                Si la asesora estaba ocupada, la llamada quedo en cola para el siguiente intento.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
       {step === 4 && confirmedBooking && (
         <div className="py-8 text-center">
           <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
@@ -631,9 +848,11 @@ const ContactBookingForm = () => {
         <div className="mt-8 flex justify-between">
           <button
             type="button"
-            onClick={() => step > 1 && setStep((step - 1) as Step)}
+            onClick={handleBack}
             className={`flex items-center gap-2 text-sm font-sans text-muted-foreground transition-colors ${
-              step === 1 || bookingMutation.isPending ? "invisible" : "hover:text-foreground"
+              step === 1 || bookingMutation.isPending || contactMutation.isPending
+                ? "invisible"
+                : "hover:text-foreground"
             }`}
           >
             <ChevronLeft size={16} /> Anterior
@@ -644,20 +863,7 @@ const ContactBookingForm = () => {
             disabled={primaryButtonDisabled}
             className={`btn-premium px-8 py-3 text-xs ${primaryButtonDisabled ? "cursor-not-allowed opacity-40" : ""}`}
           >
-            {step === 3 ? (
-              bookingMutation.isPending ? (
-                <span className="inline-flex items-center gap-2">
-                  <LoaderCircle size={14} className="animate-spin" />
-                  Confirmando...
-                </span>
-              ) : (
-                "Confirmar y pagar"
-              )
-            ) : (
-              <span className="inline-flex items-center gap-2">
-                Siguiente <ChevronRight size={14} />
-              </span>
-            )}
+            {primaryButtonContent}
           </button>
         </div>
       )}
