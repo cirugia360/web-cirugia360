@@ -4,6 +4,12 @@
       "includeFiles": "dist/index.html"
     }
   },
+  "crons": [
+    {
+      "path": "/api/cirugia360-speed/queue-dispatch",
+      "schedule": "* * * * *"
+    }
+  ],
   "rewrites": [
     {
       "source": "/robots.txt",
