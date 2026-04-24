@@ -50,6 +50,19 @@ const procedureOptions = [
   },
 ];
 
+const normalizePath = (value: string) => value.replace(/\/+$/, "") || "/";
+
+const getInitialProcedureInterest = () => {
+  if (typeof window === "undefined") {
+    return "";
+  }
+
+  const currentPath = normalizePath(window.location.pathname);
+  return (
+    procedureCatalog.find((procedure) => normalizePath(procedure.href) === currentPath)?.title || ""
+  );
+};
+
 const appointmentCard: {
   label: string;
   description: string;
@@ -254,14 +267,16 @@ const ContactBookingForm = () => {
   const [step, setStep] = useState<Step>(1);
   const [flowIntent, setFlowIntent] = useState<FlowIntent | null>(null);
   const [showDetailErrors, setShowDetailErrors] = useState(false);
-  const [form, setForm] = useState<FormState>({
+  const [form, setForm] = useState<FormState>(() => ({
+    procedimiento: getInitialProcedureInterest(),
+    otroProcedimiento: "",
     rut: "",
     nombre: "",
     apellido: "",
     segundoApellido: "",
     correo: "",
     telefono: "",
-  });
+  }));
   const [selectedDate, setSelectedDate] = useState("");
   const [selectedTime, setSelectedTime] = useState("");
   const [confirmedBooking, setConfirmedBooking] = useState<ReservoBookingResponse | null>(null);
@@ -362,16 +377,29 @@ const ContactBookingForm = () => {
   const availability = availabilityQuery.data?.availability || {};
   const availableDates = Object.keys(availability);
   const availableTimes = selectedDate ? availability[selectedDate] || [] : [];
+  const isOtherProcedure = form.procedimiento === OTHER_PROCEDURE_VALUE;
+  const selectedProcedureInterest = isOtherProcedure
+    ? form.otroProcedimiento.trim()
+    : form.procedimiento.trim();
+  const hasProcedureInterest = Boolean(selectedProcedureInterest);
+  const procedureError =
+    showDetailErrors && !hasProcedureInterest
+      ? isOtherProcedure
+        ? "Escribe el procedimiento de interes."
+        : "Selecciona un procedimiento de interes."
+      : "";
 
   const canContinueFromDetails = isContactFlow
     ? Boolean(
-        form.nombre.trim() &&
+        hasProcedureInterest &&
+          form.nombre.trim() &&
           form.apellido.trim() &&
           isValidEmail(form.correo) &&
           isValidPhone(form.telefono),
       )
     : Boolean(
-        isValidRut(form.rut) &&
+        hasProcedureInterest &&
+          isValidRut(form.rut) &&
           form.nombre.trim() &&
           form.apellido.trim() &&
           form.segundoApellido.trim() &&
@@ -390,7 +418,13 @@ const ContactBookingForm = () => {
     const nextValue =
       key === "rut" ? formatRutInput(value) : key === "telefono" ? formatPhoneInput(value) : value;
 
-    setForm((previous) => ({ ...previous, [key]: nextValue }));
+    setForm((previous) => ({
+      ...previous,
+      [key]: nextValue,
+      ...(key === "procedimiento" && nextValue !== OTHER_PROCEDURE_VALUE
+        ? { otroProcedimiento: "" }
+        : {}),
+    }));
   };
 
   const getFieldError = (key: keyof FormState) => {
@@ -427,12 +461,14 @@ const ContactBookingForm = () => {
       fullName: buildFullName(),
       phone: form.telefono,
       email: form.correo,
-      procedure: activeCard.procedureName,
-      message: "Paciente eligio ser contactado por una asesora antes de agendar evaluacion.",
+      procedure: selectedProcedureInterest,
+      message: `Paciente eligio ser contactado por una asesora antes de agendar evaluacion. Procedimiento de interes: ${selectedProcedureInterest}.`,
       sourceUrl: window.location.href,
       metadata: {
         flow: "contact_option",
         form: "contact_booking_modal",
+        procedureInterest: selectedProcedureInterest,
+        procedureOption: form.procedimiento,
         pageTitle: document.title,
       },
     });
@@ -471,6 +507,7 @@ const ContactBookingForm = () => {
 
     bookingMutation.mutate({
       appointmentType,
+      procedureInterest: selectedProcedureInterest,
       personal: {
         rut: form.rut,
         firstName: form.nombre,
@@ -624,11 +661,48 @@ const ContactBookingForm = () => {
           </p>
           <div className="mb-5 rounded-sm border border-border bg-background/70 p-4">
             <p className="text-xs font-sans uppercase tracking-[0.2em] text-muted-foreground">
-              {isContactFlow ? "Solicitud" : "Tratamiento"}
+              Tipo de solicitud
             </p>
             <p className="mt-2 text-sm text-foreground">
-              {isContactFlow ? flowCopy.contact.label : activeCard?.procedureName}
+              {isContactFlow ? flowCopy.contact.label : activeCard?.label}
             </p>
+          </div>
+          <div className="mb-5 space-y-4">
+            <div>
+              <label className="mb-1.5 block text-xs font-sans font-medium uppercase tracking-wider text-muted-foreground">
+                Procedimiento de interes
+              </label>
+              <select
+                value={form.procedimiento}
+                onChange={(event) => setField("procedimiento", event.target.value)}
+                className="w-full rounded-sm border border-border bg-background px-4 py-3 text-sm font-sans text-foreground transition-colors focus:border-primary focus:outline-none"
+              >
+                <option value="">Selecciona un procedimiento</option>
+                {procedureOptions.map((procedure) => (
+                  <option key={procedure.value} value={procedure.value}>
+                    {procedure.label}
+                  </option>
+                ))}
+              </select>
+              {procedureError && !isOtherProcedure && (
+                <p className="mt-2 text-sm text-destructive">{procedureError}</p>
+              )}
+            </div>
+            {isOtherProcedure && (
+              <div>
+                <label className="mb-1.5 block text-xs font-sans font-medium uppercase tracking-wider text-muted-foreground">
+                  Cual procedimiento?
+                </label>
+                <input
+                  type="text"
+                  placeholder="Escribe el procedimiento o consulta"
+                  value={form.otroProcedimiento}
+                  onChange={(event) => setField("otroProcedimiento", event.target.value)}
+                  className="w-full rounded-sm border border-border bg-background px-4 py-3 text-sm font-sans text-foreground transition-colors focus:border-primary focus:outline-none"
+                />
+                {procedureError && <p className="mt-2 text-sm text-destructive">{procedureError}</p>}
+              </div>
+            )}
           </div>
           <div className="space-y-4">
             {visibleFields.map((field) => {
@@ -785,6 +859,7 @@ const ContactBookingForm = () => {
               Resumen
             </p>
             <p className="mt-3 text-sm font-medium text-foreground">{buildFullName()}</p>
+            <p className="mt-2 text-sm text-muted-foreground">{selectedProcedureInterest}</p>
             <p className="mt-2 text-sm text-muted-foreground">{form.telefono}</p>
             <p className="mt-2 text-sm text-muted-foreground">{form.correo}</p>
             {contactLead.assignedAgent && (
@@ -835,6 +910,7 @@ const ContactBookingForm = () => {
               <p className="mb-2 text-sm font-medium text-foreground">
                 {form.nombre} {form.apellido}
               </p>
+              <p className="mb-2 text-sm text-muted-foreground">{selectedProcedureInterest}</p>
               <p className="mb-2 text-sm text-muted-foreground">
                 {formatSummaryDate(confirmedBooking.selectedSlot.date, confirmedBooking.selectedSlot.time)}
               </p>
