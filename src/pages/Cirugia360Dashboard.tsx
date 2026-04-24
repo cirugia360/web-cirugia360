@@ -110,6 +110,11 @@ type AgentSettings = {
 };
 
 type DashboardSnapshot = {
+  dateRange?: {
+    dateFrom: string | null;
+    dateTo: string | null;
+    label: string;
+  };
   generatedAt: string;
   pipelineStages: PipelineStage[];
   speedMetrics: DashboardMetric[];
@@ -145,12 +150,80 @@ type LeadSortKey = "createdAt" | "fullName" | "procedureInterest" | "assignedAge
 
 type SortDirection = "asc" | "desc";
 
+type DashboardPeriod = "today" | "7d" | "30d" | "month" | "custom";
+
 const navItems = [
   { id: "overview", label: "Resumen", icon: LayoutDashboard },
   { id: "pipeline", label: "Pipeline", icon: Target },
   { id: "leads", label: "Leads", icon: Users },
   { id: "team", label: "Equipo", icon: Settings },
 ];
+
+const periodOptions: Array<{ id: DashboardPeriod; label: string }> = [
+  { id: "today", label: "Hoy" },
+  { id: "7d", label: "7d" },
+  { id: "30d", label: "30d" },
+  { id: "month", label: "Mes" },
+  { id: "custom", label: "Custom" },
+];
+
+const toDateInputValue = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+};
+
+const startOfDay = (date: Date) => {
+  const nextDate = new Date(date);
+  nextDate.setHours(0, 0, 0, 0);
+  return nextDate;
+};
+
+const endOfDay = (date: Date) => {
+  const nextDate = new Date(date);
+  nextDate.setHours(23, 59, 59, 999);
+  return nextDate;
+};
+
+const getDashboardDateRange = (
+  period: DashboardPeriod,
+  customRange: { dateFrom: string; dateTo: string },
+) => {
+  const today = new Date();
+  const end = endOfDay(today);
+  const start = startOfDay(today);
+
+  if (period === "7d") {
+    start.setDate(start.getDate() - 6);
+  } else if (period === "30d") {
+    start.setDate(start.getDate() - 29);
+  } else if (period === "month") {
+    start.setDate(1);
+  } else if (period === "custom") {
+    const customStart = customRange.dateFrom ? startOfDay(new Date(`${customRange.dateFrom}T00:00:00`)) : null;
+    const customEnd = customRange.dateTo ? endOfDay(new Date(`${customRange.dateTo}T00:00:00`)) : null;
+
+    return {
+      dateFrom: customStart?.toISOString() || null,
+      dateTo: customEnd?.toISOString() || null,
+      label:
+        customRange.dateFrom || customRange.dateTo
+          ? `${customRange.dateFrom || "Inicio"} - ${customRange.dateTo || "Hoy"}`
+          : "Custom",
+    };
+  }
+
+  return {
+    dateFrom: start.toISOString(),
+    dateTo: end.toISOString(),
+    label:
+      period === "today"
+        ? "Hoy"
+        : `${toDateInputValue(start)} - ${toDateInputValue(end)}`,
+  };
+};
 
 const formatCurrency = (value: number | null) =>
   new Intl.NumberFormat("es-CL", {
@@ -808,6 +881,29 @@ const PipelineBoard = ({
               </div>
               <span className="truncate">{lead.phone}</span>
             </div>
+
+            <label
+              className="mt-3 block text-[11px] font-bold uppercase tracking-wide text-[#8e99a8] md:hidden"
+              onClick={(event) => event.stopPropagation()}
+              onMouseDown={(event) => event.stopPropagation()}
+              onTouchStart={(event) => event.stopPropagation()}
+            >
+              Etapa
+              <select
+                className="mt-1 h-9 w-full rounded-md border border-[#d9e0e5] bg-white px-2 text-xs font-semibold normal-case tracking-normal text-[#1a2332] outline-none focus:border-[#13344F]"
+                value={lead.pipelineStage}
+                disabled={isUpdating}
+                onChange={(event) => {
+                  void onStage(lead.id, event.target.value);
+                }}
+              >
+                {stages.map((stageOption) => (
+                  <option key={stageOption.id} value={stageOption.id}>
+                    {stageOption.label}
+                  </option>
+                ))}
+              </select>
+            </label>
           </article>
         </ContextMenuTrigger>
         <ContextMenuContent className="w-40">
@@ -877,7 +973,7 @@ const PipelineBoard = ({
                   event.preventDefault();
                   void handleDrop(stage.id);
                 }}
-                className={`flex h-full w-[300px] shrink-0 flex-col rounded-lg border p-3 transition ${
+                className={`flex h-full w-[min(86vw,300px)] shrink-0 flex-col rounded-lg border p-3 transition md:w-[300px] ${
                   isOver ? "border-[#13344F] bg-[#edf3f7]" : "border-[#e4e8ec] bg-[#f9fafb]"
                 }`}
               >
@@ -916,10 +1012,17 @@ const PipelineBoard = ({
         <div className="flex-1 overflow-auto px-4 py-4 lg:px-6">
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
             {filteredLeads.map((lead) => (
-              <button
+              <div
                 key={lead.id}
-                type="button"
+                role="button"
+                tabIndex={0}
                 onClick={() => onSelect(lead)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    onSelect(lead);
+                  }
+                }}
                 className="rounded-lg border border-[#e4e8ec] bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
               >
                 <div className="flex items-start justify-between gap-3">
@@ -952,7 +1055,8 @@ const PipelineBoard = ({
                   </p>
                 ) : null}
                 <div className="mt-3 flex justify-end">
-                  <span
+                  <button
+                    type="button"
                     onClick={(event) => {
                       event.stopPropagation();
                       void onOutcome(lead.id, "active");
@@ -960,9 +1064,9 @@ const PipelineBoard = ({
                     className="rounded-md border border-[#e4e8ec] px-3 py-1.5 text-xs font-bold text-[#13344F]"
                   >
                     Reabrir
-                  </span>
+                  </button>
                 </div>
-              </button>
+              </div>
             ))}
           </div>
           {filteredLeads.length === 0 ? (
@@ -1872,6 +1976,11 @@ const Cirugia360Dashboard = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [updatingPipelineLeadId, setUpdatingPipelineLeadId] = useState<string | null>(null);
   const [callingLeadId, setCallingLeadId] = useState<string | null>(null);
+  const [period, setPeriod] = useState<DashboardPeriod>("7d");
+  const [customRange, setCustomRange] = useState({
+    dateFrom: toDateInputValue(new Date()),
+    dateTo: toDateInputValue(new Date()),
+  });
   const leadDetailReturnFocusRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -1894,6 +2003,8 @@ const Cirugia360Dashboard = () => {
     });
   }, []);
 
+  const dashboardDateRange = useMemo(() => getDashboardDateRange(period, customRange), [customRange, period]);
+
   const refresh = useCallback(async () => {
     if (!session) {
       return;
@@ -1903,8 +2014,21 @@ const Cirugia360Dashboard = () => {
     setError("");
 
     try {
+      const dashboardParams = new URLSearchParams();
+
+      if (dashboardDateRange.dateFrom) {
+        dashboardParams.set("dateFrom", dashboardDateRange.dateFrom);
+      }
+
+      if (dashboardDateRange.dateTo) {
+        dashboardParams.set("dateTo", dashboardDateRange.dateTo);
+      }
+
+      const dashboardPath = `/api/cirugia360-speed/dashboard${
+        dashboardParams.toString() ? `?${dashboardParams.toString()}` : ""
+      }`;
       const [dashboardData, settingsData] = await Promise.all([
-        apiRequest<DashboardSnapshot>("/api/cirugia360-speed/dashboard"),
+        apiRequest<DashboardSnapshot>(dashboardPath),
         apiRequest<AgentSettings>("/api/cirugia360-speed/dashboard?resource=sales-agents"),
       ]);
 
@@ -1918,7 +2042,7 @@ const Cirugia360Dashboard = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [session]);
+  }, [dashboardDateRange.dateFrom, dashboardDateRange.dateTo, session]);
 
   useEffect(() => {
     void refresh();
@@ -2285,8 +2409,43 @@ const Cirugia360Dashboard = () => {
             <h1 className="truncate text-lg font-bold tracking-[-0.01em] text-[#1a2332]">
               {activeNavItem?.label || "Dashboard comercial"}
             </h1>
+            <p className="mt-0.5 truncate text-xs font-medium text-[#8e99a8]">
+              {snapshot?.dateRange?.label || dashboardDateRange.label}
+            </p>
           </div>
           <div className="ml-auto flex shrink-0 flex-wrap items-center gap-2">
+            <div className="flex rounded-[10px] border border-[#e8ecf0] bg-white p-1">
+              {periodOptions.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  className={`rounded-md px-2.5 py-1.5 text-xs font-bold transition ${
+                    period === option.id
+                      ? "bg-[#edf3f7] text-[#13344F]"
+                      : "text-[#5f6d7e] hover:text-[#13344F]"
+                  }`}
+                  onClick={() => setPeriod(option.id)}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            {period === "custom" ? (
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  className="h-9 rounded-[10px] border border-[#e8ecf0] bg-white px-2 text-xs font-semibold text-[#5f6d7e] outline-none focus:border-[#13344F]"
+                  value={customRange.dateFrom}
+                  onChange={(event) => setCustomRange((current) => ({ ...current, dateFrom: event.target.value }))}
+                />
+                <input
+                  type="date"
+                  className="h-9 rounded-[10px] border border-[#e8ecf0] bg-white px-2 text-xs font-semibold text-[#5f6d7e] outline-none focus:border-[#13344F]"
+                  value={customRange.dateTo}
+                  onChange={(event) => setCustomRange((current) => ({ ...current, dateTo: event.target.value }))}
+                />
+              </div>
+            ) : null}
             <button
               type="button"
               onClick={refresh}
