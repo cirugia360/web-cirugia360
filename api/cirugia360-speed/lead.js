@@ -69,6 +69,7 @@ export default async function handler(request, response) {
       const updatedLead = await updateSpeedLead(lead.id, {
         assigned_agent_name: assignedAgent?.name || null,
         assigned_agent_phone: assignedAgent?.phone || null,
+        assigned_agent_email: assignedAgent?.email || null,
       });
 
       await insertSpeedLeadEvent(lead.id, "lead.assigned_agent_changed", {
@@ -118,6 +119,7 @@ export default async function handler(request, response) {
       external_reference_candidates: [],
       assigned_agent_name: assignedAgent?.name || null,
       assigned_agent_phone: assignedAgent?.phone || null,
+      assigned_agent_email: assignedAgent?.email || null,
       agent_attempts: 0,
       dispatch_scheduled_at: null,
       first_attempt_at: null,

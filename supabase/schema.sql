@@ -80,6 +80,7 @@ create table if not exists public.c360_speed_leads (
   external_reference_candidates jsonb not null default '[]'::jsonb,
   assigned_agent_name text,
   assigned_agent_phone text,
+  assigned_agent_email text,
   agent_attempts integer not null default 0,
   dispatch_scheduled_at timestamptz,
   first_attempt_at timestamptz,
@@ -119,6 +120,7 @@ alter table public.c360_speed_leads add column if not exists recording_status te
 alter table public.c360_speed_leads add column if not exists transcription_sid text;
 alter table public.c360_speed_leads add column if not exists transcription_text text;
 alter table public.c360_speed_leads add column if not exists transcription_status text;
+alter table public.c360_speed_leads add column if not exists assigned_agent_email text;
 
 create table if not exists public.c360_speed_lead_events (
   id bigserial primary key,
@@ -182,6 +184,9 @@ create index if not exists c360_speed_leads_booking_reference_idx
 
 create index if not exists c360_speed_leads_assigned_agent_phone_idx
   on public.c360_speed_leads (assigned_agent_phone);
+
+create index if not exists c360_speed_leads_assigned_agent_email_idx
+  on public.c360_speed_leads (assigned_agent_email);
 
 create index if not exists c360_speed_leads_sales_call_sid_idx
   on public.c360_speed_leads (twilio_sales_call_sid);

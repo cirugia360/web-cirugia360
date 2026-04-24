@@ -192,6 +192,7 @@ const scheduleLeadWithPlan = async (lead, plan, config, reason = null) => {
   const updatedLead = await updateSpeedLead(lead.id, {
     assigned_agent_name: plan.agent.name,
     assigned_agent_phone: plan.agent.phone,
+    assigned_agent_email: plan.agent.email || null,
     dispatch_scheduled_at: scheduledAtIso,
     status: plan.immediate ? "received" : "scheduled",
     sales_call_status: plan.immediate ? "queued" : "scheduled",
@@ -251,6 +252,7 @@ const scheduleLeadRetryDelay = async (lead, config, reason = null, preferredAgen
   const updatedLead = await updateSpeedLead(lead.id, {
     assigned_agent_name: nextAgent?.name || null,
     assigned_agent_phone: nextAgent?.phone || null,
+    assigned_agent_email: nextAgent?.email || null,
     dispatch_scheduled_at: retryAtIso,
     status: "scheduled",
     sales_call_status: "scheduled",
@@ -422,6 +424,7 @@ const buildBaseLeadRow = ({
     external_reference_candidates: externalReferences,
     assigned_agent_name: null,
     assigned_agent_phone: null,
+    assigned_agent_email: null,
     agent_attempts: 0,
     dispatch_scheduled_at: paymentStatus === "pending" ? paymentDueAt : null,
     first_attempt_at: null,

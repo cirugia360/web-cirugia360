@@ -61,6 +61,7 @@ export const toPublicLead = (lead, notes = []) => ({
   sourceUrl: lead.source_url,
   assignedAgentName: lead.assigned_agent_name,
   assignedAgentPhone: lead.assigned_agent_phone,
+  assignedAgentEmail: lead.assigned_agent_email,
   agentAttempts: lead.agent_attempts,
   dispatchScheduledAt: lead.dispatch_scheduled_at,
   firstAttemptAt: lead.first_attempt_at,

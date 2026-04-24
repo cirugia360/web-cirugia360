@@ -1,5 +1,5 @@
 import { getSpeedAdminClient } from "./_cirugia360-speed-db.js";
-import { normalizePhoneInput, normalizeText, uniqueStrings } from "./_cirugia360-speed-shared.js";
+import { normalizeEmail, normalizePhoneInput, normalizeText, uniqueStrings } from "./_cirugia360-speed-shared.js";
 
 const SETTINGS_TABLE = "c360_speed_settings";
 const SETTINGS_KEY = "runtime";
@@ -10,6 +10,7 @@ const isPlainObject = (value) =>
 const normalizeAgent = (agent, index, defaultCountryDialCode) => {
   const name = normalizeText(agent?.name);
   const phone = normalizePhoneInput(agent?.phone, defaultCountryDialCode);
+  const email = normalizeEmail(agent?.email);
   const id = normalizeText(agent?.id) || `agent-${index + 1}`;
 
   if (!name || !phone) {
@@ -20,6 +21,7 @@ const normalizeAgent = (agent, index, defaultCountryDialCode) => {
     id,
     name,
     phone,
+    email,
     active: agent?.active !== false,
   };
 };

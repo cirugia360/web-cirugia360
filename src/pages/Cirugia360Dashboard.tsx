@@ -87,6 +87,7 @@ type DashboardLead = {
   message: string | null;
   sourceUrl: string | null;
   assignedAgentName: string | null;
+  assignedAgentEmail: string | null;
   agentAttempts: number;
   dispatchScheduledAt: string | null;
   customerConnectedAt: string | null;
@@ -108,6 +109,7 @@ type AgentSettings = {
     id: string;
     name: string;
     phone: string;
+    email?: string | null;
     active?: boolean;
   }>;
 };
@@ -188,6 +190,21 @@ const periodOptions: Array<{ id: DashboardPeriod; label: string }> = [
   { id: "month", label: "Mes" },
   { id: "custom", label: "Custom" },
 ];
+
+const businessTimeZoneOptions = [
+  "America/Santiago",
+  "America/Argentina/Buenos_Aires",
+  "America/Lima",
+  "America/Bogota",
+  "America/Mexico_City",
+  "America/New_York",
+];
+
+const isValidAgentPhone = (value: string) => {
+  const compactValue = value.replace(/[^\d+]/g, "");
+
+  return /^\+?\d{8,15}$/.test(compactValue);
+};
 
 const toDateInputValue = (date: Date) => {
   const year = date.getFullYear();
@@ -639,6 +656,7 @@ const leadMatchesSearch = (lead: DashboardLead, search: string) => {
     lead.email,
     lead.procedureInterest,
     lead.assignedAgentName,
+    lead.assignedAgentEmail,
     lead.pipelineOutcomeReason,
     getLeadStatus(lead).label,
   ]
@@ -646,6 +664,64 @@ const leadMatchesSearch = (lead: DashboardLead, search: string) => {
     .join(" ")
     .toLowerCase()
     .includes(normalizedSearch);
+};
+
+const escapeCsvValue = (value: string | number | null | undefined) => {
+  const rawValue = String(value ?? "");
+  const escapedValue = rawValue.replace(/"/g, '""');
+
+  return /[",\n\r]/.test(escapedValue) ? `"${escapedValue}"` : escapedValue;
+};
+
+const exportLeadsCsv = (leads: DashboardLead[], filenamePrefix: string) => {
+  const headers = [
+    "ID",
+    "Creado",
+    "Paciente",
+    "Telefono",
+    "Email",
+    "Procedimiento",
+    "Asesora",
+    "Estado",
+    "Etapa",
+    "Outcome",
+    "Motivo outcome",
+    "Valor pipeline",
+    "Fuente",
+    "Intentos",
+    "Ultimo error",
+  ];
+  const rows = leads.map((lead) => [
+    lead.id,
+    lead.createdAt,
+    lead.fullName,
+    lead.phone,
+    lead.email,
+    lead.procedureInterest || "Evaluacion",
+    lead.assignedAgentName || "Sin asignar",
+    getLeadStatus(lead).label,
+    lead.pipelineStage,
+    lead.pipelineOutcome || "active",
+    lead.pipelineOutcomeReason || "",
+    lead.pipelineValue,
+    lead.sourceUrl || "",
+    lead.agentAttempts,
+    lead.lastError || "",
+  ]);
+  const csv = [headers, ...rows]
+    .map((row) => row.map((value) => escapeCsvValue(value)).join(","))
+    .join("\r\n");
+  const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  const dateStamp = toDateInputValue(new Date());
+
+  link.href = url;
+  link.download = `${filenamePrefix}-${dateStamp}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 };
 
 const LeadStatusBadge = ({ lead }: { lead: DashboardLead }) => {
@@ -739,6 +815,7 @@ const PipelineBoard = ({
   onCall,
   onOutcome,
   onNewLead,
+  currentUserEmail,
   updatingLeadId,
   callingLeadId,
 }: {
@@ -749,6 +826,7 @@ const PipelineBoard = ({
   onCall: (leadId: string, options?: ActionOptions) => Promise<boolean>;
   onOutcome: (leadId: string, outcome: "active" | "lost" | "won", reason?: string, options?: ActionOptions) => Promise<boolean>;
   onNewLead: () => void;
+  currentUserEmail: string | null;
   updatingLeadId: string | null;
   callingLeadId: string | null;
 }) => {
@@ -756,6 +834,7 @@ const PipelineBoard = ({
   const [overStage, setOverStage] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [view, setView] = useState<"active" | "lost" | "won">("active");
+  const [ownershipView, setOwnershipView] = useState<"all" | "mine">("all");
   const [winLead, setWinLead] = useState<DashboardLead | null>(null);
   const [lossLead, setLossLead] = useState<DashboardLead | null>(null);
   const [lossReason, setLossReason] = useState("");
@@ -767,8 +846,11 @@ const PipelineBoard = ({
     return leads.filter((lead) => {
       const outcome = lead.pipelineOutcome || "active";
       const matchesView = view === "active" ? outcome !== "lost" && outcome !== "won" : outcome === view;
+      const matchesOwner =
+        ownershipView === "all" ||
+        (currentUserEmail && lead.assignedAgentEmail?.toLowerCase() === currentUserEmail.toLowerCase());
 
-      if (!matchesView) {
+      if (!matchesView || !matchesOwner) {
         return false;
       }
 
@@ -778,7 +860,7 @@ const PipelineBoard = ({
 
       return leadMatchesSearch(lead, normalizedSearch);
     });
-  }, [leads, search, view]);
+  }, [currentUserEmail, leads, ownershipView, search, view]);
 
   const activeLeads = leads.filter(
     (lead) => lead.pipelineOutcome !== "lost" && lead.pipelineOutcome !== "won",
@@ -1031,6 +1113,23 @@ const PipelineBoard = ({
             placeholder="Buscar paciente, telefono o asesora"
           />
         </label>
+        <div className="flex rounded-lg border border-dashboard-line bg-white p-1">
+          {[
+            { id: "all", label: "Todos" },
+            { id: "mine", label: "Míos" },
+          ].map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className={`rounded-md px-3 py-1.5 text-xs font-bold ${
+                ownershipView === item.id ? "bg-dashboard-soft text-dashboard-primary" : "text-dashboard-muted"
+              }`}
+              onClick={() => setOwnershipView(item.id as "all" | "mine")}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
         <button
           type="button"
           onClick={onNewLead}
@@ -1038,6 +1137,15 @@ const PipelineBoard = ({
         >
           <Plus className="h-4 w-4" />
           Nuevo lead
+        </button>
+        <button
+          type="button"
+          onClick={() => exportLeadsCsv(filteredLeads, `cirugia360-pipeline-${view}`)}
+          disabled={filteredLeads.length === 0}
+          className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-dashboard-line bg-white px-3 text-sm font-bold text-dashboard-muted transition hover:text-dashboard-primary disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <FileText className="h-4 w-4" />
+          Exportar
         </button>
       </div>
 
@@ -1278,17 +1386,20 @@ const LeadsTable = ({
   onSelect,
   onCall,
   onNewLead,
+  currentUserEmail,
   callingLeadId,
 }: {
   leads: DashboardLead[];
   onSelect: (lead: DashboardLead) => void;
   onCall: (leadId: string, options?: ActionOptions) => Promise<boolean>;
   onNewLead: () => void;
+  currentUserEmail: string | null;
   callingLeadId: string | null;
 }) => {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [agentFilter, setAgentFilter] = useState("all");
+  const [ownershipView, setOwnershipView] = useState<"all" | "mine">("all");
   const [sortKey, setSortKey] = useState<LeadSortKey>("createdAt");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [page, setPage] = useState(1);
@@ -1312,6 +1423,11 @@ const LeadsTable = ({
   const filteredLeads = useMemo(() => {
     const sortedLeads = leads
       .filter((lead) => leadMatchesSearch(lead, search))
+      .filter(
+        (lead) =>
+          ownershipView === "all" ||
+          (currentUserEmail && lead.assignedAgentEmail?.toLowerCase() === currentUserEmail.toLowerCase()),
+      )
       .filter((lead) => statusFilter === "all" || getLeadStatus(lead).label === statusFilter)
       .filter((lead) => agentFilter === "all" || (lead.assignedAgentName || "Sin asignar") === agentFilter)
       .sort((firstLead, secondLead) => {
@@ -1327,7 +1443,7 @@ const LeadsTable = ({
       });
 
     return sortedLeads;
-  }, [agentFilter, leads, search, sortDirection, sortKey, statusFilter]);
+  }, [agentFilter, currentUserEmail, leads, ownershipView, search, sortDirection, sortKey, statusFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filteredLeads.length / LEADS_PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
@@ -1338,7 +1454,7 @@ const LeadsTable = ({
 
   useEffect(() => {
     setPage(1);
-  }, [agentFilter, search, statusFilter]);
+  }, [agentFilter, ownershipView, search, statusFilter]);
 
   const changeSort = (nextSortKey: LeadSortKey) => {
     if (sortKey === nextSortKey) {
@@ -1409,6 +1525,23 @@ const LeadsTable = ({
             </select>
           </label>
         </div>
+        <div className="flex h-10 rounded-lg border border-dashboard-line bg-white p-1">
+          {[
+            { id: "all", label: "Todos" },
+            { id: "mine", label: "Míos" },
+          ].map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className={`rounded-md px-3 text-xs font-bold ${
+                ownershipView === item.id ? "bg-dashboard-soft text-dashboard-primary" : "text-dashboard-muted"
+              }`}
+              onClick={() => setOwnershipView(item.id as "all" | "mine")}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
         <button
           type="button"
           onClick={onNewLead}
@@ -1416,6 +1549,15 @@ const LeadsTable = ({
         >
           <Plus className="h-4 w-4" />
           Nuevo lead
+        </button>
+        <button
+          type="button"
+          onClick={() => exportLeadsCsv(filteredLeads, "cirugia360-leads")}
+          disabled={filteredLeads.length === 0}
+          className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-dashboard-line bg-white px-3 text-sm font-bold text-dashboard-muted transition hover:text-dashboard-primary disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <FileText className="h-4 w-4" />
+          Exportar
         </button>
       </div>
 
@@ -2242,7 +2384,7 @@ const TeamSettings = ({
     }
   }, [settings]);
 
-  const updateAgent = (index: number, key: "name" | "phone" | "active", value: string | boolean) => {
+  const updateAgent = (index: number, key: "name" | "phone" | "email" | "active", value: string | boolean) => {
     setDraft((current) => ({
       ...current,
       agents: current.agents.map((agent, agentIndex) =>
@@ -2251,9 +2393,51 @@ const TeamSettings = ({
     }));
   };
 
+  const removeAgent = (index: number) => {
+    setDraft((current) => ({
+      ...current,
+      agents: current.agents.filter((_, agentIndex) => agentIndex !== index),
+    }));
+  };
+
+  const validateTeamSettings = () => {
+    if (!draft.businessTimeZone.trim()) {
+      return "Selecciona una zona horaria.";
+    }
+
+    const invalidAgent = draft.agents.find((agent) => {
+      const hasName = Boolean(agent.name.trim());
+      const hasPhone = Boolean(agent.phone.trim());
+
+      return !hasName || !hasPhone || !isValidAgentPhone(agent.phone);
+    });
+
+    if (invalidAgent) {
+      return "Cada asesora debe tener nombre y un telefono valido, por ejemplo +56912345678.";
+    }
+
+    const invalidEmailAgent = draft.agents.find(
+      (agent) => agent.email?.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(agent.email.trim()),
+    );
+
+    if (invalidEmailAgent) {
+      return "El email de cada asesora debe tener un formato valido.";
+    }
+
+    return "";
+  };
+
   const saveSettings = async () => {
     setIsSaving(true);
     setError("");
+
+    const validationError = validateTeamSettings();
+
+    if (validationError) {
+      setError(validationError);
+      setIsSaving(false);
+      return;
+    }
 
     try {
       const data = await apiRequest<AgentSettings>("/api/cirugia360-speed/dashboard?resource=sales-agents", {
@@ -2304,7 +2488,7 @@ const TeamSettings = ({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold">Equipo y cola</h2>
-          <p className="text-sm text-slate-500">{draft.businessTimeZone}</p>
+          <p className="text-sm text-slate-500">Asesoras, zona horaria y estado de la cola</p>
         </div>
         <button
           type="button"
@@ -2317,9 +2501,29 @@ const TeamSettings = ({
         </button>
       </div>
 
+      <label className="mt-5 block max-w-sm text-sm font-medium">
+        Zona horaria
+        <select
+          className="mt-1 h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+          value={draft.businessTimeZone}
+          onChange={(event) =>
+            setDraft((current) => ({
+              ...current,
+              businessTimeZone: event.target.value,
+            }))
+          }
+        >
+          {businessTimeZoneOptions.map((timeZone) => (
+            <option key={timeZone} value={timeZone}>
+              {timeZone}
+            </option>
+          ))}
+        </select>
+      </label>
+
       <div className="mt-5 space-y-3">
         {draft.agents.map((agent, index) => (
-          <div key={agent.id || index} className="grid gap-3 rounded-lg border border-slate-200 p-3 md:grid-cols-[1fr_1fr_auto]">
+          <div key={agent.id || index} className="grid gap-3 rounded-lg border border-slate-200 p-3 md:grid-cols-[1fr_1fr_1fr_auto_auto]">
             <input
               className="rounded-md border border-slate-200 px-3 py-2 text-sm"
               value={agent.name}
@@ -2332,6 +2536,12 @@ const TeamSettings = ({
               onChange={(event) => updateAgent(index, "phone", event.target.value)}
               placeholder="+569..."
             />
+            <input
+              className="rounded-md border border-slate-200 px-3 py-2 text-sm"
+              value={agent.email || ""}
+              onChange={(event) => updateAgent(index, "email", event.target.value)}
+              placeholder="email@clinica.cl"
+            />
             <label className="inline-flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
@@ -2340,6 +2550,13 @@ const TeamSettings = ({
               />
               Activa
             </label>
+            <button
+              type="button"
+              className="rounded-md border border-red-200 px-3 py-2 text-sm font-semibold text-red-700"
+              onClick={() => removeAgent(index)}
+            >
+              Eliminar
+            </button>
           </div>
         ))}
       </div>
@@ -2357,6 +2574,7 @@ const TeamSettings = ({
                   id: `agent-${current.agents.length + 1}`,
                   name: "",
                   phone: "",
+                  email: "",
                   active: true,
                 },
               ],
@@ -2839,7 +3057,7 @@ const Cirugia360Dashboard = () => {
     setError("");
     const previousSnapshot = snapshot;
     const agent = settings?.agents.find((currentAgent) => currentAgent.id === assignedAgentId) || null;
-    patchLead(leadId, { assignedAgentName: agent?.name || null });
+    patchLead(leadId, { assignedAgentName: agent?.name || null, assignedAgentEmail: agent?.email || null });
 
     try {
       const updatedLead = await apiRequest<DashboardLead>("/api/cirugia360-speed/lead", {
@@ -2849,7 +3067,10 @@ const Cirugia360Dashboard = () => {
           assignedAgentId: assignedAgentId || null,
         }),
       });
-      patchLead(leadId, { assignedAgentName: updatedLead.assignedAgentName });
+      patchLead(leadId, {
+        assignedAgentName: updatedLead.assignedAgentName,
+        assignedAgentEmail: updatedLead.assignedAgentEmail,
+      });
 
       if (!options.skipToast) {
         showActionToast("success", "Asesora actualizada.");
@@ -3102,6 +3323,7 @@ const Cirugia360Dashboard = () => {
   const leads = snapshot?.leads || [];
   const stages = snapshot?.pipelineStages || [];
   const activeNavItem = navItems.find((item) => item.id === activeView);
+  const currentUserEmail = session.user.email?.toLowerCase() || null;
 
   return (
     <main className="min-h-screen bg-dashboard-page text-dashboard-ink lg:pl-[220px]">
@@ -3301,6 +3523,7 @@ const Cirugia360Dashboard = () => {
               onCall={callLead}
               onOutcome={updateOutcome}
               onNewLead={() => setIsCreateLeadOpen(true)}
+              currentUserEmail={currentUserEmail}
               updatingLeadId={updatingPipelineLeadId}
               callingLeadId={callingLeadId}
             />
@@ -3312,6 +3535,7 @@ const Cirugia360Dashboard = () => {
               onSelect={openLeadDetail}
               onCall={callLead}
               onNewLead={() => setIsCreateLeadOpen(true)}
+              currentUserEmail={currentUserEmail}
               callingLeadId={callingLeadId}
             />
           ) : null}
