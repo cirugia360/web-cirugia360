@@ -116,6 +116,7 @@ export type ActionOptions = {
 
 export type RefreshOptions = {
   silent?: boolean;
+  force?: boolean;
 };
 
 export type LeadSortKey = "createdAt" | "fullName" | "procedureInterest" | "assignedAgentName" | "status";

@@ -97,6 +97,14 @@ const businessTimeZoneOptions = [
   "America/New_York",
 ];
 
+const emptyTeamSettings: AgentSettings = {
+  businessTimeZone: "America/Santiago",
+  queuePaused: false,
+  agents: [],
+};
+
+const serializeTeamSettings = (value: AgentSettings | null) => JSON.stringify(value || emptyTeamSettings);
+
 const lossReasonOptions: Array<{ id: LossReasonCode; label: string }> = [
   { id: "no_responde", label: "No responde" },
   { id: "precio", label: "Precio" },
@@ -2094,27 +2102,50 @@ const TeamSettings = ({
   agentPerformance,
   onRefresh,
   onSessionExpired,
+  onDirtyChange,
 }: {
   settings: AgentSettings | null;
   agentPerformance: DashboardSnapshot["agentPerformance"];
-  onRefresh: () => void;
+  onRefresh: (options?: RefreshOptions) => void;
   onSessionExpired: () => Promise<void>;
+  onDirtyChange: (hasUnsavedChanges: boolean) => void;
 }) => {
-  const [draft, setDraft] = useState<AgentSettings>(
-    settings || {
-      businessTimeZone: "America/Santiago",
-      queuePaused: false,
-      agents: [],
-    },
+  const [draft, setDraft] = useState<AgentSettings>(() => settings || emptyTeamSettings);
+  const [lastSyncedKey, setLastSyncedKey] = useState<string | null>(() =>
+    settings ? serializeTeamSettings(settings) : null,
   );
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
+  const settingsKey = useMemo(() => (settings ? serializeTeamSettings(settings) : null), [settings]);
+  const draftKey = useMemo(() => serializeTeamSettings(draft), [draft]);
+  const hasUnsavedChanges = Boolean(lastSyncedKey && draftKey !== lastSyncedKey);
 
   useEffect(() => {
-    if (settings) {
-      setDraft(settings);
+    if (!settings || !settingsKey) {
+      return;
     }
-  }, [settings]);
+
+    if (draftKey === lastSyncedKey || draftKey === settingsKey) {
+      setDraft(settings);
+      setLastSyncedKey(settingsKey);
+    }
+  }, [draftKey, lastSyncedKey, settings, settingsKey]);
+
+  useEffect(() => {
+    onDirtyChange(hasUnsavedChanges);
+
+    return () => {
+      onDirtyChange(false);
+    };
+  }, [hasUnsavedChanges, onDirtyChange]);
+
+  const discardChanges = () => {
+    const nextDraft = settings || emptyTeamSettings;
+
+    setDraft(nextDraft);
+    setLastSyncedKey(settings ? serializeTeamSettings(settings) : serializeTeamSettings(nextDraft));
+    setError("");
+  };
 
   const updateAgent = (index: number, key: "name" | "phone" | "email" | "active", value: string | boolean) => {
     setDraft((current) => ({
@@ -2176,8 +2207,11 @@ const TeamSettings = ({
         method: "POST",
         body: JSON.stringify(draft),
       });
+      const nextKey = serializeTeamSettings(data);
+
       setDraft(data);
-      onRefresh();
+      setLastSyncedKey(nextKey);
+      onRefresh({ force: true });
     } catch (saveError) {
       if (isSessionExpiredError(saveError)) {
         await onSessionExpired();
@@ -2201,8 +2235,11 @@ const TeamSettings = ({
           action: draft.queuePaused ? "resume" : "pause",
         }),
       });
+      const nextKey = serializeTeamSettings(data);
+
       setDraft(data);
-      onRefresh();
+      setLastSyncedKey(nextKey);
+      onRefresh({ force: true });
     } catch (saveError) {
       if (isSessionExpiredError(saveError)) {
         await onSessionExpired();
@@ -2217,6 +2254,32 @@ const TeamSettings = ({
 
   return (
     <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      {hasUnsavedChanges ? (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          <span className="font-medium">
+            Tenés cambios sin guardar. No cerramos ni refrescamos hasta que los guardes o descartes.
+          </span>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className="rounded-md bg-amber-700 px-3 py-1.5 text-xs font-semibold text-white"
+              onClick={() => void saveSettings()}
+              disabled={isSaving}
+            >
+              Guardar
+            </button>
+            <button
+              type="button"
+              className="rounded-md border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900"
+              onClick={discardChanges}
+              disabled={isSaving}
+            >
+              Descartar
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold">Equipo y cola</h2>
