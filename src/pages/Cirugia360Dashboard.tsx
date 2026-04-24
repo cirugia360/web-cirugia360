@@ -95,6 +95,7 @@ type DashboardLead = {
   lastError: string | null;
   pipelineStage: string;
   pipelineOutcome: string;
+  pipelineOutcomeReasonCode: string | null;
   pipelineOutcomeReason: string | null;
   pipelineValue: number;
   recordingUrl: string | null;
@@ -125,6 +126,19 @@ type DashboardSnapshot = {
   speedMetrics: DashboardMetric[];
   funnelMetrics: Array<{ id: string; label: string; count: number; value: number }>;
   callMetrics: Array<{ id: string; label: string; value: number }>;
+  agentPerformance?: Array<{
+    id: string;
+    name: string;
+    email: string | null;
+    assigned: number;
+    contacted: number;
+    evaluations: number;
+    surgeries: number;
+    won: number;
+    answeredCalls: number;
+    conversionRate: number;
+    averageTimeToContactSeconds: number | null;
+  }>;
   leads: DashboardLead[];
 };
 
@@ -164,6 +178,7 @@ type ToastTone = "success" | "warning" | "error";
 type ActionOptions = {
   skipToast?: boolean;
   skipUndoToast?: boolean;
+  reasonCode?: LossReasonCode | null;
 };
 
 type RefreshOptions = {
@@ -175,6 +190,8 @@ type LeadSortKey = "createdAt" | "fullName" | "procedureInterest" | "assignedAge
 type SortDirection = "asc" | "desc";
 
 type DashboardPeriod = "today" | "7d" | "30d" | "month" | "custom";
+
+type LossReasonCode = "no_responde" | "precio" | "no_califica_medicamente" | "eligio_otra_clinica" | "otro";
 
 const navItems = [
   { id: "overview", label: "Resumen", icon: LayoutDashboard },
@@ -199,6 +216,17 @@ const businessTimeZoneOptions = [
   "America/Mexico_City",
   "America/New_York",
 ];
+
+const lossReasonOptions: Array<{ id: LossReasonCode; label: string }> = [
+  { id: "no_responde", label: "No responde" },
+  { id: "precio", label: "Precio" },
+  { id: "no_califica_medicamente", label: "No califica médicamente" },
+  { id: "eligio_otra_clinica", label: "Eligió otra clínica" },
+  { id: "otro", label: "Otro" },
+];
+
+const getLossReasonLabel = (reasonCode: string | null) =>
+  lossReasonOptions.find((option) => option.id === reasonCode)?.label || "";
 
 const isValidAgentPhone = (value: string) => {
   const compactValue = value.replace(/[^\d+]/g, "");
@@ -657,6 +685,7 @@ const leadMatchesSearch = (lead: DashboardLead, search: string) => {
     lead.procedureInterest,
     lead.assignedAgentName,
     lead.assignedAgentEmail,
+    getLossReasonLabel(lead.pipelineOutcomeReasonCode),
     lead.pipelineOutcomeReason,
     getLeadStatus(lead).label,
   ]
@@ -685,7 +714,8 @@ const exportLeadsCsv = (leads: DashboardLead[], filenamePrefix: string) => {
     "Estado",
     "Etapa",
     "Outcome",
-    "Motivo outcome",
+    "Motivo perdida",
+    "Detalle perdida",
     "Valor pipeline",
     "Fuente",
     "Intentos",
@@ -702,6 +732,7 @@ const exportLeadsCsv = (leads: DashboardLead[], filenamePrefix: string) => {
     getLeadStatus(lead).label,
     lead.pipelineStage,
     lead.pipelineOutcome || "active",
+    getLossReasonLabel(lead.pipelineOutcomeReasonCode),
     lead.pipelineOutcomeReason || "",
     lead.pipelineValue,
     lead.sourceUrl || "",
@@ -837,6 +868,7 @@ const PipelineBoard = ({
   const [ownershipView, setOwnershipView] = useState<"all" | "mine">("all");
   const [winLead, setWinLead] = useState<DashboardLead | null>(null);
   const [lossLead, setLossLead] = useState<DashboardLead | null>(null);
+  const [lossReasonCode, setLossReasonCode] = useState<LossReasonCode | "">("");
   const [lossReason, setLossReason] = useState("");
   const [lossError, setLossError] = useState("");
 
@@ -888,6 +920,7 @@ const PipelineBoard = ({
 
   const openLossConfirm = (lead: DashboardLead) => {
     setLossLead(lead);
+    setLossReasonCode("");
     setLossReason("");
     setLossError("");
   };
@@ -909,15 +942,16 @@ const PipelineBoard = ({
       return;
     }
 
-    if (!lossReason.trim()) {
-      setLossError("Ingresa el motivo de perdida.");
+    if (!lossReasonCode) {
+      setLossError("Selecciona el motivo de perdida.");
       return;
     }
 
-    const saved = await onOutcome(lossLead.id, "lost", lossReason.trim());
+    const saved = await onOutcome(lossLead.id, "lost", lossReason.trim(), { reasonCode: lossReasonCode });
 
     if (saved) {
       setLossLead(null);
+      setLossReasonCode("");
       setLossReason("");
       setLossError("");
     } else {
@@ -1253,9 +1287,9 @@ const PipelineBoard = ({
                   <span>{lead.assignedAgentName || "Sin asesora"}</span>
                   <span>{formatDate(lead.createdAt)}</span>
                 </div>
-                {view === "lost" && lead.pipelineOutcomeReason ? (
+                {view === "lost" && (lead.pipelineOutcomeReasonCode || lead.pipelineOutcomeReason) ? (
                   <p className="mt-3 line-clamp-2 text-xs leading-5 text-dashboard-muted">
-                    {lead.pipelineOutcomeReason}
+                    {[getLossReasonLabel(lead.pipelineOutcomeReasonCode), lead.pipelineOutcomeReason].filter(Boolean).join(" - ")}
                   </p>
                 ) : null}
                 <div className="mt-3 flex justify-end">
@@ -1331,6 +1365,24 @@ const PipelineBoard = ({
               <p className="text-sm leading-6 text-dashboard-muted">
                 {lossLead.fullName} saldra del pipeline activo y quedara registrada en Perdidas.
               </p>
+              <label className="block text-sm font-medium">
+                Motivo
+                <select
+                  className="mt-1 h-10 w-full rounded-lg border border-dashboard-line bg-white px-3 text-sm outline-none focus:border-dashboard-primary"
+                  value={lossReasonCode}
+                  onChange={(event) => {
+                    setLossReasonCode(event.target.value as LossReasonCode);
+                    setLossError("");
+                  }}
+                >
+                  <option value="">Seleccionar motivo</option>
+                  {lossReasonOptions.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <textarea
                 className="min-h-28 w-full rounded-lg border border-dashboard-line px-3 py-2 text-sm outline-none focus:border-dashboard-primary"
                 value={lossReason}
@@ -1338,7 +1390,7 @@ const PipelineBoard = ({
                   setLossReason(event.target.value);
                   setLossError("");
                 }}
-                placeholder="Motivo de perdida"
+                placeholder="Detalle opcional"
               />
               {lossError ? (
                 <p className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">{lossError}</p>
@@ -1740,6 +1792,7 @@ const LeadDetail = ({
 }) => {
   const [note, setNote] = useState("");
   const [value, setValue] = useState(String(Math.round(lead.pipelineValue || 0)));
+  const [reasonCode, setReasonCode] = useState<LossReasonCode | "">((lead.pipelineOutcomeReasonCode as LossReasonCode) || "");
   const [reason, setReason] = useState(lead.pipelineOutcomeReason || "");
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
@@ -1848,11 +1901,21 @@ const LeadDetail = ({
   };
 
   const saveOutcome = async (outcome: "active" | "lost" | "won") => {
+    if (outcome === "lost" && !reasonCode) {
+      setError("Selecciona el motivo de perdida.");
+      showDrawerToast("warning", "Selecciona el motivo de perdida.");
+      return;
+    }
+
     setIsSaving(true);
     setError("");
 
     try {
-      const saved = await onOutcome(lead.id, outcome, reason, { skipToast: true, skipUndoToast: true });
+      const saved = await onOutcome(lead.id, outcome, reason.trim(), {
+        skipToast: true,
+        skipUndoToast: true,
+        reasonCode: outcome === "lost" ? reasonCode : null,
+      });
 
       if (!saved) {
         setError("No pudimos guardar.");
@@ -2085,12 +2148,29 @@ const LeadDetail = ({
               Perdido
             </button>
           </div>
-          <input
-            className="mt-3 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-            placeholder="Motivo de perdida"
-            value={reason}
-            onChange={(event) => setReason(event.target.value)}
-          />
+          <div className="mt-3 grid gap-2">
+            <label className="text-sm">
+              Motivo de perdida
+              <select
+                className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+                value={reasonCode}
+                onChange={(event) => setReasonCode(event.target.value as LossReasonCode)}
+              >
+                <option value="">Seleccionar motivo</option>
+                {lossReasonOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <textarea
+              className="min-h-20 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+              placeholder="Detalle opcional"
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+            />
+          </div>
         </section>
 
         {lead.recordingUrl || lead.transcriptionText ? (
@@ -2361,10 +2441,12 @@ const CreateLeadModal = ({
 
 const TeamSettings = ({
   settings,
+  agentPerformance,
   onRefresh,
   onSessionExpired,
 }: {
   settings: AgentSettings | null;
+  agentPerformance: DashboardSnapshot["agentPerformance"];
   onRefresh: () => void;
   onSessionExpired: () => Promise<void>;
 }) => {
@@ -2595,6 +2677,51 @@ const TeamSettings = ({
       </div>
 
       {error ? <p className="mt-3 rounded-md bg-red-50 p-3 text-sm text-red-800">{error}</p> : null}
+
+      <section className="mt-6 border-t border-slate-200 pt-5">
+        <div className="mb-3">
+          <h3 className="text-base font-semibold">Rendimiento</h3>
+          <p className="text-sm text-slate-500">Metricas por asesora en el periodo activo.</p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="min-w-[760px] w-full text-left text-sm">
+            <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
+              <tr>
+                <th scope="col" className="py-2 pr-3">Asesora</th>
+                <th scope="col" className="px-3 py-2">Leads</th>
+                <th scope="col" className="px-3 py-2">Contactados</th>
+                <th scope="col" className="px-3 py-2">Evaluaciones</th>
+                <th scope="col" className="px-3 py-2">Cirugias</th>
+                <th scope="col" className="px-3 py-2">Ganados</th>
+                <th scope="col" className="px-3 py-2">Conversion</th>
+                <th scope="col" className="px-3 py-2">Tiempo prom.</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {(agentPerformance || []).map((agent) => (
+                <tr key={agent.id}>
+                  <th scope="row" className="py-3 pr-3 font-semibold text-slate-900">
+                    {agent.name}
+                    {agent.email ? <span className="block text-xs font-normal text-slate-500">{agent.email}</span> : null}
+                  </th>
+                  <td className="px-3 py-3">{agent.assigned}</td>
+                  <td className="px-3 py-3">{agent.contacted}</td>
+                  <td className="px-3 py-3">{agent.evaluations}</td>
+                  <td className="px-3 py-3">{agent.surgeries}</td>
+                  <td className="px-3 py-3">{agent.won}</td>
+                  <td className="px-3 py-3">{agent.conversionRate}%</td>
+                  <td className="px-3 py-3">{formatMetric({ id: "agent-speed", label: "", value: agent.averageTimeToContactSeconds, format: "duration" })}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {agentPerformance?.length ? null : (
+          <p className="rounded-md border border-dashed border-slate-200 p-4 text-sm text-slate-500">
+            No hay leads asignados en este periodo.
+          </p>
+        )}
+      </section>
     </section>
   );
 };
@@ -2961,9 +3088,12 @@ const Cirugia360Dashboard = () => {
     const previousSnapshot = snapshot;
     const previousLead = previousSnapshot?.leads.find((lead) => lead.id === leadId) || null;
     const previousOutcome = (previousLead?.pipelineOutcome || "active") as "active" | "lost" | "won";
+    const previousReasonCode = (previousLead?.pipelineOutcomeReasonCode as LossReasonCode | null) || null;
     const previousReason = previousLead?.pipelineOutcomeReason || "";
+    const nextReasonCode = outcome === "lost" ? options.reasonCode || null : null;
     patchLead(leadId, {
       pipelineOutcome: outcome,
+      pipelineOutcomeReasonCode: nextReasonCode,
       pipelineOutcomeReason: outcome === "lost" ? reason : null,
     });
 
@@ -2974,6 +3104,7 @@ const Cirugia360Dashboard = () => {
           action: "outcome",
           leadId,
           outcome,
+          reasonCode: nextReasonCode,
           reason: outcome === "lost" ? reason : null,
         }),
       });
@@ -2990,7 +3121,10 @@ const Cirugia360Dashboard = () => {
           action: {
             label: "Deshacer",
             onClick: () => {
-              void updateOutcome(leadId, previousOutcome, previousReason, { skipUndoToast: true });
+              void updateOutcome(leadId, previousOutcome, previousReason, {
+                skipUndoToast: true,
+                reasonCode: previousOutcome === "lost" ? previousReasonCode : null,
+              });
             },
           },
         });
@@ -3541,7 +3675,12 @@ const Cirugia360Dashboard = () => {
           ) : null}
 
           {activeView === "team" ? (
-            <TeamSettings settings={settings} onRefresh={refresh} onSessionExpired={expireDashboardSession} />
+            <TeamSettings
+              settings={settings}
+              agentPerformance={snapshot?.agentPerformance || []}
+              onRefresh={refresh}
+              onSessionExpired={expireDashboardSession}
+            />
           ) : null}
 
           {!snapshot && !error ? (

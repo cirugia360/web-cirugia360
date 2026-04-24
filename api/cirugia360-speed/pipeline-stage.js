@@ -35,6 +35,10 @@ const outcomeSchema = z.object({
   action: z.literal("outcome"),
   leadId: z.string().uuid(),
   outcome: z.enum(["active", "lost", "won"]),
+  reasonCode: z
+    .enum(["no_responde", "precio", "no_califica_medicamente", "eligio_otra_clinica", "otro"])
+    .optional()
+    .nullable(),
   reason: z.string().trim().max(500).optional().nullable(),
   at: z.string().datetime().optional(),
 });
@@ -75,10 +79,10 @@ export default async function handler(request, response) {
     } else if (payload.action === "value") {
       lead = await updatePipelineValue(payload);
     } else {
-      if (payload.outcome === "lost" && !payload.reason?.trim()) {
+      if (payload.outcome === "lost" && !payload.reasonCode) {
         return sendJson(response, 400, {
           success: false,
-          error: "Ingresa el motivo de perdida.",
+          error: "Selecciona el motivo de perdida.",
         });
       }
 

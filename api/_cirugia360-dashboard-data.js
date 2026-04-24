@@ -70,6 +70,7 @@ export const toPublicLead = (lead, notes = []) => ({
   lastError: lead.last_error,
   pipelineStage: normalizePipelineStage(lead.pipeline_stage),
   pipelineOutcome: lead.pipeline_outcome || "active",
+  pipelineOutcomeReasonCode: lead.pipeline_outcome_reason_code,
   pipelineOutcomeReason: lead.pipeline_outcome_reason,
   pipelineOutcomeAt: lead.pipeline_outcome_at,
   pipelineValue: numberOrZero(lead.pipeline_value),
@@ -209,6 +210,81 @@ const buildCallMetrics = (leads) => [
   },
 ];
 
+const buildAgentPerformance = (leads) => {
+  const performanceByAgent = new Map();
+
+  for (const lead of leads) {
+    const agentKey = lead.assigned_agent_email || lead.assigned_agent_phone || lead.assigned_agent_name || "unassigned";
+    const current = performanceByAgent.get(agentKey) || {
+      id: agentKey,
+      name: lead.assigned_agent_name || "Sin asignar",
+      email: lead.assigned_agent_email || null,
+      assigned: 0,
+      contacted: 0,
+      evaluations: 0,
+      surgeries: 0,
+      won: 0,
+      answeredCalls: 0,
+      totalTimeToContactSeconds: 0,
+      timeToContactSamples: 0,
+    };
+
+    current.assigned += 1;
+
+    if (lead.customer_connected_at || lead.status === "completed" || lead.status === "customer_connected") {
+      current.contacted += 1;
+      current.answeredCalls += 1;
+    }
+
+    if (["eval_presencial", "eval_online"].includes(normalizePipelineStage(lead.pipeline_stage))) {
+      current.evaluations += 1;
+    }
+
+    if (normalizePipelineStage(lead.pipeline_stage) === "cirugia") {
+      current.surgeries += 1;
+    }
+
+    if (lead.pipeline_outcome === "won") {
+      current.won += 1;
+    }
+
+    if (lead.customer_connected_at && lead.created_at) {
+      const seconds = (Date.parse(lead.customer_connected_at) - Date.parse(lead.created_at)) / 1000;
+
+      if (Number.isFinite(seconds) && seconds >= 0) {
+        current.totalTimeToContactSeconds += seconds;
+        current.timeToContactSamples += 1;
+      }
+    }
+
+    performanceByAgent.set(agentKey, current);
+  }
+
+  return Array.from(performanceByAgent.values())
+    .map((agent) => ({
+      id: agent.id,
+      name: agent.name,
+      email: agent.email,
+      assigned: agent.assigned,
+      contacted: agent.contacted,
+      evaluations: agent.evaluations,
+      surgeries: agent.surgeries,
+      won: agent.won,
+      answeredCalls: agent.answeredCalls,
+      conversionRate: agent.assigned ? Math.round((agent.won / agent.assigned) * 100) : 0,
+      averageTimeToContactSeconds: agent.timeToContactSamples
+        ? Math.round(agent.totalTimeToContactSeconds / agent.timeToContactSamples)
+        : null,
+    }))
+    .sort((firstAgent, secondAgent) => {
+      if (secondAgent.won !== firstAgent.won) {
+        return secondAgent.won - firstAgent.won;
+      }
+
+      return secondAgent.contacted - firstAgent.contacted;
+    });
+};
+
 export const buildDashboardSnapshot = async (options = {}) => {
   const client = getSpeedAdminClient();
   const dateRange = getDateRange(options);
@@ -243,6 +319,7 @@ export const buildDashboardSnapshot = async (options = {}) => {
     speedMetrics: buildSpeedMetrics(leads || []),
     funnelMetrics: buildFunnelMetrics(leads || []),
     callMetrics: buildCallMetrics(leads || []),
+    agentPerformance: buildAgentPerformance(leads || []),
     leads: publicLeads,
   };
 };
@@ -300,6 +377,7 @@ export const updatePipelineValue = async ({ leadId, pipelineValue, at = new Date
 export const updatePipelineOutcome = async ({
   leadId,
   outcome,
+  reasonCode = null,
   reason = null,
   at = new Date().toISOString(),
 }) => {
@@ -310,8 +388,10 @@ export const updatePipelineOutcome = async ({
   }
 
   const normalizedOutcome = outcome === "lost" || outcome === "won" ? outcome : "active";
+  const normalizedReasonCode = normalizeText(reasonCode) || null;
   const updatedLead = await updateSpeedLead(lead.id, {
     pipeline_outcome: normalizedOutcome === "active" ? null : normalizedOutcome,
+    pipeline_outcome_reason_code: normalizedOutcome === "lost" ? normalizedReasonCode : null,
     pipeline_outcome_reason: normalizedOutcome === "lost" ? normalizeText(reason) || null : null,
     pipeline_outcome_at: normalizedOutcome === "active" ? null : at,
   });
@@ -319,6 +399,7 @@ export const updatePipelineOutcome = async ({
   await insertSpeedLeadEvent(lead.id, "lead.pipeline_outcome_changed", {
     at,
     outcome: normalizedOutcome,
+    reasonCode: normalizedOutcome === "lost" ? normalizedReasonCode : null,
     reason: normalizedOutcome === "lost" ? normalizeText(reason) || null : null,
   });
 

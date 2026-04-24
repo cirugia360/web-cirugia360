@@ -91,6 +91,7 @@ create table if not exists public.c360_speed_leads (
   last_error text,
   pipeline_stage text not null default 'nuevo',
   pipeline_outcome text,
+  pipeline_outcome_reason_code text,
   pipeline_outcome_reason text,
   pipeline_outcome_at timestamptz,
   pipeline_value numeric(12, 2),
@@ -108,6 +109,7 @@ create table if not exists public.c360_speed_leads (
 
 alter table public.c360_speed_leads add column if not exists pipeline_stage text not null default 'nuevo';
 alter table public.c360_speed_leads add column if not exists pipeline_outcome text;
+alter table public.c360_speed_leads add column if not exists pipeline_outcome_reason_code text;
 alter table public.c360_speed_leads add column if not exists pipeline_outcome_reason text;
 alter table public.c360_speed_leads add column if not exists pipeline_outcome_at timestamptz;
 alter table public.c360_speed_leads add column if not exists pipeline_value numeric(12, 2);
@@ -121,6 +123,29 @@ alter table public.c360_speed_leads add column if not exists transcription_sid t
 alter table public.c360_speed_leads add column if not exists transcription_text text;
 alter table public.c360_speed_leads add column if not exists transcription_status text;
 alter table public.c360_speed_leads add column if not exists assigned_agent_email text;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'c360_speed_leads_pipeline_outcome_reason_code_check'
+  ) then
+    alter table public.c360_speed_leads
+      add constraint c360_speed_leads_pipeline_outcome_reason_code_check
+      check (
+        pipeline_outcome_reason_code is null
+        or pipeline_outcome_reason_code in (
+          'no_responde',
+          'precio',
+          'no_califica_medicamente',
+          'eligio_otra_clinica',
+          'otro'
+        )
+      );
+  end if;
+end
+$$;
 
 create table if not exists public.c360_speed_lead_events (
   id bigserial primary key,
