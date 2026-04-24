@@ -1,8 +1,11 @@
 import {
   Activity,
   AlertCircle,
+  ArrowUpDown,
   BarChart3,
   CalendarCheck,
+  ChevronLeft,
+  ChevronRight,
   Clock,
   CreditCard,
   FileText,
@@ -26,7 +29,7 @@ import {
   Video,
   XCircle,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type { Session } from "@supabase/supabase-js";
 import {
   ContextMenu,
@@ -137,6 +140,10 @@ type ActionOptions = {
   skipToast?: boolean;
   skipUndoToast?: boolean;
 };
+
+type LeadSortKey = "createdAt" | "fullName" | "procedureInterest" | "assignedAgentName" | "status";
+
+type SortDirection = "asc" | "desc";
 
 const navItems = [
   { id: "overview", label: "Resumen", icon: LayoutDashboard },
@@ -492,15 +499,42 @@ const humanizeStatus = (status: string) =>
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ") || "Sin estado";
 
-const LeadStatusBadge = ({ lead }: { lead: DashboardLead }) => {
+const getLeadStatus = (lead: DashboardLead) => {
   const statusKey =
     lead.customerConnectedAt && ["received", "scheduled", "dispatching", "connecting_customer"].includes(lead.status)
       ? "customer_connected"
       : lead.status;
-  const status = STATUS_LABELS[statusKey] || {
+
+  return STATUS_LABELS[statusKey] || {
     label: lead.lastError ? "Atención" : humanizeStatus(statusKey),
     className: lead.lastError ? STATUS_LABELS.failed.className : FALLBACK_STATUS_CLASSNAME,
   };
+};
+
+const leadMatchesSearch = (lead: DashboardLead, search: string) => {
+  const normalizedSearch = search.trim().toLowerCase();
+
+  if (!normalizedSearch) {
+    return true;
+  }
+
+  return [
+    lead.fullName,
+    lead.phone,
+    lead.email,
+    lead.procedureInterest,
+    lead.assignedAgentName,
+    lead.pipelineOutcomeReason,
+    getLeadStatus(lead).label,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase()
+    .includes(normalizedSearch);
+};
+
+const LeadStatusBadge = ({ lead }: { lead: DashboardLead }) => {
+  const status = getLeadStatus(lead);
 
   return (
     <span className={`inline-flex rounded-md border px-2 py-1 text-xs font-medium ${status.className}`}>
@@ -579,18 +613,7 @@ const PipelineBoard = ({
         return true;
       }
 
-      return [
-        lead.fullName,
-        lead.phone,
-        lead.email,
-        lead.procedureInterest,
-        lead.assignedAgentName,
-        lead.pipelineOutcomeReason,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase()
-        .includes(normalizedSearch);
+      return leadMatchesSearch(lead, normalizedSearch);
     });
   }, [leads, search, view]);
 
@@ -1036,6 +1059,257 @@ const PipelineBoard = ({
   );
 };
 
+const LEADS_PAGE_SIZE = 50;
+
+const getSortValue = (lead: DashboardLead, sortKey: LeadSortKey) => {
+  if (sortKey === "status") {
+    return getLeadStatus(lead).label;
+  }
+
+  if (sortKey === "createdAt") {
+    return Date.parse(lead.createdAt) || 0;
+  }
+
+  return String(lead[sortKey] || "").toLowerCase();
+};
+
+const LeadsTable = ({
+  leads,
+  onSelect,
+  onCall,
+  callingLeadId,
+}: {
+  leads: DashboardLead[];
+  onSelect: (lead: DashboardLead) => void;
+  onCall: (leadId: string, options?: ActionOptions) => Promise<boolean>;
+  callingLeadId: string | null;
+}) => {
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [agentFilter, setAgentFilter] = useState("all");
+  const [sortKey, setSortKey] = useState<LeadSortKey>("createdAt");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [page, setPage] = useState(1);
+
+  const statusOptions = useMemo(() => {
+    const labels = new Map<string, string>();
+
+    for (const lead of leads) {
+      const status = getLeadStatus(lead).label;
+      labels.set(status, status);
+    }
+
+    return Array.from(labels.values()).sort((a, b) => a.localeCompare(b, "es"));
+  }, [leads]);
+
+  const agentOptions = useMemo(() => {
+    const agents = new Set(leads.map((lead) => lead.assignedAgentName || "Sin asignar"));
+    return Array.from(agents.values()).sort((a, b) => a.localeCompare(b, "es"));
+  }, [leads]);
+
+  const filteredLeads = useMemo(() => {
+    const sortedLeads = leads
+      .filter((lead) => leadMatchesSearch(lead, search))
+      .filter((lead) => statusFilter === "all" || getLeadStatus(lead).label === statusFilter)
+      .filter((lead) => agentFilter === "all" || (lead.assignedAgentName || "Sin asignar") === agentFilter)
+      .sort((firstLead, secondLead) => {
+        const firstValue = getSortValue(firstLead, sortKey);
+        const secondValue = getSortValue(secondLead, sortKey);
+        const direction = sortDirection === "asc" ? 1 : -1;
+
+        if (typeof firstValue === "number" && typeof secondValue === "number") {
+          return (firstValue - secondValue) * direction;
+        }
+
+        return String(firstValue).localeCompare(String(secondValue), "es") * direction;
+      });
+
+    return sortedLeads;
+  }, [agentFilter, leads, search, sortDirection, sortKey, statusFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredLeads.length / LEADS_PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const shouldPaginate = filteredLeads.length > LEADS_PAGE_SIZE;
+  const visibleLeads = shouldPaginate
+    ? filteredLeads.slice((currentPage - 1) * LEADS_PAGE_SIZE, currentPage * LEADS_PAGE_SIZE)
+    : filteredLeads;
+
+  useEffect(() => {
+    setPage(1);
+  }, [agentFilter, search, statusFilter]);
+
+  const changeSort = (nextSortKey: LeadSortKey) => {
+    if (sortKey === nextSortKey) {
+      setSortDirection((currentDirection) => (currentDirection === "asc" ? "desc" : "asc"));
+      return;
+    }
+
+    setSortKey(nextSortKey);
+    setSortDirection(nextSortKey === "createdAt" ? "desc" : "asc");
+  };
+
+  const sortLabel = (key: LeadSortKey) =>
+    sortKey === key ? (sortDirection === "asc" ? "ascendente" : "descendente") : "sin ordenar";
+
+  const SortButton = ({ label, value }: { label: string; value: LeadSortKey }) => (
+    <button
+      type="button"
+      className="inline-flex items-center gap-1 font-semibold text-slate-500 transition hover:text-slate-900"
+      onClick={() => changeSort(value)}
+      aria-label={`Ordenar por ${label}, ${sortLabel(value)}`}
+    >
+      {label}
+      <ArrowUpDown className="h-3.5 w-3.5" />
+    </button>
+  );
+
+  return (
+    <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div className="flex flex-col gap-3 border-b border-slate-200 p-4 lg:flex-row lg:items-center">
+        <label className="relative min-w-[240px] flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#8e99a8]" />
+          <input
+            className="h-10 w-full rounded-lg border border-[#e4e8ec] bg-white pl-9 pr-3 text-sm outline-none transition focus:border-[#13344F]"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Buscar paciente, telefono, procedimiento o asesora"
+          />
+        </label>
+        <div className="grid gap-2 sm:grid-cols-2 lg:w-[420px]">
+          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Estado
+            <select
+              className="mt-1 h-10 w-full rounded-lg border border-[#e4e8ec] bg-white px-3 text-sm font-normal normal-case text-slate-900 outline-none focus:border-[#13344F]"
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value)}
+            >
+              <option value="all">Todos</option>
+              {statusOptions.map((status) => (
+                <option key={status} value={status}>
+                  {status}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Asesora
+            <select
+              className="mt-1 h-10 w-full rounded-lg border border-[#e4e8ec] bg-white px-3 text-sm font-normal normal-case text-slate-900 outline-none focus:border-[#13344F]"
+              value={agentFilter}
+              onChange={(event) => setAgentFilter(event.target.value)}
+            >
+              <option value="all">Todas</option>
+              {agentOptions.map((agent) => (
+                <option key={agent} value={agent}>
+                  {agent}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="min-w-[860px] w-full border-collapse text-left text-sm">
+          <caption className="sr-only">Listado de leads comerciales</caption>
+          <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide">
+            <tr>
+              <th scope="col" className="px-4 py-3">
+                <SortButton label="Paciente" value="fullName" />
+              </th>
+              <th scope="col" className="px-4 py-3">
+                <SortButton label="Procedimiento" value="procedureInterest" />
+              </th>
+              <th scope="col" className="px-4 py-3">
+                <SortButton label="Asesora" value="assignedAgentName" />
+              </th>
+              <th scope="col" className="px-4 py-3">
+                <SortButton label="Estado" value="status" />
+              </th>
+              <th scope="col" className="px-4 py-3">
+                <SortButton label="Creado" value="createdAt" />
+              </th>
+              <th scope="col" className="px-4 py-3 text-right">
+                Acciones
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {visibleLeads.map((lead) => {
+              const isCalling = callingLeadId === lead.id;
+
+              return (
+                <tr key={lead.id} className="align-middle transition hover:bg-slate-50">
+                  <th scope="row" className="px-4 py-3 font-normal">
+                    <button type="button" className="min-w-0 text-left" onClick={() => onSelect(lead)}>
+                      <strong className="block max-w-[240px] truncate font-semibold text-slate-950">{lead.fullName}</strong>
+                      <span className="block text-xs text-slate-500">{lead.phone}</span>
+                    </button>
+                  </th>
+                  <td className="max-w-[220px] truncate px-4 py-3">{lead.procedureInterest || "Evaluacion"}</td>
+                  <td className="max-w-[180px] truncate px-4 py-3">{lead.assignedAgentName || "Sin asignar"}</td>
+                  <td className="px-4 py-3">
+                    <LeadStatusBadge lead={lead} />
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-3 text-slate-600">{formatDate(lead.createdAt)}</td>
+                  <td className="px-4 py-3 text-right">
+                    <button
+                      type="button"
+                      onClick={() => void onCall(lead.id)}
+                      disabled={Boolean(callingLeadId)}
+                      className="inline-flex items-center gap-1 rounded-md border border-teal-200 bg-teal-50 px-2.5 py-1.5 text-xs font-semibold text-teal-800 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <Phone className={`h-3.5 w-3.5 ${isCalling ? "animate-pulse" : ""}`} />
+                      {isCalling ? "Llamando" : "Llamar"}
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {visibleLeads.length === 0 ? (
+        <div className="border-t border-slate-100 p-6 text-sm font-medium text-slate-500">
+          No hay leads que coincidan con los filtros.
+        </div>
+      ) : null}
+
+      <div className="flex flex-col gap-3 border-t border-slate-200 px-4 py-3 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between">
+        <span>
+          Mostrando {visibleLeads.length} de {filteredLeads.length} leads
+        </span>
+        {shouldPaginate ? (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2.5 py-1.5 font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={() => setPage((currentPageValue) => Math.max(1, currentPageValue - 1))}
+              disabled={currentPage === 1}
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Anterior
+            </button>
+            <span className="font-medium">
+              {currentPage} / {totalPages}
+            </span>
+            <button
+              type="button"
+              className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2.5 py-1.5 font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={() => setPage((currentPageValue) => Math.min(totalPages, currentPageValue + 1))}
+              disabled={currentPage === totalPages}
+            >
+              Siguiente
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        ) : null}
+      </div>
+    </section>
+  );
+};
+
 const LeadCard = ({
   lead,
   stages,
@@ -1110,6 +1384,7 @@ const LeadDetail = ({
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
   const [drawerToast, setDrawerToast] = useState<{ id: number; tone: ToastTone; title: string; detail?: string } | null>(null);
+  const drawerRef = useRef<HTMLElement | null>(null);
 
   const showDrawerToast = (tone: ToastTone, title: string, detail?: string) => {
     const id = Date.now();
@@ -1125,6 +1400,56 @@ const LeadDetail = ({
       : drawerToast?.tone === "warning"
         ? "border-amber-200 bg-amber-50 text-amber-900"
         : "border-red-200 bg-red-50 text-red-900";
+
+  useEffect(() => {
+    const firstInteractiveElement = drawerRef.current?.querySelector<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+    );
+
+    firstInteractiveElement?.focus();
+
+    const getFocusableElements = () =>
+      Array.from(
+        drawerRef.current?.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ) || [],
+      ).filter((element) => element.offsetParent !== null);
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+        return;
+      }
+
+      if (event.key !== "Tab") {
+        return;
+      }
+
+      const focusableElements = getFocusableElements();
+
+      if (focusableElements.length === 0) {
+        event.preventDefault();
+        return;
+      }
+
+      const firstElement = focusableElements[0];
+      const lastElement = focusableElements[focusableElements.length - 1];
+
+      if (event.shiftKey && document.activeElement === firstElement) {
+        event.preventDefault();
+        lastElement.focus();
+      } else if (!event.shiftKey && document.activeElement === lastElement) {
+        event.preventDefault();
+        firstElement.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [onClose]);
 
   const saveValue = async () => {
     setIsSaving(true);
@@ -1219,10 +1544,24 @@ const LeadDetail = ({
   };
 
   return (
-    <aside className="fixed inset-y-0 right-0 z-40 w-full max-w-xl overflow-y-auto border-l border-slate-200 bg-white shadow-xl">
+    <div
+      className="fixed inset-0 z-40 bg-slate-950/20"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) {
+          onClose();
+        }
+      }}
+    >
+      <aside
+        ref={drawerRef}
+        className="ml-auto h-full w-full max-w-xl overflow-y-auto border-l border-slate-200 bg-white shadow-xl"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="lead-detail-title"
+      >
       <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4">
         <div>
-          <h2 className="text-lg font-semibold">{lead.fullName}</h2>
+          <h2 id="lead-detail-title" className="text-lg font-semibold">{lead.fullName}</h2>
           <p className="text-sm text-slate-500">{lead.phone}</p>
         </div>
         <button type="button" className="rounded-md p-2 hover:bg-slate-100" onClick={onClose}>
@@ -1358,7 +1697,8 @@ const LeadDetail = ({
 
         {error ? <p className="rounded-md bg-red-50 p-3 text-sm text-red-800">{error}</p> : null}
       </div>
-    </aside>
+      </aside>
+    </div>
   );
 };
 
@@ -1532,6 +1872,7 @@ const Cirugia360Dashboard = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [updatingPipelineLeadId, setUpdatingPipelineLeadId] = useState<string | null>(null);
   const [callingLeadId, setCallingLeadId] = useState<string | null>(null);
+  const leadDetailReturnFocusRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     const configError = getDashboardSupabaseConfigError();
@@ -1588,6 +1929,20 @@ const Cirugia360Dashboard = () => {
     setSnapshot(null);
     setSettings(null);
   };
+
+  const openLeadDetail = useCallback((lead: DashboardLead) => {
+    leadDetailReturnFocusRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setSelectedLead(lead);
+  }, []);
+
+  const closeLeadDetail = useCallback(() => {
+    setSelectedLead(null);
+    window.setTimeout(() => {
+      leadDetailReturnFocusRef.current?.focus();
+      leadDetailReturnFocusRef.current = null;
+    }, 0);
+  }, []);
 
   const patchLead = useCallback((leadId: string, patch: Partial<DashboardLead>) => {
     setSnapshot((currentSnapshot) => {
@@ -2037,7 +2392,7 @@ const Cirugia360Dashboard = () => {
             <PipelineBoard
               leads={leads}
               stages={stages}
-              onSelect={setSelectedLead}
+              onSelect={openLeadDetail}
               onStage={updateStage}
               onCall={callLead}
               onOutcome={updateOutcome}
@@ -2047,36 +2402,12 @@ const Cirugia360Dashboard = () => {
           ) : null}
 
           {activeView === "leads" && snapshot ? (
-            <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
-              <div className="grid grid-cols-[1.2fr_.8fr_.8fr_.7fr_auto] gap-3 border-b border-slate-200 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                <span>Paciente</span>
-                <span>Procedimiento</span>
-                <span>Asesora</span>
-                <span>Estado</span>
-                <span />
-              </div>
-              <div className="divide-y divide-slate-100">
-                {leads.map((lead) => (
-                  <div key={lead.id} className="grid grid-cols-[1.2fr_.8fr_.8fr_.7fr_auto] gap-3 px-4 py-3 text-sm">
-                    <button type="button" className="min-w-0 text-left" onClick={() => setSelectedLead(lead)}>
-                      <strong className="block truncate">{lead.fullName}</strong>
-                      <span className="text-xs text-slate-500">{lead.phone}</span>
-                    </button>
-                    <span className="truncate">{lead.procedureInterest || "Evaluacion"}</span>
-                    <span className="truncate">{lead.assignedAgentName || "Sin asignar"}</span>
-                    <LeadStatusBadge lead={lead} />
-                    <button
-                      type="button"
-                      onClick={() => callLead(lead.id)}
-                      className="inline-flex items-center gap-1 rounded-md border border-teal-200 bg-teal-50 px-2 py-1 text-xs font-semibold text-teal-800"
-                    >
-                      <Phone className="h-3.5 w-3.5" />
-                      Llamar
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </section>
+            <LeadsTable
+              leads={leads}
+              onSelect={openLeadDetail}
+              onCall={callLead}
+              callingLeadId={callingLeadId}
+            />
           ) : null}
 
           {activeView === "team" ? (
@@ -2093,9 +2424,10 @@ const Cirugia360Dashboard = () => {
 
       {selectedLead ? (
         <LeadDetail
+          key={selectedLead.id}
           lead={selectedLead}
           stages={stages}
-          onClose={() => setSelectedLead(null)}
+          onClose={closeLeadDetail}
           onStage={updateStage}
           onValue={updatePipelineValue}
           onOutcome={updateOutcome}
