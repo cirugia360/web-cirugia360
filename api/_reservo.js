@@ -828,6 +828,9 @@ const buildBookingNotes = (payload, config) =>
   [
     `Origen: web dr-sebastian-torres`,
     `Tipo: ${config.label}`,
+    payload?.procedureInterest
+      ? `Procedimiento de interes: ${normalizeText(payload.procedureInterest)}`
+      : null,
     payload?.sourceUrl ? `Pagina: ${normalizeText(payload.sourceUrl)}` : null,
   ]
     .filter(Boolean)

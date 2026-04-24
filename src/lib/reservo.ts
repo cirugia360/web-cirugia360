@@ -22,6 +22,7 @@ export type ReservoAvailabilityResponse = {
 
 export type ReservoBookingPayload = {
   appointmentType: AppointmentType;
+  procedureInterest?: string;
   personal: {
     rut: string;
     firstName: string;

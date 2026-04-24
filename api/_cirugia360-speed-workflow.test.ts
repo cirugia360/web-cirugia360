@@ -23,6 +23,7 @@ vi.mock("./_cirugia360-speed-twilio.js", () => ({
 }));
 
 import {
+  createBookingLeadFromBooking,
   createContactLead,
   extractBookingReference,
   extractExternalReferenceCandidates,
@@ -129,5 +130,59 @@ describe("cirugia360 speed-to-lead contact leads", () => {
       queued: true,
       warning: "No habia una asesora libre en este instante. El lead quedo en cola.",
     });
+  });
+});
+
+describe("cirugia360 speed-to-lead booking leads", () => {
+  const config = {
+    defaultCountryDialCode: "56",
+    retryDelaySeconds: 180,
+    agentCallCooldownSeconds: 180,
+    salesAgents: [{ id: "agent-1", name: "Asesora 1", phone: "+56912345678" }],
+    twilioConfigured: false,
+    twilioPhoneNumber: "+56229146709",
+    appUrl: "https://example.com",
+  };
+
+  it("uses the selected procedure interest instead of the Reservo consultation name", async () => {
+    await createBookingLeadFromBooking(
+      {
+        bookingPayload: {
+          appointmentType: "presencial",
+          procedureInterest: "Rinoplastia",
+          personal: {
+            firstName: "Thomas",
+            lastName1: "Weisskapp",
+            lastName2: "Test",
+            phone: "+56 9 9237 2299",
+            email: "tweisskapp@gmail.com",
+          },
+        },
+        bookingResponse: {
+          option: {
+            procedureName: "Consulta Medica Dr. Sebastian Torres - Presencial o a Distancia",
+            label: "Evaluacion con el Dr. Torres",
+          },
+          selectedSlot: {
+            date: "2026-04-24",
+            time: "10:00",
+          },
+          source: {
+            reserva: {
+              uuid: "booking-123",
+            },
+          },
+        },
+        sourceUrl: "https://example.com",
+      },
+      config,
+    );
+
+    expect(dbMocks.insertSpeedLead).toHaveBeenCalledWith(
+      expect.objectContaining({
+        lead_kind: "booking_request",
+        procedure_interest: "Rinoplastia",
+      }),
+    );
   });
 });

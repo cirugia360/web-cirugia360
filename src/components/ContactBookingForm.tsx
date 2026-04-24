@@ -11,6 +11,7 @@ import {
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Calendar } from "@/components/ui/calendar";
 import { toast } from "@/components/ui/sonner";
+import { procedureCatalog } from "@/data/procedureCatalog";
 import {
   createCirugia360ContactLead,
   createReservoBooking,
@@ -26,6 +27,8 @@ type Step = 1 | 2 | 3 | 4;
 type FlowIntent = "contact" | "booking";
 
 type FormState = {
+  procedimiento: string;
+  otroProcedimiento: string;
   rut: string;
   nombre: string;
   apellido: string;
@@ -33,6 +36,19 @@ type FormState = {
   correo: string;
   telefono: string;
 };
+
+const OTHER_PROCEDURE_VALUE = "__other__";
+
+const procedureOptions = [
+  ...procedureCatalog.map((procedure) => ({
+    value: procedure.title,
+    label: procedure.title,
+  })),
+  {
+    value: OTHER_PROCEDURE_VALUE,
+    label: "Otro",
+  },
+];
 
 const appointmentCard: {
   label: string;

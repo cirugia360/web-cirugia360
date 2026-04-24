@@ -598,6 +598,7 @@ export const createBookingLeadFromBooking = async ({
       phone: normalizePhoneInput(bookingPayload?.personal?.phone, config.defaultCountryDialCode),
       email: normalizeEmail(bookingPayload?.personal?.email),
       procedure:
+        normalizeText(bookingPayload?.procedureInterest) ||
         normalizeText(bookingResponse?.option?.procedureName) ||
         normalizeText(bookingResponse?.option?.label) ||
         "Evaluacion",
@@ -612,6 +613,7 @@ export const createBookingLeadFromBooking = async ({
       externalReferences: extractExternalReferenceCandidates(bookingResponse?.source),
       metadata: {
         appointmentType: normalizeText(bookingPayload?.appointmentType) || null,
+        procedureInterest: normalizeText(bookingPayload?.procedureInterest) || null,
         selectedSlot: bookingResponse?.selectedSlot || null,
         callbackMode: "booking_follow_up",
         hasPaymentUrl: Boolean(paymentUrl),

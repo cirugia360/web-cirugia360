@@ -834,38 +834,18 @@ const Cirugia360Dashboard = () => {
 
   const leads = snapshot?.leads || [];
   const stages = snapshot?.pipelineStages || [];
+  const activeNavItem = navItems.find((item) => item.id === activeView);
 
   return (
-    <main className="min-h-screen bg-[#f5f7f8] text-slate-950">
-      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-teal-700">Cirugia360</p>
-            <h1 className="text-xl font-semibold">Dashboard comercial</h1>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={refresh}
-              className="inline-flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm font-semibold"
-            >
-              <RefreshCcw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
-              Actualizar
-            </button>
-            <button
-              type="button"
-              onClick={signOut}
-              className="inline-flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm font-semibold"
-            >
-              <LogOut className="h-4 w-4" />
-              Salir
-            </button>
-          </div>
+    <main className="min-h-screen bg-[#f6f8fa] text-[#1a2332] lg:pl-[220px]">
+      <aside className="hidden lg:fixed lg:inset-y-0 lg:left-0 lg:z-40 lg:flex lg:w-[220px] lg:flex-col lg:border-r lg:border-[#e8ecf0] lg:bg-white">
+        <div className="border-b border-[#e8ecf0] px-5 py-5">
+          <p className="text-[15px] font-bold tracking-[-0.01em] text-[#13344F]">Cirugia360</p>
+          <p className="mt-0.5 text-[10px] font-medium uppercase tracking-[0.15em] text-[#8e99a8]">
+            Lead system
+          </p>
         </div>
-      </header>
-
-      <div className="mx-auto grid max-w-7xl gap-4 px-4 py-4 lg:grid-cols-[15rem_1fr]">
-        <nav className="h-max rounded-lg border border-slate-200 bg-white p-2 shadow-sm">
+        <nav aria-label="Secciones del dashboard" className="flex-1 space-y-0.5 p-2.5">
           {navItems.map((item) => {
             const Icon = item.icon;
             const active = activeView === item.id;
@@ -874,8 +854,65 @@ const Cirugia360Dashboard = () => {
               <button
                 key={item.id}
                 type="button"
-                className={`mb-1 flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-semibold ${
-                  active ? "bg-slate-950 text-white" : "text-slate-700 hover:bg-slate-100"
+                className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-[13px] transition ${
+                  active
+                    ? "bg-[#edf3f7] font-semibold text-[#13344F]"
+                    : "font-normal text-[#5f6d7e] hover:bg-[#f5f7f9] hover:text-[#13344F]"
+                }`}
+                onClick={() => setActiveView(item.id)}
+              >
+                <Icon className="h-4 w-4 shrink-0" />
+                <span className="truncate">{item.label}</span>
+              </button>
+            );
+          })}
+        </nav>
+        <div className="border-t border-[#e8ecf0] px-5 py-4 text-[11px] text-[#8e99a8]">
+          Dashboard comercial
+        </div>
+      </aside>
+
+      <header className="sticky top-0 z-30 border-b border-[#e8ecf0] bg-white/95 backdrop-blur lg:bg-white">
+        <div className="flex flex-wrap items-center gap-3 px-4 py-3 lg:px-6">
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[#8e99a8] lg:hidden">Cirugia360</p>
+            <h1 className="truncate text-lg font-bold tracking-[-0.01em] text-[#1a2332]">
+              {activeNavItem?.label || "Dashboard comercial"}
+            </h1>
+          </div>
+          <div className="ml-auto flex shrink-0 flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={refresh}
+              className="inline-flex items-center gap-2 rounded-[10px] border border-[#e8ecf0] bg-white px-3 py-2 text-sm font-bold text-[#5f6d7e] transition hover:text-[#13344F]"
+            >
+              <RefreshCcw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
+              Actualizar
+            </button>
+            <button
+              type="button"
+              onClick={signOut}
+              className="inline-flex items-center gap-2 rounded-[10px] border border-[#e8ecf0] bg-white px-3 py-2 text-sm font-bold text-[#5f6d7e] transition hover:text-[#13344F]"
+            >
+              <LogOut className="h-4 w-4" />
+              Salir
+            </button>
+          </div>
+        </div>
+        <nav
+          aria-label="Secciones del dashboard"
+          className="flex gap-1 overflow-x-auto border-t border-[#e8ecf0] bg-white px-4 py-2 lg:hidden"
+        >
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const active = activeView === item.id;
+
+            return (
+              <button
+                key={item.id}
+                type="button"
+                className={`flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-[13px] font-semibold transition ${
+                  active ? "bg-[#edf3f7] text-[#13344F]" : "text-[#5f6d7e] hover:bg-[#f5f7f9]"
                 }`}
                 onClick={() => setActiveView(item.id)}
               >
@@ -885,8 +922,10 @@ const Cirugia360Dashboard = () => {
             );
           })}
         </nav>
+      </header>
 
-        <section className="min-w-0 space-y-4">
+      <div className="px-4 py-4 lg:px-6">
+        <section className="mx-auto max-w-7xl min-w-0 space-y-4">
           {error ? (
             <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
               <AlertCircle className="h-4 w-4" />
@@ -943,7 +982,6 @@ const Cirugia360Dashboard = () => {
               </div>
             </>
           ) : null}
-
           {activeView === "pipeline" && snapshot ? (
             <div className="grid gap-3 xl:grid-cols-3">
               {stages.map((stage) => {
