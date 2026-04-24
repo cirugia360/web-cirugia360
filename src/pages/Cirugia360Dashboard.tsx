@@ -10,6 +10,7 @@ import {
   GripVertical,
   LayoutDashboard,
   LogOut,
+  MoreHorizontal,
   MessageCircle,
   Pause,
   Phone,
@@ -27,6 +28,19 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import type { Session } from "@supabase/supabase-js";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { toast } from "@/components/ui/sonner";
 import {
   getDashboardAccessToken,
   getDashboardSupabase,
@@ -105,6 +119,16 @@ type ApiResult<T> = {
   success: boolean;
   data?: T;
   error?: string;
+  [key: string]: unknown;
+};
+
+type LeadCallResult = {
+  leadId: string;
+  callStarted?: boolean;
+  queued?: boolean;
+  dispatchScheduledAt?: string | null;
+  assignedAgent?: string | null;
+  warning?: string;
 };
 
 const navItems = [
@@ -170,7 +194,79 @@ const apiRequest = async <T,>(path: string, options: RequestInit = {}) => {
     throw new Error(payload?.error || "No pudimos completar la accion.");
   }
 
-  return payload.data as T;
+  return (payload.data ?? payload) as T;
+};
+
+const buildSpeedMetrics = (leads: DashboardLead[]): DashboardMetric[] => {
+  const connected = leads.filter((lead) => lead.customerConnectedAt).length;
+  const completed = leads.filter((lead) => lead.status === "completed").length;
+  const queued = leads.filter((lead) => ["scheduled", "dispatching"].includes(lead.status)).length;
+  const lost = leads.filter((lead) => lead.pipelineOutcome === "lost").length;
+  const won = leads.filter((lead) => lead.pipelineOutcome === "won").length;
+  const totalPipelineValue = leads.reduce((sum, lead) => sum + Number(lead.pipelineValue || 0), 0);
+
+  return [
+    { id: "total", label: "Leads", value: leads.length, tone: "blue" },
+    { id: "connected", label: "Contactados", value: connected, tone: "green" },
+    { id: "queued", label: "En cola", value: queued, tone: "amber" },
+    { id: "completed", label: "Completados", value: completed, tone: "slate" },
+    { id: "won", label: "Ganados", value: won, tone: "green" },
+    { id: "lost", label: "Perdidos", value: lost, tone: "red" },
+    {
+      id: "pipelineValue",
+      label: "Pipeline",
+      value: totalPipelineValue,
+      format: "currency",
+      tone: "blue",
+    },
+    { id: "speed", label: "Primer intento", value: null, format: "duration", tone: "slate" },
+  ];
+};
+
+const buildFunnelMetrics = (leads: DashboardLead[], stages: PipelineStage[]) =>
+  stages.map((stage) => {
+    const stageLeads = leads.filter((lead) => lead.pipelineStage === stage.id);
+
+    return {
+      id: stage.id,
+      label: stage.label,
+      count: stageLeads.length,
+      value: stageLeads.reduce((sum, lead) => sum + Number(lead.pipelineValue || 0), 0),
+    };
+  });
+
+const buildCallMetrics = (leads: DashboardLead[]) => [
+  {
+    id: "agent_attempts",
+    label: "Intentos asesoras",
+    value: leads.reduce((sum, lead) => sum + Number(lead.agentAttempts || 0), 0),
+  },
+  {
+    id: "answered",
+    label: "Pacientes conectados",
+    value: leads.filter((lead) => lead.customerConnectedAt).length,
+  },
+  {
+    id: "unreachable",
+    label: "No contactables",
+    value: leads.filter((lead) => lead.status === "customer_unreachable").length,
+  },
+];
+
+const withLeads = (snapshot: DashboardSnapshot, leads: DashboardLead[]): DashboardSnapshot => {
+  const previousSpeedMetric = snapshot.speedMetrics.find((metric) => metric.id === "speed");
+  const speedMetrics = buildSpeedMetrics(leads).map((metric) =>
+    metric.id === "speed" && previousSpeedMetric ? previousSpeedMetric : metric,
+  );
+
+  return {
+    ...snapshot,
+    generatedAt: new Date().toISOString(),
+    speedMetrics,
+    funnelMetrics: buildFunnelMetrics(leads, snapshot.pipelineStages),
+    callMetrics: buildCallMetrics(leads),
+    leads,
+  };
 };
 
 const LoginPanel = ({ onReady }: { onReady: (session: Session) => void }) => {
@@ -348,6 +444,7 @@ const PipelineBoard = ({
   const [overStage, setOverStage] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [view, setView] = useState<"active" | "lost" | "won">("active");
+  const [winLead, setWinLead] = useState<DashboardLead | null>(null);
   const [lossLead, setLossLead] = useState<DashboardLead | null>(null);
   const [lossReason, setLossReason] = useState("");
   const [lossError, setLossError] = useState("");
@@ -402,6 +499,28 @@ const PipelineBoard = ({
     await onStage(droppedLeadId, stageId);
   };
 
+  const openWinConfirm = (lead: DashboardLead) => {
+    setWinLead(lead);
+  };
+
+  const openLossConfirm = (lead: DashboardLead) => {
+    setLossLead(lead);
+    setLossReason("");
+    setLossError("");
+  };
+
+  const confirmWin = async () => {
+    if (!winLead) {
+      return;
+    }
+
+    const saved = await onOutcome(winLead.id, "won");
+
+    if (saved) {
+      setWinLead(null);
+    }
+  };
+
   const confirmLoss = async () => {
     if (!lossLead) {
       return;
@@ -433,82 +552,130 @@ const PipelineBoard = ({
     const visual = stageVisuals[stage?.id || lead.pipelineStage] || stageVisuals.nuevo;
     const isUpdating = updatingLeadId === lead.id;
     const isCalling = callingLeadId === lead.id;
+    const actionsDisabled = isUpdating || Boolean(callingLeadId);
+    const actionMenu = (
+      <>
+        <DropdownMenuItem
+          onSelect={() => void onCall(lead.id)}
+          disabled={actionsDisabled}
+          className="gap-2"
+        >
+          <Phone className={`h-4 w-4 ${isCalling ? "animate-pulse" : ""}`} />
+          {isCalling ? "Llamando" : "Llamar"}
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onSelect={() => openWinConfirm(lead)}
+          disabled={isUpdating}
+          className="gap-2 text-emerald-700 focus:text-emerald-800"
+        >
+          <Target className="h-4 w-4" />
+          Ganar
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onSelect={() => openLossConfirm(lead)}
+          disabled={isUpdating}
+          className="gap-2 text-red-700 focus:text-red-800"
+        >
+          <XCircle className="h-4 w-4" />
+          Perder
+        </DropdownMenuItem>
+      </>
+    );
+    const contextActionMenu = (
+      <>
+        <ContextMenuItem
+          onSelect={() => void onCall(lead.id)}
+          disabled={actionsDisabled}
+          className="gap-2"
+        >
+          <Phone className={`h-4 w-4 ${isCalling ? "animate-pulse" : ""}`} />
+          {isCalling ? "Llamando" : "Llamar"}
+        </ContextMenuItem>
+        <ContextMenuItem
+          onSelect={() => openWinConfirm(lead)}
+          disabled={isUpdating}
+          className="gap-2 text-emerald-700 focus:text-emerald-800"
+        >
+          <Target className="h-4 w-4" />
+          Ganar
+        </ContextMenuItem>
+        <ContextMenuItem
+          onSelect={() => openLossConfirm(lead)}
+          disabled={isUpdating}
+          className="gap-2 text-red-700 focus:text-red-800"
+        >
+          <XCircle className="h-4 w-4" />
+          Perder
+        </ContextMenuItem>
+      </>
+    );
 
     return (
-      <article
-        key={lead.id}
-        draggable={view === "active" && !isUpdating}
-        onDragStart={(event) => {
-          setDragId(lead.id);
-          event.dataTransfer.effectAllowed = "move";
-          event.dataTransfer.setData("text/plain", lead.id);
-        }}
-        onDragEnd={() => {
-          setDragId(null);
-          setOverStage(null);
-        }}
-        className={`group rounded-lg border bg-white p-3 shadow-sm transition ${
-          isUpdating ? "cursor-wait opacity-60" : "cursor-grab active:cursor-grabbing"
-        } ${dragId === lead.id ? "opacity-40" : "hover:-translate-y-0.5 hover:shadow-md"}`}
-        style={{ borderColor: "#e4e8ec", borderTopColor: visual.color, borderTopWidth: 3 }}
-      >
-        <div className="flex items-start justify-between gap-3">
-          <button className="min-w-0 flex-1 text-left" type="button" onClick={() => onSelect(lead)}>
-            <h3 className="truncate text-[14px] font-bold text-[#1a2332]">{lead.fullName}</h3>
-            <p className="mt-1 truncate text-xs font-medium text-[#5f6d7e]">
-              {lead.procedureInterest || "Evaluacion"}
-            </p>
-          </button>
-          <GripVertical className="mt-0.5 h-4 w-4 shrink-0 text-[#a7b0bc] transition group-hover:text-[#5f6d7e]" />
-        </div>
-
-        <div className="mt-3 flex items-center justify-between gap-2">
-          <strong className="text-lg font-bold tracking-[-0.01em] text-[#1a2332]">
-            {formatCompactMoney(lead.pipelineValue)}
-          </strong>
-          <LeadStatusBadge lead={lead} />
-        </div>
-
-        <div className="mt-3 grid gap-1.5 text-[11px] text-[#8e99a8]">
-          <div className="flex items-center justify-between gap-2">
-            <span className="truncate">{lead.assignedAgentName || "Sin asesora"}</span>
-            <span className="shrink-0">{formatDate(lead.createdAt)}</span>
-          </div>
-          <span className="truncate">{lead.phone}</span>
-        </div>
-
-        <div className="mt-3 grid grid-cols-[1fr_auto_auto] gap-2">
-          <button
-            type="button"
-            onClick={() => void onCall(lead.id)}
-            disabled={Boolean(callingLeadId) || isUpdating}
-            className="inline-flex min-w-0 items-center justify-center gap-1.5 rounded-md border border-[#cdebef] bg-[#edf8f9] px-2 py-1.5 text-xs font-bold text-[#137181] disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <Phone className={`h-3.5 w-3.5 ${isCalling ? "animate-pulse" : ""}`} />
-            <span className="truncate">{isCalling ? "Llamando" : "Llamar"}</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => void onOutcome(lead.id, "won")}
-            disabled={isUpdating}
-            className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-xs font-bold text-emerald-700 disabled:opacity-60"
-          >
-            Ganar
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setLossLead(lead);
-              setLossReason("");
-              setLossError("");
+      <ContextMenu key={lead.id}>
+        <ContextMenuTrigger asChild>
+          <article
+            draggable={view === "active" && !isUpdating}
+            onDragStart={(event) => {
+              setDragId(lead.id);
+              event.dataTransfer.effectAllowed = "move";
+              event.dataTransfer.setData("text/plain", lead.id);
             }}
-            disabled={isUpdating}
-            className="rounded-md border border-red-200 bg-red-50 px-2 py-1.5 text-xs font-bold text-red-700 disabled:opacity-60"
+            onDragEnd={() => {
+              setDragId(null);
+              setOverStage(null);
+            }}
+            className={`group rounded-lg border bg-white p-3 shadow-sm transition ${
+              isUpdating ? "cursor-wait opacity-60" : "cursor-grab active:cursor-grabbing"
+            } ${dragId === lead.id ? "opacity-40" : "hover:-translate-y-0.5 hover:shadow-md"}`}
+            style={{ borderColor: "#e4e8ec", borderTopColor: visual.color, borderTopWidth: 3 }}
           >
-            Perder
-          </button>
-        </div>
-      </article>
+            <div className="flex items-start justify-between gap-3">
+              <button className="min-w-0 flex-1 text-left" type="button" onClick={() => onSelect(lead)}>
+                <h3 className="truncate text-[14px] font-bold text-[#1a2332]">{lead.fullName}</h3>
+                <p className="mt-1 truncate text-xs font-medium text-[#5f6d7e]">
+                  {lead.procedureInterest || "Evaluacion"}
+                </p>
+              </button>
+              <div className="flex shrink-0 items-start gap-1">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      className="rounded-md p-1 text-[#5f6d7e] opacity-0 outline-none transition hover:bg-[#edf3f7] hover:text-[#13344F] focus:opacity-100 focus-visible:ring-2 focus-visible:ring-[#13344F] group-hover:opacity-100"
+                      aria-label={`Acciones para ${lead.fullName}`}
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      <MoreHorizontal className="h-4 w-4" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-40">
+                    {actionMenu}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <GripVertical className="mt-0.5 h-4 w-4 text-[#a7b0bc] transition group-hover:text-[#5f6d7e]" />
+              </div>
+            </div>
+
+            <div className="mt-3 flex items-center justify-between gap-2">
+              <strong className="text-lg font-bold tracking-[-0.01em] text-[#1a2332]">
+                {formatCompactMoney(lead.pipelineValue)}
+              </strong>
+              <LeadStatusBadge lead={lead} />
+            </div>
+
+            <div className="mt-3 grid gap-1.5 text-[11px] text-[#8e99a8]">
+              <div className="flex items-center justify-between gap-2">
+                <span className="truncate">{lead.assignedAgentName || "Sin asesora"}</span>
+                <span className="shrink-0">{formatDate(lead.createdAt)}</span>
+              </div>
+              <span className="truncate">{lead.phone}</span>
+            </div>
+          </article>
+        </ContextMenuTrigger>
+        <ContextMenuContent className="w-40">
+          {contextActionMenu}
+        </ContextMenuContent>
+      </ContextMenu>
     );
   };
 
@@ -668,6 +835,43 @@ const PipelineBoard = ({
         </div>
       )}
 
+      {winLead ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4" onClick={() => setWinLead(null)}>
+          <div className="w-full max-w-md rounded-lg bg-white shadow-xl" onClick={(event) => event.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-[#e4e8ec] px-5 py-4">
+              <h2 className="text-base font-bold text-[#1a2332]">Marcar como ganada</h2>
+              <button type="button" className="rounded-md p-1.5 hover:bg-slate-100" onClick={() => setWinLead(null)}>
+                <XCircle className="h-5 w-5 text-[#5f6d7e]" />
+              </button>
+            </div>
+            <div className="space-y-3 p-5">
+              <p className="text-sm leading-6 text-[#5f6d7e]">
+                {winLead.fullName} saldra del pipeline activo y quedara registrada en Ganadas.
+              </p>
+              <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-3 text-sm font-semibold text-emerald-800">
+                Valor comercial: {formatCurrency(winLead.pipelineValue)}
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-[#e4e8ec] px-5 py-4">
+              <button
+                type="button"
+                className="rounded-md border border-[#e4e8ec] px-3 py-2 text-sm font-bold text-[#5f6d7e]"
+                onClick={() => setWinLead(null)}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="rounded-md bg-emerald-600 px-3 py-2 text-sm font-bold text-white"
+                onClick={() => void confirmWin()}
+              >
+                Marcar ganada
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {lossLead ? (
         <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4" onClick={() => setLossLead(null)}>
           <div className="w-full max-w-md rounded-lg bg-white shadow-xl" onClick={(event) => event.stopPropagation()}>
@@ -770,15 +974,19 @@ const LeadDetail = ({
   lead,
   stages,
   onClose,
-  onRefresh,
   onStage,
+  onValue,
+  onOutcome,
+  onNote,
   onCall,
 }: {
   lead: DashboardLead;
   stages: PipelineStage[];
   onClose: () => void;
-  onRefresh: () => void;
-  onStage: (leadId: string, stage: string) => void;
+  onStage: (leadId: string, stage: string) => Promise<void>;
+  onValue: (leadId: string, pipelineValue: number) => Promise<boolean>;
+  onOutcome: (leadId: string, outcome: "active" | "lost" | "won", reason?: string) => Promise<boolean>;
+  onNote: (leadId: string, body: string) => Promise<boolean>;
   onCall: (leadId: string) => void;
 }) => {
   const [note, setNote] = useState("");
@@ -792,15 +1000,11 @@ const LeadDetail = ({
     setError("");
 
     try {
-      await apiRequest("/api/cirugia360-speed/pipeline-stage", {
-        method: "POST",
-        body: JSON.stringify({
-          action: "value",
-          leadId: lead.id,
-          pipelineValue: Number(value || 0),
-        }),
-      });
-      onRefresh();
+      const saved = await onValue(lead.id, Number(value || 0));
+
+      if (!saved) {
+        setError("No pudimos guardar.");
+      }
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "No pudimos guardar.");
     } finally {
@@ -813,16 +1017,11 @@ const LeadDetail = ({
     setError("");
 
     try {
-      await apiRequest("/api/cirugia360-speed/pipeline-stage", {
-        method: "POST",
-        body: JSON.stringify({
-          action: "outcome",
-          leadId: lead.id,
-          outcome,
-          reason: outcome === "lost" ? reason : null,
-        }),
-      });
-      onRefresh();
+      const saved = await onOutcome(lead.id, outcome, reason);
+
+      if (!saved) {
+        setError("No pudimos guardar.");
+      }
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "No pudimos guardar.");
     } finally {
@@ -839,15 +1038,13 @@ const LeadDetail = ({
     setError("");
 
     try {
-      await apiRequest("/api/cirugia360-speed/dashboard?resource=lead-note", {
-        method: "POST",
-        body: JSON.stringify({
-          leadId: lead.id,
-          body: note,
-        }),
-      });
-      setNote("");
-      onRefresh();
+      const saved = await onNote(lead.id, note);
+
+      if (saved) {
+        setNote("");
+      } else {
+        setError("No pudimos guardar la nota.");
+      }
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "No pudimos guardar la nota.");
     } finally {
@@ -1219,9 +1416,45 @@ const Cirugia360Dashboard = () => {
     setSettings(null);
   };
 
+  const patchLead = useCallback((leadId: string, patch: Partial<DashboardLead>) => {
+    setSnapshot((currentSnapshot) => {
+      if (!currentSnapshot) {
+        return currentSnapshot;
+      }
+
+      const nextLeads = currentSnapshot.leads.map((lead) =>
+        lead.id === leadId ? { ...lead, ...patch } : lead,
+      );
+
+      return withLeads(currentSnapshot, nextLeads);
+    });
+    setSelectedLead((currentLead) =>
+      currentLead?.id === leadId ? { ...currentLead, ...patch } : currentLead,
+    );
+  }, []);
+
+  const restoreSnapshot = useCallback((previousSnapshot: DashboardSnapshot | null) => {
+    setSnapshot(previousSnapshot);
+    setSelectedLead((currentLead) =>
+      currentLead && previousSnapshot
+        ? previousSnapshot.leads.find((lead) => lead.id === currentLead.id) || null
+        : currentLead,
+    );
+  }, []);
+
+  const reconcileAfterFailure = useCallback(
+    async (previousSnapshot: DashboardSnapshot | null) => {
+      restoreSnapshot(previousSnapshot);
+      await refresh();
+    },
+    [refresh, restoreSnapshot],
+  );
+
   const updateStage = async (leadId: string, stage: string) => {
     setError("");
     setUpdatingPipelineLeadId(leadId);
+    const previousSnapshot = snapshot;
+    patchLead(leadId, { pipelineStage: stage });
 
     try {
       await apiRequest("/api/cirugia360-speed/pipeline-stage", {
@@ -1232,9 +1465,11 @@ const Cirugia360Dashboard = () => {
           stage,
         }),
       });
-      await refresh();
     } catch (stageError) {
-      setError(stageError instanceof Error ? stageError.message : "No pudimos actualizar la etapa.");
+      const message = stageError instanceof Error ? stageError.message : "No pudimos actualizar la etapa.";
+      setError(message);
+      await reconcileAfterFailure(previousSnapshot);
+      setError(message);
     } finally {
       setUpdatingPipelineLeadId(null);
     }
@@ -1243,23 +1478,50 @@ const Cirugia360Dashboard = () => {
   const callLead = async (leadId: string) => {
     setError("");
     setCallingLeadId(leadId);
+    const previousSnapshot = snapshot;
+    patchLead(leadId, {
+      status: "dispatching",
+      salesCallStatus: "dispatching",
+      lastError: null,
+    });
 
     try {
-      await apiRequest("/api/cirugia360-speed/dashboard?resource=lead-call", {
+      const result = await apiRequest<LeadCallResult>("/api/cirugia360-speed/dashboard?resource=lead-call", {
         method: "POST",
         body: JSON.stringify({ leadId }),
       });
-      await refresh();
+      patchLead(leadId, {
+        status: result.queued ? "scheduled" : "dispatching",
+        salesCallStatus: result.queued ? "scheduled" : "dispatching",
+        dispatchScheduledAt: result.dispatchScheduledAt || null,
+        ...(result.assignedAgent ? { assignedAgentName: result.assignedAgent } : {}),
+      });
     } catch (callError) {
-      setError(callError instanceof Error ? callError.message : "No pudimos iniciar la llamada.");
+      const message = callError instanceof Error ? callError.message : "No pudimos iniciar la llamada.";
+      setError(message);
+      await reconcileAfterFailure(previousSnapshot);
+      setError(message);
     } finally {
       setCallingLeadId(null);
     }
   };
 
-  const updateOutcome = async (leadId: string, outcome: "active" | "lost" | "won", reason = "") => {
+  const updateOutcome = async (
+    leadId: string,
+    outcome: "active" | "lost" | "won",
+    reason = "",
+    options: { skipUndoToast?: boolean } = {},
+  ) => {
     setError("");
     setUpdatingPipelineLeadId(leadId);
+    const previousSnapshot = snapshot;
+    const previousLead = previousSnapshot?.leads.find((lead) => lead.id === leadId) || null;
+    const previousOutcome = (previousLead?.pipelineOutcome || "active") as "active" | "lost" | "won";
+    const previousReason = previousLead?.pipelineOutcomeReason || "";
+    patchLead(leadId, {
+      pipelineOutcome: outcome,
+      pipelineOutcomeReason: outcome === "lost" ? reason : null,
+    });
 
     try {
       await apiRequest("/api/cirugia360-speed/pipeline-stage", {
@@ -1271,13 +1533,133 @@ const Cirugia360Dashboard = () => {
           reason: outcome === "lost" ? reason : null,
         }),
       });
-      await refresh();
+      if (!options.skipUndoToast && previousLead && previousOutcome !== outcome) {
+        const outcomeLabels: Record<"active" | "lost" | "won", string> = {
+          active: "activa",
+          lost: "perdida",
+          won: "ganada",
+        };
+
+        toast(`Oportunidad ${outcomeLabels[outcome]}`, {
+          description: previousLead.fullName,
+          duration: 6000,
+          action: {
+            label: "Deshacer",
+            onClick: () => {
+              void updateOutcome(leadId, previousOutcome, previousReason, { skipUndoToast: true });
+            },
+          },
+        });
+      }
       return true;
     } catch (outcomeError) {
-      setError(outcomeError instanceof Error ? outcomeError.message : "No pudimos actualizar la oportunidad.");
+      const message = outcomeError instanceof Error ? outcomeError.message : "No pudimos actualizar la oportunidad.";
+      setError(message);
+      await reconcileAfterFailure(previousSnapshot);
+      setError(message);
       return false;
     } finally {
       setUpdatingPipelineLeadId(null);
+    }
+  };
+
+  const updatePipelineValue = async (leadId: string, pipelineValue: number) => {
+    setError("");
+    setUpdatingPipelineLeadId(leadId);
+    const previousSnapshot = snapshot;
+    patchLead(leadId, { pipelineValue });
+
+    try {
+      await apiRequest("/api/cirugia360-speed/pipeline-stage", {
+        method: "POST",
+        body: JSON.stringify({
+          action: "value",
+          leadId,
+          pipelineValue,
+        }),
+      });
+      return true;
+    } catch (valueError) {
+      const message = valueError instanceof Error ? valueError.message : "No pudimos guardar el valor.";
+      setError(message);
+      await reconcileAfterFailure(previousSnapshot);
+      setError(message);
+      return false;
+    } finally {
+      setUpdatingPipelineLeadId(null);
+    }
+  };
+
+  const addLeadNote = async (leadId: string, body: string) => {
+    const trimmedBody = body.trim();
+
+    if (!trimmedBody) {
+      return false;
+    }
+
+    setError("");
+    const previousSnapshot = snapshot;
+    const pendingNote: LeadNote = {
+      id: -Date.now(),
+      createdAt: new Date().toISOString(),
+      authorEmail: session?.user.email || null,
+      body: trimmedBody,
+    };
+
+    setSnapshot((currentSnapshot) => {
+      if (!currentSnapshot) {
+        return currentSnapshot;
+      }
+
+      const nextLeads = currentSnapshot.leads.map((lead) =>
+        lead.id === leadId ? { ...lead, notes: [pendingNote, ...lead.notes] } : lead,
+      );
+
+      return withLeads(currentSnapshot, nextLeads);
+    });
+    setSelectedLead((currentLead) =>
+      currentLead?.id === leadId ? { ...currentLead, notes: [pendingNote, ...currentLead.notes] } : currentLead,
+    );
+
+    try {
+      const savedNote = await apiRequest<LeadNote>("/api/cirugia360-speed/dashboard?resource=lead-note", {
+        method: "POST",
+        body: JSON.stringify({
+          leadId,
+          body: trimmedBody,
+        }),
+      });
+      setSnapshot((currentSnapshot) => {
+        if (!currentSnapshot) {
+          return currentSnapshot;
+        }
+
+        const nextLeads = currentSnapshot.leads.map((lead) =>
+          lead.id === leadId
+            ? {
+                ...lead,
+                notes: lead.notes.map((leadNote) => (leadNote.id === pendingNote.id ? savedNote : leadNote)),
+              }
+            : lead,
+        );
+
+        return withLeads(currentSnapshot, nextLeads);
+      });
+      setSelectedLead((currentLead) =>
+        currentLead?.id === leadId
+          ? {
+              ...currentLead,
+              notes: currentLead.notes.map((leadNote) => (leadNote.id === pendingNote.id ? savedNote : leadNote)),
+            }
+          : currentLead,
+      );
+      return true;
+    } catch (noteError) {
+      const message = noteError instanceof Error ? noteError.message : "No pudimos guardar la nota.";
+      setError(message);
+      await reconcileAfterFailure(previousSnapshot);
+      setError(message);
+      return false;
     }
   };
 
@@ -1506,8 +1888,10 @@ const Cirugia360Dashboard = () => {
           lead={selectedLead}
           stages={stages}
           onClose={() => setSelectedLead(null)}
-          onRefresh={refresh}
           onStage={updateStage}
+          onValue={updatePipelineValue}
+          onOutcome={updateOutcome}
+          onNote={addLeadNote}
           onCall={callLead}
         />
       ) : null}
