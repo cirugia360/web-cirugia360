@@ -1830,10 +1830,10 @@ const LeadDetail = ({
   const [editingNoteBody, setEditingNoteBody] = useState("");
   const [drawerToast, setDrawerToast] = useState<{ id: number; tone: ToastTone; title: string; detail?: string } | null>(null);
   const drawerRef = useRef<HTMLElement | null>(null);
-  const activeAgents = (settings?.agents || []).filter((agent) => agent.active !== false);
+  const assignableAgents = settings?.agents || [];
   const selectedAgentId =
-    activeAgents.find(
-      (agent) => agent.name === lead.assignedAgentName,
+    assignableAgents.find(
+      (agent) => agent.email === lead.assignedAgentEmail || agent.name === lead.assignedAgentName,
     )?.id || "";
   const sortedNotes = useMemo(
     () =>
@@ -2163,12 +2163,17 @@ const LeadDetail = ({
               onChange={(event) => void updateDrawerAgent(event.target.value)}
             >
               <option value="">Sin asignar</option>
-              {activeAgents.map((agent) => (
+              {assignableAgents.map((agent) => (
                 <option key={agent.id} value={agent.id}>
-                  {agent.name}
+                  {agent.active === false ? `${agent.name} (inactiva)` : agent.name}
                 </option>
               ))}
             </select>
+            {assignableAgents.length === 0 ? (
+              <span className="mt-1 block text-xs text-amber-700">
+                Agrega vendedoras en Equipo para poder asignar leads.
+              </span>
+            ) : null}
           </label>
           <Detail label="Intentos" value={String(lead.agentAttempts || 0)} />
           <Detail label="Ultimo error" value={lead.lastError || "Sin error"} />

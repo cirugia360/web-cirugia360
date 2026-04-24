@@ -122,7 +122,7 @@ export const mergeRuntimeSettingsIntoConfig = async (config, options = {}) => {
 
   const activeSettingsAgents = (settings?.agents || []).filter((agent) => agent.active);
   const mergedAgents = activeSettingsAgents.length
-    ? activeSettingsAgents.map(({ id, name, phone }) => ({ id, name, phone }))
+    ? activeSettingsAgents.map(({ id, name, phone, email }) => ({ id, name, phone, email }))
     : config.salesAgents;
 
   if (requireAgents && !mergedAgents.length) {

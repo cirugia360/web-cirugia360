@@ -75,7 +75,10 @@ export default async function handler(request, response) {
       const events = [];
 
       if (Object.prototype.hasOwnProperty.call(rawPayload, "assignedAgentId")) {
-        const assignedAgent = findAssignedAgent(config.salesAgents || [], payload.assignedAgentId);
+        const assignableAgents = config.dashboardSettings?.agents?.length
+          ? config.dashboardSettings.agents
+          : config.salesAgents || [];
+        const assignedAgent = findAssignedAgent(assignableAgents, payload.assignedAgentId);
 
         updates.assigned_agent_name = assignedAgent?.name || null;
         updates.assigned_agent_phone = assignedAgent?.phone || null;
