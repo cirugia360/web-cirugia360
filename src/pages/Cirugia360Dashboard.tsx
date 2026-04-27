@@ -2604,57 +2604,6 @@ const TeamSettings = ({
 
       <section className="mt-6 border-t border-slate-200 pt-5">
         <div className="mb-3">
-          <h3 className="text-base font-semibold">Cuentas del dashboard</h3>
-          <p className="text-sm text-slate-500">Usuarios de Supabase Auth conectados al panel.</p>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-[620px] w-full text-left text-sm">
-            <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
-              <tr>
-                <th scope="col" className="py-2 pr-3">Email</th>
-                <th scope="col" className="px-3 py-2">Rol</th>
-                <th scope="col" className="px-3 py-2">Estado</th>
-                <th scope="col" className="px-3 py-2">Vinculo</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {(settings?.accounts || []).map((account) => (
-                <tr key={account.id}>
-                  <th scope="row" className="py-3 pr-3 font-semibold text-slate-900">
-                    {account.email}
-                    {account.name ? <span className="block text-xs font-normal text-slate-500">{account.name}</span> : null}
-                  </th>
-                  <td className="px-3 py-3">{account.role === "admin" ? "Admin" : "Vendedora"}</td>
-                  <td className="px-3 py-3">
-                    <span
-                      className={`inline-flex rounded-full px-2 py-1 text-xs font-bold ${
-                        account.accountActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"
-                      }`}
-                    >
-                      {account.accountActive ? "Activa" : "Inactiva"}
-                    </span>
-                  </td>
-                  <td className="px-3 py-3 text-slate-600">
-                    {account.role === "admin"
-                      ? "Cuenta principal"
-                      : account.linkedAgentId
-                        ? "Conectada al equipo"
-                        : "Sin vendedora"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        {settings?.accounts?.length ? null : (
-          <p className="rounded-md border border-dashed border-slate-200 p-4 text-sm text-slate-500">
-            No pudimos cargar cuentas de Auth todavia.
-          </p>
-        )}
-      </section>
-
-      <section className="mt-6 border-t border-slate-200 pt-5">
-        <div className="mb-3">
           <h3 className="text-base font-semibold">Rendimiento</h3>
           <p className="text-sm text-slate-500">Metricas por asesora en el periodo activo.</p>
         </div>

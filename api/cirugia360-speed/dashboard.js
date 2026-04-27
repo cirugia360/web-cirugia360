@@ -1,6 +1,5 @@
 import {
   getDashboardAuthAdminClient,
-  getDashboardAdminEmails,
   getDashboardUserContext,
   getDashboardUserRole,
   canAccessLead,
@@ -99,18 +98,10 @@ const handleGetSalesAgents = async (request, response, user) => {
     : baseConfig;
 
   const userContext = getDashboardUserContext(user);
-
   const settingsPayload = buildSettingsFromConfig(mergedConfig);
-  const accounts =
-    userContext.role === "admin"
-      ? await listDashboardAccounts(getDashboardAuthAdminClient(), settingsPayload.agents)
-      : [];
   const publicSettings =
     userContext.role === "admin"
-      ? {
-          ...settingsPayload,
-          accounts,
-        }
+      ? settingsPayload
       : {
           ...settingsPayload,
           agents: settingsPayload.agents.filter(
@@ -148,10 +139,7 @@ const handleSaveSalesAgents = async (request, response, user) => {
 
   return sendJson(response, 200, {
     success: true,
-    data: {
-      ...settings,
-      accounts: await listDashboardAccounts(getDashboardAuthAdminClient(), settings.agents),
-    },
+    data: settings,
   });
 };
 
@@ -221,58 +209,6 @@ const listDashboardUsersByEmail = async (authAdmin) => {
   }
 
   return usersByEmail;
-};
-
-const getUserAccountActive = (user) => {
-  if (!user) {
-    return false;
-  }
-
-  if (user.banned_until) {
-    const bannedUntilMs = Date.parse(user.banned_until);
-
-    if (!Number.isNaN(bannedUntilMs) && bannedUntilMs > Date.now()) {
-      return false;
-    }
-  }
-
-  return true;
-};
-
-const toTeamAccount = (user, agents = []) => {
-  const email = normalizeText(user?.email).toLowerCase();
-  const linkedAgent = agents.find((agent) => normalizeText(agent.email).toLowerCase() === email) || null;
-
-  return {
-    id: user.id,
-    email,
-    name: normalizeText(user.user_metadata?.name) || linkedAgent?.name || null,
-    role: getDashboardUserRole(user),
-    accountActive: getUserAccountActive(user),
-    linkedAgentId: linkedAgent?.id || null,
-  };
-};
-
-const listDashboardAccounts = async (authAdmin, agents = []) => {
-  const usersByEmail = await listDashboardUsersByEmail(authAdmin);
-  const adminEmails = new Set(getDashboardAdminEmails());
-  const agentEmails = new Set((agents || []).map((agent) => normalizeText(agent.email).toLowerCase()).filter(Boolean));
-
-  return Array.from(usersByEmail.values())
-    .filter((user) => {
-      const email = normalizeText(user.email).toLowerCase();
-      const role = getDashboardUserRole(user);
-
-      return role === "admin" || adminEmails.has(email) || agentEmails.has(email);
-    })
-    .map((user) => toTeamAccount(user, agents))
-    .sort((firstAccount, secondAccount) => {
-      if (firstAccount.role !== secondAccount.role) {
-        return firstAccount.role === "admin" ? -1 : 1;
-      }
-
-      return firstAccount.email.localeCompare(secondAccount.email, "es");
-    });
 };
 
 const syncSalesAgentAccounts = async (settings, previousSettings = {}) => {

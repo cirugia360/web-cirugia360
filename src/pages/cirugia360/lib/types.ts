@@ -53,14 +53,6 @@ export type DashboardLead = {
 export type AgentSettings = {
   businessTimeZone: string;
   queuePaused: boolean;
-  accounts?: Array<{
-    id: string;
-    email: string;
-    name: string | null;
-    role: "admin" | "agent";
-    accountActive: boolean;
-    linkedAgentId?: string | null;
-  }>;
   agents: Array<{
     id: string;
     name: string;
