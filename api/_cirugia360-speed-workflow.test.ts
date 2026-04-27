@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const dbMocks = vi.hoisted(() => ({
   claimDueSpeedLeads: vi.fn(),
+  claimQueuedSpeedLeads: vi.fn(),
   findLeadForPaymentCallback: vi.fn(),
   getSpeedLeadById: vi.fn(),
   hasActiveLeadForAgent: vi.fn(),

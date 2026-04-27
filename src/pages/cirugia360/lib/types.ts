@@ -62,6 +62,13 @@ export type AgentSettings = {
     accountActive?: boolean;
     authUserId?: string | null;
     password?: string;
+    activityAverageSeconds?: number;
+    lastAutoDeactivation?: {
+      at: string | null;
+      reason: string | null;
+      leadId: string | null;
+      leadName: string | null;
+    } | null;
   }>;
 };
 
@@ -92,7 +99,9 @@ export type DashboardSnapshot = {
     answeredCalls: number;
     conversionRate: number;
     averageTimeToContactSeconds: number | null;
+    activityAverageSeconds?: number;
   }>;
+  agentActivityAverages?: Record<string, number>;
   leads: DashboardLead[];
 };
 

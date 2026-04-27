@@ -11,6 +11,7 @@ import {
   insertSpeedLeadEvent,
   updateSpeedLead,
 } from "../../_cirugia360-speed-db.js";
+import { updateRuntimeAgentStatus } from "../../_cirugia360-speed-settings.js";
 import {
   canRetryAgent,
   isStaleSalesStatusCallback,
@@ -65,6 +66,29 @@ const getCompletedFallbackReason = (lead) => {
   }
 
   return "La asesora no atendio la llamada.";
+};
+
+const deactivateAssignedAgent = async (lead, config, reason) => {
+  const result = await updateRuntimeAgentStatus({
+    agentEmail: lead.assigned_agent_email,
+    active: false,
+    reason,
+    lead,
+    defaultCountryDialCode: config.defaultCountryDialCode,
+    updatedBy: "twilio",
+  });
+
+  if (result.agent) {
+    await insertSpeedLeadEvent(lead.id, "agent.auto_deactivated", {
+      agentId: result.agent.id,
+      agentName: result.agent.name,
+      agentEmail: result.agent.email,
+      reason,
+      at: result.agent.lastAutoDeactivation?.at || new Date().toISOString(),
+    });
+  }
+
+  return result.agent;
 };
 
 export default async function handler(request, response) {
@@ -131,6 +155,10 @@ export default async function handler(request, response) {
     if (callStatus === "completed") {
       const fallbackReason = getCompletedFallbackReason(lead);
 
+      if (fallbackReason) {
+        await deactivateAssignedAgent(lead, config, fallbackReason);
+      }
+
       if (fallbackReason && canRetryAgent(lead)) {
         const retryResult = await tryNextAgent(lead, config, fallbackReason);
 
@@ -153,8 +181,14 @@ export default async function handler(request, response) {
       }
     }
 
+    if (FAILURE_STATUSES.has(callStatus)) {
+      const failureMessage = getFailureMessage(callStatus);
+      await deactivateAssignedAgent(lead, config, failureMessage);
+    }
+
     if (FAILURE_STATUSES.has(callStatus) && canRetryAgent(lead)) {
-      const retryResult = await tryNextAgent(lead, config, getFailureMessage(callStatus));
+      const failureMessage = getFailureMessage(callStatus);
+      const retryResult = await tryNextAgent(lead, config, failureMessage);
 
       return sendJson(response, 200, {
         success: true,

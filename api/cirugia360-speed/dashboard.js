@@ -23,8 +23,10 @@ import {
 import { getSpeedAdminClient, getSpeedLeadById } from "../_cirugia360-speed-db.js";
 import {
   buildSettingsFromConfig,
+  logAgentActivityChanges,
   loadSpeedRuntimeSettings,
   saveSpeedRuntimeSettings,
+  updateRuntimeAgentStatus,
 } from "../_cirugia360-speed-settings.js";
 import {
   getFirstQueryValue,
@@ -34,7 +36,7 @@ import {
   readJsonBody,
   sendJson,
 } from "../_cirugia360-speed-shared.js";
-import { triggerLeadPhoneCall } from "../_cirugia360-speed-workflow.js";
+import { dispatchDueLeads, triggerLeadPhoneCall } from "../_cirugia360-speed-workflow.js";
 
 const noStore = (response) => {
   response.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
@@ -45,6 +47,87 @@ const noStore = (response) => {
 const getClientIp = (request) =>
   normalizeText(getHeader(request, "x-forwarded-for")).split(",")[0]?.trim() ||
   normalizeText(request.socket?.remoteAddress);
+
+const getAgentActivityAverages = async () => {
+  const client = getSpeedAdminClient();
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const windowEnd = today;
+  const windowStart = new Date(today);
+  windowStart.setDate(windowStart.getDate() - 7);
+  const lookbackStart = new Date(windowStart);
+  lookbackStart.setDate(lookbackStart.getDate() - 14);
+  const { data, error } = await client
+    .from("c360_speed_agent_activity")
+    .select("*")
+    .gte("created_at", lookbackStart.toISOString())
+    .lt("created_at", windowEnd.toISOString())
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    throw new Error(error.message || "No se pudo cargar la actividad del equipo.");
+  }
+
+  const eventsByEmail = new Map();
+
+  for (const event of data || []) {
+    const email = normalizeText(event.agent_email).toLowerCase();
+
+    if (!email) {
+      continue;
+    }
+
+    eventsByEmail.set(email, [...(eventsByEmail.get(email) || []), event]);
+  }
+
+  const averages = new Map();
+
+  for (const [email, events] of eventsByEmail.entries()) {
+    let active = false;
+    let cursorTime = windowStart.getTime();
+    let totalActiveMs = 0;
+
+    for (const event of events) {
+      const eventTime = Date.parse(event.created_at);
+
+      if (!Number.isFinite(eventTime)) {
+        continue;
+      }
+
+      if (eventTime < windowStart.getTime()) {
+        active = event.active === true;
+        continue;
+      }
+
+      if (active) {
+        totalActiveMs += Math.max(0, eventTime - cursorTime);
+      }
+
+      active = event.active === true;
+      cursorTime = eventTime;
+    }
+
+    if (active) {
+      totalActiveMs += Math.max(0, windowEnd.getTime() - cursorTime);
+    }
+
+    averages.set(email, Math.round(totalActiveMs / 1000 / 7));
+  }
+
+  return averages;
+};
+
+const withActivityAverages = async (settings) => {
+  const averages = await getAgentActivityAverages();
+
+  return {
+    ...settings,
+    agents: (settings.agents || []).map((agent) => ({
+      ...agent,
+      activityAverageSeconds: averages.get(normalizeText(agent.email).toLowerCase()) || 0,
+    })),
+  };
+};
 
 const assertLeadAccessByNoteId = async (noteId, user, response) => {
   const client = getSpeedAdminClient();
@@ -98,7 +181,7 @@ const handleGetSalesAgents = async (request, response, user) => {
     : baseConfig;
 
   const userContext = getDashboardUserContext(user);
-  const settingsPayload = buildSettingsFromConfig(mergedConfig);
+  const settingsPayload = await withActivityAverages(buildSettingsFromConfig(mergedConfig));
   const publicSettings =
     userContext.role === "admin"
       ? settingsPayload
@@ -136,10 +219,15 @@ const handleSaveSalesAgents = async (request, response, user) => {
     defaultCountryDialCode: baseConfig.defaultCountryDialCode,
     updatedBy: user.email,
   });
+  await logAgentActivityChanges({
+    previousAgents: previousSettings.agents || [],
+    nextAgents: settings.agents || [],
+    changedBy: user.email,
+  });
 
   return sendJson(response, 200, {
     success: true,
-    data: settings,
+    data: await withActivityAverages(settings),
   });
 };
 
@@ -178,7 +266,54 @@ const handleQueueControl = async (request, response, user) => {
 
   return sendJson(response, 200, {
     success: true,
-    data: settings,
+    data: await withActivityAverages(settings),
+  });
+};
+
+const handleAgentStatus = async (request, response, user) => {
+  if (request.method !== "POST") {
+    return methodNotAllowed(response, ["POST"]);
+  }
+
+  const body = await readJsonBody(request);
+  const userContext = getDashboardUserContext(user);
+  const active = body.active === true;
+  const requestedEmail = normalizeText(body.email).toLowerCase();
+  const agentEmail = userContext.role === "admin" && requestedEmail ? requestedEmail : userContext.email;
+  const baseConfig = getCirugia360SpeedConfig(request, {
+    requireAgents: false,
+    requireTwilio: false,
+  });
+  const result = await updateRuntimeAgentStatus({
+    agentEmail,
+    active,
+    reason: active ? null : "Cambio manual desde dashboard.",
+    defaultCountryDialCode: baseConfig.defaultCountryDialCode,
+    updatedBy: user.email,
+  });
+
+  if (!result.agent) {
+    return sendJson(response, 404, {
+      success: false,
+      error: "No encontramos una vendedora asociada a esta cuenta.",
+    });
+  }
+
+  let drainResult = null;
+
+  const config = await getCirugia360SpeedConfigWithSettings(request, {
+    requireAgents: false,
+    requireTwilio: true,
+  });
+  drainResult = await dispatchDueLeads(config, 50, { includeFuture: true });
+
+  return sendJson(response, 200, {
+    success: true,
+    data: {
+      settings: await withActivityAverages(result.settings),
+      agent: result.agent,
+      drain: drainResult,
+    },
   });
 };
 
@@ -567,6 +702,10 @@ export default async function handler(request, response) {
       }
 
       return handleQueueControl(request, response, user);
+    }
+
+    if (resource === "agent-status") {
+      return handleAgentStatus(request, response, user);
     }
 
     if (resource === "lead-note") {

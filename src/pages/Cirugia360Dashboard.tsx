@@ -424,6 +424,14 @@ const formatCompactMoney = (value: number) => {
   return `$${(value / 1000000).toFixed(1)}M`;
 };
 
+const formatHoursMinutes = (seconds: number | null | undefined) => {
+  const totalMinutes = Math.max(0, Math.round(Number(seconds || 0) / 60));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")} horas`;
+};
+
 const leadMatchesSearch = (lead: DashboardLead, search: string) => {
   const normalizedSearch = search.trim().toLowerCase();
 
@@ -2528,6 +2536,15 @@ const TeamSettings = ({
               />
               Cuenta
             </label>
+            {agent.lastAutoDeactivation?.reason ? (
+              <p className="text-xs leading-5 text-amber-700 md:col-span-full md:pl-[52px]">
+                Desactivada a las {formatDate(agent.lastAutoDeactivation.at)} - {agent.lastAutoDeactivation.reason}
+                {agent.lastAutoDeactivation.leadName ? ` a ${agent.lastAutoDeactivation.leadName}` : ""}
+              </p>
+            ) : null}
+            <p className="text-xs leading-5 text-slate-600 md:col-span-full md:pl-[52px]">
+              Últimos 7 días: {formatHoursMinutes(agent.activityAverageSeconds)}
+            </p>
             <button
               type="button"
               className="rounded-md border border-red-200 px-3 py-2 text-sm font-semibold text-red-700"
@@ -2594,6 +2611,7 @@ const TeamSettings = ({
                 <th scope="col" className="px-3 py-2">Evaluaciones</th>
                 <th scope="col" className="px-3 py-2">Cirugias</th>
                 <th scope="col" className="px-3 py-2">Ganados</th>
+                <th scope="col" className="px-3 py-2">Actividad 7d</th>
                 <th scope="col" className="px-3 py-2">Conversion</th>
                 <th scope="col" className="px-3 py-2">Tiempo prom.</th>
               </tr>
@@ -2610,6 +2628,7 @@ const TeamSettings = ({
                   <td className="px-3 py-3">{agent.evaluations}</td>
                   <td className="px-3 py-3">{agent.surgeries}</td>
                   <td className="px-3 py-3">{agent.won}</td>
+                  <td className="px-3 py-3">{formatHoursMinutes(agent.activityAverageSeconds)}</td>
                   <td className="px-3 py-3">{agent.conversionRate}%</td>
                   <td className="px-3 py-3">{formatMetric({ id: "agent-speed", label: "", value: agent.averageTimeToContactSeconds, format: "duration" })}</td>
                 </tr>
@@ -2641,6 +2660,7 @@ const Cirugia360Dashboard = () => {
   const [isTeamSettingsDirty, setIsTeamSettingsDirty] = useState(false);
   const [updatingPipelineLeadId, setUpdatingPipelineLeadId] = useState<string | null>(null);
   const [callingLeadId, setCallingLeadId] = useState<string | null>(null);
+  const [isTogglingOwnStatus, setIsTogglingOwnStatus] = useState(false);
   const [period, setPeriod] = useState<DashboardPeriod>("7d");
   const [customRange, setCustomRange] = useState({
     dateFrom: toDateInputValue(new Date()),
@@ -2895,6 +2915,39 @@ const Cirugia360Dashboard = () => {
     resetDashboardState();
     await getDashboardSupabase().auth.signOut();
     setAuthBanner("");
+  };
+
+  const toggleOwnAgentStatus = async () => {
+    const nextActive = currentAgent?.active === false;
+
+    setIsTogglingOwnStatus(true);
+    setError("");
+
+    try {
+      const result = await apiRequest<{ settings: AgentSettings }>("/api/cirugia360-speed/dashboard?resource=agent-status", {
+        method: "POST",
+        body: JSON.stringify({ active: nextActive }),
+      });
+
+      setSettings(result.settings);
+      await refresh({ silent: true, force: true });
+      showActionToast(
+        "success",
+        nextActive ? "Quedaste activa." : "Quedaste inactiva.",
+        nextActive ? "Revisamos la cola para asignar llamadas pendientes." : undefined,
+      );
+    } catch (statusError) {
+      if (isSessionExpiredError(statusError)) {
+        await expireDashboardSession();
+        return;
+      }
+
+      const message = getDashboardErrorMessage(statusError, "No pudimos cambiar tu estado.");
+      setError(message);
+      showActionToast("error", "No pudimos cambiar tu estado.", message);
+    } finally {
+      setIsTogglingOwnStatus(false);
+    }
   };
 
   const openLeadDetail = useCallback((lead: DashboardLead) => {
@@ -3644,6 +3697,24 @@ const Cirugia360Dashboard = () => {
                 }`}
               >
                 {currentAgent?.active !== false ? "Activa" : "Inactiva"}
+              </span>
+            ) : null}
+            {viewerRole === "agent" && currentAgent ? (
+              <button
+                type="button"
+                onClick={() => void toggleOwnAgentStatus()}
+                disabled={isTogglingOwnStatus}
+                className={`inline-flex items-center gap-2 rounded-[10px] px-3 py-2 text-sm font-bold text-white transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                  currentAgent.active === false ? "bg-emerald-700 hover:bg-emerald-800" : "bg-slate-700 hover:bg-slate-800"
+                }`}
+              >
+                {isTogglingOwnStatus ? <RefreshCcw className="h-4 w-4 animate-spin" /> : null}
+                {currentAgent.active === false ? "Activarme" : "Desactivarme"}
+              </button>
+            ) : null}
+            {viewerRole === "agent" && currentAgent ? (
+              <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700">
+                Últimos 7 días: {formatHoursMinutes(currentAgent.activityAverageSeconds)}
               </span>
             ) : null}
             <button

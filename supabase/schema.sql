@@ -195,6 +195,19 @@ create table if not exists public.c360_speed_settings (
   updated_by text
 );
 
+create table if not exists public.c360_speed_agent_activity (
+  id bigserial primary key,
+  created_at timestamptz not null default timezone('utc', now()),
+  agent_id text,
+  agent_email text not null,
+  agent_name text,
+  active boolean not null,
+  reason text,
+  lead_id uuid references public.c360_speed_leads(id) on delete set null,
+  lead_name text,
+  changed_by text
+);
+
 create index if not exists c360_speed_leads_status_idx
   on public.c360_speed_leads (status);
 
@@ -245,6 +258,12 @@ create index if not exists c360_speed_tracking_events_lead_id_idx
 create index if not exists c360_speed_tracking_events_event_name_idx
   on public.c360_speed_tracking_events (event_name, created_at desc);
 
+create index if not exists c360_speed_agent_activity_email_created_idx
+  on public.c360_speed_agent_activity (agent_email, created_at desc);
+
+create index if not exists c360_speed_agent_activity_created_idx
+  on public.c360_speed_agent_activity (created_at desc);
+
 create or replace function public.c360_claim_due_speed_leads(
   p_limit integer default 20,
   p_now timestamptz default timezone('utc', now())
@@ -279,6 +298,38 @@ begin
 end
 $$;
 
+create or replace function public.c360_claim_queued_speed_leads(
+  p_limit integer default 50
+)
+returns setof public.c360_speed_leads
+language plpgsql
+security definer
+as $$
+begin
+  return query
+  with queued_rows as (
+    select leads.id
+    from public.c360_speed_leads as leads
+    where leads.status = 'scheduled'
+      and leads.dispatch_scheduled_at is not null
+      and coalesce(leads.payment_status, 'not_required') <> 'confirmed'
+    order by leads.created_at desc, leads.dispatch_scheduled_at asc
+    limit greatest(coalesce(p_limit, 50), 1)
+    for update skip locked
+  ),
+  claimed_rows as (
+    update public.c360_speed_leads as leads
+    set
+      status = 'dispatching',
+      updated_at = timezone('utc', now())
+    from queued_rows
+    where leads.id = queued_rows.id
+    returning leads.*
+  )
+  select * from claimed_rows;
+end
+$$;
+
 create or replace function public.c360_dashboard_role()
 returns text
 language sql
@@ -306,6 +357,7 @@ alter table public.c360_speed_lead_events enable row level security;
 alter table public.c360_speed_lead_notes enable row level security;
 alter table public.c360_speed_tracking_events enable row level security;
 alter table public.c360_speed_settings enable row level security;
+alter table public.c360_speed_agent_activity enable row level security;
 
 drop policy if exists "c360 dashboard admins can read leads" on public.c360_speed_leads;
 create policy "c360 dashboard admins can read leads"
@@ -422,3 +474,28 @@ create policy "c360 dashboard users can read accessible events"
         )
     )
   );
+
+drop policy if exists "c360 dashboard admins can read agent activity" on public.c360_speed_agent_activity;
+create policy "c360 dashboard admins can read agent activity"
+  on public.c360_speed_agent_activity
+  for select
+  to authenticated
+  using (public.c360_dashboard_role() = 'admin');
+
+drop policy if exists "c360 dashboard agents can read own activity" on public.c360_speed_agent_activity;
+create policy "c360 dashboard agents can read own activity"
+  on public.c360_speed_agent_activity
+  for select
+  to authenticated
+  using (
+    public.c360_dashboard_role() = 'agent'
+    and lower(coalesce(agent_email, '')) = public.c360_dashboard_email()
+  );
+
+drop policy if exists "c360 dashboard admins can mutate agent activity" on public.c360_speed_agent_activity;
+create policy "c360 dashboard admins can mutate agent activity"
+  on public.c360_speed_agent_activity
+  for all
+  to authenticated
+  using (public.c360_dashboard_role() = 'admin')
+  with check (public.c360_dashboard_role() = 'admin');

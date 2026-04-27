@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import {
   claimDueSpeedLeads,
+  claimQueuedSpeedLeads,
   findLeadForPaymentCallback,
   getSpeedLeadById,
   hasActiveLeadForAgent,
@@ -814,7 +815,7 @@ export const confirmLeadPayment = async (lookup, callbackPayload = {}) => {
   };
 };
 
-export const dispatchDueLeads = async (config, limit = 20) => {
+export const dispatchDueLeads = async (config, limit = 20, options = {}) => {
   const result = {
     claimed: 0,
     dispatched: 0,
@@ -831,7 +832,9 @@ export const dispatchDueLeads = async (config, limit = 20) => {
     return result;
   }
 
-  const claimedLeads = await claimDueSpeedLeads(limit);
+  const claimedLeads = options.includeFuture === true
+    ? await claimQueuedSpeedLeads(limit)
+    : await claimDueSpeedLeads(limit);
   result.claimed = claimedLeads.length;
 
   for (const claimedLead of claimedLeads) {

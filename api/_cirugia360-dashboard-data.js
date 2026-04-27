@@ -6,6 +6,7 @@ const LEADS_TABLE = "c360_speed_leads";
 const EVENTS_TABLE = "c360_speed_lead_events";
 const NOTES_TABLE = "c360_speed_lead_notes";
 const TRACKING_TABLE = "c360_speed_tracking_events";
+const AGENT_ACTIVITY_TABLE = "c360_speed_agent_activity";
 
 export const PIPELINE_STAGES = [
   { id: "nuevo", label: "Nuevo" },
@@ -286,6 +287,80 @@ const buildAgentPerformance = (leads) => {
     });
 };
 
+const getAgentActivityAverages = async () => {
+  const client = getSpeedAdminClient();
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const windowEnd = today;
+  const windowStart = new Date(today);
+  windowStart.setDate(windowStart.getDate() - 7);
+  const lookbackStart = new Date(windowStart);
+  lookbackStart.setDate(lookbackStart.getDate() - 14);
+
+  const { data, error } = await client
+    .from(AGENT_ACTIVITY_TABLE)
+    .select("*")
+    .gte("created_at", lookbackStart.toISOString())
+    .lt("created_at", windowEnd.toISOString())
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    throw new Error(error.message || "No se pudo calcular la actividad de las vendedoras.");
+  }
+
+  const eventsByEmail = new Map();
+
+  for (const event of data || []) {
+    const email = normalizeEmail(event.agent_email);
+
+    if (!email) {
+      continue;
+    }
+
+    eventsByEmail.set(email, [...(eventsByEmail.get(email) || []), event]);
+  }
+
+  const averagesByEmail = new Map();
+
+  for (const [email, events] of eventsByEmail.entries()) {
+    let totalActiveMs = 0;
+    let cursorActive = false;
+    let cursorTime = windowStart.getTime();
+
+    for (const event of events) {
+      const eventTime = Date.parse(event.created_at);
+
+      if (!Number.isFinite(eventTime)) {
+        continue;
+      }
+
+      if (eventTime < windowStart.getTime()) {
+        cursorActive = event.active === true;
+        continue;
+      }
+
+      if (eventTime > windowEnd.getTime()) {
+        break;
+      }
+
+      if (cursorActive) {
+        totalActiveMs += Math.max(0, eventTime - cursorTime);
+      }
+
+      cursorActive = event.active === true;
+      cursorTime = eventTime;
+    }
+
+    if (cursorActive) {
+      totalActiveMs += Math.max(0, windowEnd.getTime() - cursorTime);
+    }
+
+    averagesByEmail.set(email, Math.round(totalActiveMs / 1000 / 7));
+  }
+
+  return averagesByEmail;
+};
+
 export const buildDashboardSnapshot = async (options = {}) => {
   const client = getSpeedAdminClient();
   const dateRange = getDateRange(options);
@@ -317,7 +392,12 @@ export const buildDashboardSnapshot = async (options = {}) => {
 
   const leadIds = (leads || []).map((lead) => lead.id);
   const notesByLead = await getLeadNotes(leadIds);
+  const activityAveragesByEmail = await getAgentActivityAverages();
   const publicLeads = (leads || []).map((lead) => toPublicLead(lead, notesByLead.get(lead.id) || []));
+  const agentPerformance = buildAgentPerformance(leads || []).map((agent) => ({
+    ...agent,
+    activityAverageSeconds: activityAveragesByEmail.get(normalizeEmail(agent.email)) || 0,
+  }));
 
   return {
     viewer: {
@@ -330,7 +410,8 @@ export const buildDashboardSnapshot = async (options = {}) => {
     speedMetrics: buildSpeedMetrics(leads || []),
     funnelMetrics: buildFunnelMetrics(leads || []),
     callMetrics: buildCallMetrics(leads || []),
-    agentPerformance: buildAgentPerformance(leads || []),
+    agentPerformance,
+    agentActivityAverages: Object.fromEntries(activityAveragesByEmail.entries()),
     leads: publicLeads,
   };
 };

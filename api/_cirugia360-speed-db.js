@@ -6,6 +6,8 @@ const EVENTS_TABLE =
   normalizeText(process.env.CIRUGIA360_STL_EVENTS_TABLE) || "c360_speed_lead_events";
 const CLAIM_RPC =
   normalizeText(process.env.CIRUGIA360_STL_CLAIM_RPC) || "c360_claim_due_speed_leads";
+const CLAIM_QUEUED_RPC =
+  normalizeText(process.env.CIRUGIA360_STL_CLAIM_QUEUED_RPC) || "c360_claim_queued_speed_leads";
 
 const ACTIVE_AGENT_STATUSES = [
   "dialing_agent",
@@ -99,6 +101,16 @@ export const claimDueSpeedLeads = async (limit = 20) => {
   });
 
   throwIfError(error, "No se pudo reclamar la cola de Speed-to-Lead.");
+  return Array.isArray(data) ? data : [];
+};
+
+export const claimQueuedSpeedLeads = async (limit = 50) => {
+  const client = getSpeedAdminClient();
+  const { data, error } = await client.rpc(CLAIM_QUEUED_RPC, {
+    p_limit: limit,
+  });
+
+  throwIfError(error, "No se pudo reclamar la cola completa de Speed-to-Lead.");
   return Array.isArray(data) ? data : [];
 };
 

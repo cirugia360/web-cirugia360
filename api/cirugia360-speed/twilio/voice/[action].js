@@ -12,6 +12,7 @@ import {
   insertSpeedLeadEvent,
   updateSpeedLead,
 } from "../../../_cirugia360-speed-db.js";
+import { updateRuntimeAgentStatus } from "../../../_cirugia360-speed-settings.js";
 import {
   buildLeadSummaryText,
   canRetryAgent,
@@ -61,6 +62,27 @@ const getFinalAgentMessage = (dialStatus) => {
       return "La llamada con la paciente fue cancelada.";
     default:
       return "La llamada ha finalizado.";
+  }
+};
+
+const deactivateAssignedAgent = async (lead, config, reason) => {
+  const result = await updateRuntimeAgentStatus({
+    agentEmail: lead.assigned_agent_email,
+    active: false,
+    reason,
+    lead,
+    defaultCountryDialCode: config.defaultCountryDialCode,
+    updatedBy: "twilio",
+  });
+
+  if (result.agent) {
+    await insertSpeedLeadEvent(lead.id, "agent.auto_deactivated", {
+      agentId: result.agent.id,
+      agentName: result.agent.name,
+      agentEmail: result.agent.email,
+      reason,
+      at: result.agent.lastAutoDeactivation?.at || new Date().toISOString(),
+    });
   }
 };
 
@@ -169,9 +191,11 @@ const handleSalesDecision = async (request, response, form) => {
   }
 
   let retryResult = "exhausted";
+  const retryReason = "La asesora no confirmo con 1.";
+  await deactivateAssignedAgent(lead, config, retryReason);
 
   if (canRetryAgent(lead)) {
-    retryResult = await tryNextAgent(lead, config, "La asesora no confirmo con 1.");
+    retryResult = await tryNextAgent(lead, config, retryReason);
   }
 
   sayInSpanish(voiceResponse, getDecisionMessage(retryResult));

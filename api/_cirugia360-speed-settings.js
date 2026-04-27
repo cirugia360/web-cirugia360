@@ -3,6 +3,7 @@ import { normalizeEmail, normalizePhoneInput, normalizeText, uniqueStrings } fro
 
 const SETTINGS_TABLE = "c360_speed_settings";
 const SETTINGS_KEY = "runtime";
+const ACTIVITY_TABLE = "c360_speed_agent_activity";
 
 const isPlainObject = (value) =>
   Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -25,6 +26,14 @@ const normalizeAgent = (agent, index, defaultCountryDialCode) => {
     active: agent?.active !== false,
     accountActive: agent?.accountActive !== false,
     authUserId: normalizeText(agent?.authUserId) || null,
+    lastAutoDeactivation: isPlainObject(agent?.lastAutoDeactivation)
+      ? {
+          at: normalizeText(agent.lastAutoDeactivation.at) || null,
+          reason: normalizeText(agent.lastAutoDeactivation.reason) || null,
+          leadId: normalizeText(agent.lastAutoDeactivation.leadId) || null,
+          leadName: normalizeText(agent.lastAutoDeactivation.leadName) || null,
+        }
+      : null,
   };
 };
 
@@ -125,7 +134,7 @@ export const mergeRuntimeSettingsIntoConfig = async (config, options = {}) => {
   // Keep ALL agents (active and inactive) in the merged list. Inactive agents
   // carry `active: false` so the workflow can recognise them without losing
   // the historical assignment on each lead.
-  const settingsAgents = (settings?.agents || []).map(({ id, name, phone, email, active, accountActive, authUserId }) => ({
+  const settingsAgents = (settings?.agents || []).map(({ id, name, phone, email, active, accountActive, authUserId, lastAutoDeactivation }) => ({
     id,
     name,
     phone,
@@ -133,6 +142,7 @@ export const mergeRuntimeSettingsIntoConfig = async (config, options = {}) => {
     active: active !== false,
     accountActive: accountActive !== false,
     authUserId: authUserId || null,
+    lastAutoDeactivation: lastAutoDeactivation || null,
   }));
   const mergedAgents = settingsAgents.length
     ? settingsAgents
@@ -164,3 +174,156 @@ export const buildSettingsFromConfig = (config) => ({
 });
 
 export const getAgentIds = (settings) => uniqueStrings((settings?.agents || []).map((agent) => agent.id));
+
+export const insertAgentActivityChange = async ({
+  agent,
+  active,
+  reason = null,
+  lead = null,
+  changedBy = null,
+}) => {
+  const email = normalizeEmail(agent?.email);
+
+  if (!email) {
+    return null;
+  }
+
+  const client = getSpeedAdminClient();
+  const { data, error } = await client
+    .from(ACTIVITY_TABLE)
+    .insert({
+      agent_id: normalizeText(agent?.id) || null,
+      agent_email: email,
+      agent_name: normalizeText(agent?.name) || null,
+      active: active === true,
+      reason: normalizeText(reason) || null,
+      lead_id: normalizeText(lead?.id) || null,
+      lead_name: normalizeText(lead?.full_name) || null,
+      changed_by: normalizeText(changedBy) || null,
+    })
+    .select("*")
+    .single();
+
+  if (error) {
+    throw new Error(error.message || "No se pudo registrar el cambio de actividad.");
+  }
+
+  return data;
+};
+
+export const logAgentActivityChanges = async ({
+  previousAgents = [],
+  nextAgents = [],
+  changedBy = null,
+}) => {
+  const previousByEmail = new Map(
+    (previousAgents || [])
+      .map((agent) => [normalizeEmail(agent?.email), agent])
+      .filter(([email]) => Boolean(email)),
+  );
+
+  for (const nextAgent of nextAgents || []) {
+    const email = normalizeEmail(nextAgent?.email);
+
+    if (!email) {
+      continue;
+    }
+
+    const previousAgent = previousByEmail.get(email);
+
+    if (!previousAgent) {
+      if (nextAgent.active !== false) {
+        await insertAgentActivityChange({
+          agent: nextAgent,
+          active: true,
+          reason: "Vendedora creada en Equipo.",
+          changedBy,
+        });
+      }
+
+      continue;
+    }
+
+    if (previousAgent.active === nextAgent.active) {
+      continue;
+    }
+
+    await insertAgentActivityChange({
+      agent: nextAgent,
+      active: nextAgent.active !== false,
+      reason: "Cambio manual desde Equipo.",
+      changedBy,
+    });
+  }
+};
+
+export const updateRuntimeAgentStatus = async ({
+  agentEmail = "",
+  agentId = "",
+  active,
+  reason = null,
+  lead = null,
+  defaultCountryDialCode = "56",
+  updatedBy = null,
+}) => {
+  const settings = await loadSpeedRuntimeSettings(defaultCountryDialCode);
+  const normalizedEmail = normalizeEmail(agentEmail);
+  const normalizedAgentId = normalizeText(agentId);
+  let matchedAgent = null;
+  const nextSettings = {
+    ...settings,
+    agents: settings.agents.map((agent) => {
+      const matches =
+        (normalizedAgentId && agent.id === normalizedAgentId) ||
+        (normalizedEmail && agent.email === normalizedEmail);
+
+      if (!matches) {
+        return agent;
+      }
+
+      matchedAgent = agent;
+      return {
+        ...agent,
+        active: active === true,
+        lastAutoDeactivation:
+          active === false && reason
+            ? {
+                at: new Date().toISOString(),
+                reason: normalizeText(reason),
+                leadId: normalizeText(lead?.id) || null,
+                leadName: normalizeText(lead?.full_name) || null,
+              }
+            : agent.lastAutoDeactivation || null,
+      };
+    }),
+  };
+
+  if (!matchedAgent) {
+    return {
+      settings,
+      agent: null,
+    };
+  }
+
+  const savedSettings = await saveSpeedRuntimeSettings({
+    settings: nextSettings,
+    defaultCountryDialCode,
+    updatedBy,
+  });
+  const savedAgent = savedSettings.agents.find((agent) => agent.id === matchedAgent.id) || null;
+
+  if (matchedAgent.active !== active && savedAgent) {
+    await insertAgentActivityChange({
+      agent: savedAgent,
+      active: active === true,
+      reason,
+      lead,
+      changedBy: updatedBy,
+    });
+  }
+
+  return {
+    settings: savedSettings,
+    agent: savedAgent,
+  };
+};
