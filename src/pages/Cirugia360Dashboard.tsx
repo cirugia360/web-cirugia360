@@ -2561,7 +2561,7 @@ const TeamSettings = ({
               />
               Cuenta
             </label>
-            {agent.lastAutoDeactivation?.reason ? (
+            {agent.active === false && agent.lastAutoDeactivation?.reason ? (
               <p className="text-xs leading-5 text-amber-700 md:col-span-full md:pl-[52px]">
                 Desactivada a las {formatDate(agent.lastAutoDeactivation.at)} - {agent.lastAutoDeactivation.reason}
                 {agent.lastAutoDeactivation.leadName ? ` a ${agent.lastAutoDeactivation.leadName}` : ""}
@@ -2648,7 +2648,7 @@ const TeamSettings = ({
                 {agent.activeLeadName ? (
                   <p className="mt-1 text-xs text-slate-600">Atendiendo a {agent.activeLeadName}</p>
                 ) : null}
-                {agent.lastAutoDeactivation?.reason ? (
+                {agent.status === "inactive" && agent.lastAutoDeactivation?.reason ? (
                   <p className="mt-2 text-xs leading-5 text-amber-800">
                     Última auto-desactivación: {formatDate(agent.lastAutoDeactivation.at)} - {agent.lastAutoDeactivation.reason}
                   </p>

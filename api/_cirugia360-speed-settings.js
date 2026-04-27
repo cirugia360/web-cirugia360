@@ -8,6 +8,25 @@ const ACTIVITY_TABLE = "c360_speed_agent_activity";
 const isPlainObject = (value) =>
   Boolean(value) && typeof value === "object" && !Array.isArray(value);
 
+const normalizeLastAutoDeactivation = (agent) => {
+  if (agent?.active !== false || !isPlainObject(agent?.lastAutoDeactivation)) {
+    return null;
+  }
+
+  const reason = normalizeText(agent.lastAutoDeactivation.reason);
+
+  if (!reason || reason.toLowerCase().startsWith("cambio manual")) {
+    return null;
+  }
+
+  return {
+    at: normalizeText(agent.lastAutoDeactivation.at) || null,
+    reason,
+    leadId: normalizeText(agent.lastAutoDeactivation.leadId) || null,
+    leadName: normalizeText(agent.lastAutoDeactivation.leadName) || null,
+  };
+};
+
 const normalizeAgent = (agent, index, defaultCountryDialCode) => {
   const name = normalizeText(agent?.name);
   const phone = normalizePhoneInput(agent?.phone, defaultCountryDialCode);
@@ -26,14 +45,7 @@ const normalizeAgent = (agent, index, defaultCountryDialCode) => {
     active: agent?.active !== false,
     accountActive: agent?.accountActive !== false,
     authUserId: normalizeText(agent?.authUserId) || null,
-    lastAutoDeactivation: isPlainObject(agent?.lastAutoDeactivation)
-      ? {
-          at: normalizeText(agent.lastAutoDeactivation.at) || null,
-          reason: normalizeText(agent.lastAutoDeactivation.reason) || null,
-          leadId: normalizeText(agent.lastAutoDeactivation.leadId) || null,
-          leadName: normalizeText(agent.lastAutoDeactivation.leadName) || null,
-        }
-      : null,
+    lastAutoDeactivation: normalizeLastAutoDeactivation(agent),
   };
 };
 
@@ -286,14 +298,14 @@ export const updateRuntimeAgentStatus = async ({
         ...agent,
         active: active === true,
         lastAutoDeactivation:
-          active === false && reason
+          active === false && reason && lead
             ? {
                 at: new Date().toISOString(),
                 reason: normalizeText(reason),
                 leadId: normalizeText(lead?.id) || null,
                 leadName: normalizeText(lead?.full_name) || null,
               }
-            : agent.lastAutoDeactivation || null,
+            : null,
       };
     }),
   };
