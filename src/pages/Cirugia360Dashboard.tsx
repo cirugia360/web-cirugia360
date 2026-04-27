@@ -2197,6 +2197,7 @@ const TeamSettings = ({
   );
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [isTogglingQueue, setIsTogglingQueue] = useState(false);
+  const [draggingAgentIndex, setDraggingAgentIndex] = useState<number | null>(null);
   const [error, setError] = useState("");
   const settingsKey = useMemo(() => (settings ? serializeTeamSettings(settings) : null), [settings]);
   const draftKey = useMemo(() => serializeTeamSettings(draft), [draft]);
@@ -2248,6 +2249,28 @@ const TeamSettings = ({
       ...current,
       agents: current.agents.filter((_, agentIndex) => agentIndex !== index),
     }));
+  };
+
+  const moveAgent = (fromIndex: number, toIndex: number) => {
+    if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0) {
+      return;
+    }
+
+    setDraft((current) => {
+      const nextAgents = [...current.agents];
+      const [movedAgent] = nextAgents.splice(fromIndex, 1);
+
+      if (!movedAgent) {
+        return current;
+      }
+
+      nextAgents.splice(toIndex, 0, movedAgent);
+
+      return {
+        ...current,
+        agents: nextAgents,
+      };
+    });
   };
 
   const validateTeamSettings = () => {
@@ -2451,7 +2474,41 @@ const TeamSettings = ({
 
       <div className="mt-5 space-y-3">
         {draft.agents.map((agent, index) => (
-          <div key={agent.id || index} className="grid gap-3 rounded-lg border border-slate-200 p-3 md:grid-cols-[1fr_1fr_1fr_1fr_auto_auto_auto]">
+          <div
+            key={agent.id || index}
+            className={`grid gap-3 rounded-lg border p-3 transition md:grid-cols-[auto_1fr_1fr_1fr_1fr_auto_auto_auto] ${
+              draggingAgentIndex === index ? "border-dashboard-primary bg-dashboard-soft/60" : "border-slate-200"
+            }`}
+            onDragOver={(event) => {
+              event.preventDefault();
+              event.dataTransfer.dropEffect = "move";
+            }}
+            onDrop={(event) => {
+              event.preventDefault();
+              const fromIndex = Number(event.dataTransfer.getData("text/plain"));
+
+              if (Number.isInteger(fromIndex)) {
+                moveAgent(fromIndex, index);
+              }
+
+              setDraggingAgentIndex(null);
+            }}
+          >
+            <button
+              type="button"
+              draggable
+              className="inline-flex h-10 w-10 cursor-grab items-center justify-center rounded-md border border-slate-200 text-slate-500 transition hover:bg-slate-50 active:cursor-grabbing"
+              title="Arrastrar prioridad"
+              onDragStart={(event) => {
+                setDraggingAgentIndex(index);
+                event.dataTransfer.effectAllowed = "move";
+                event.dataTransfer.setData("text/plain", String(index));
+              }}
+              onDragEnd={() => setDraggingAgentIndex(null)}
+            >
+              <GripVertical className="h-4 w-4" />
+              <span className="sr-only">Arrastrar prioridad {index + 1}</span>
+            </button>
             <input
               className="rounded-md border border-slate-200 px-3 py-2 text-sm"
               value={agent.name}

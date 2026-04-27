@@ -37,20 +37,6 @@ const isPlainObject = (value) =>
 
 const toIsoString = (date) => (date instanceof Date ? date.toISOString() : new Date(date).toISOString());
 
-const rotateAgents = (agents, startAgentId) => {
-  if (!startAgentId) {
-    return [...agents];
-  }
-
-  const startIndex = agents.findIndex((agent) => agent.id === startAgentId);
-
-  if (startIndex < 0) {
-    return [...agents];
-  }
-
-  return [...agents.slice(startIndex), ...agents.slice(0, startIndex)];
-};
-
 const isAgentActive = (agent) => Boolean(agent) && agent.active !== false;
 
 const getActiveSalesAgents = (config) =>
@@ -63,20 +49,6 @@ const getAgentById = (config, agentId) =>
 
 const getAgentByPhone = (config, phone) =>
   (config.salesAgents || []).find((agent) => agent.phone === phone) || null;
-
-const getNextAgentId = (agents, currentAgentId) => {
-  if (!agents.length) {
-    return null;
-  }
-
-  const currentIndex = agents.findIndex((agent) => agent.id === currentAgentId);
-
-  if (currentIndex < 0) {
-    return agents[0]?.id || null;
-  }
-
-  return agents[(currentIndex + 1) % agents.length]?.id || null;
-};
 
 const getRoutingState = (metadata) => {
   const rawRoutingState = isPlainObject(metadata?.[ROUTING_KEY]) ? metadata[ROUTING_KEY] : {};
@@ -154,27 +126,13 @@ const buildRetryDate = (config, referenceTime = new Date()) =>
   new Date(referenceTime.getTime() + config.retryDelaySeconds * 1000);
 
 const buildLeadDispatchPlan = async (lead, config, referenceTime = new Date(), options = {}) => {
-  const routingState = getRoutingState(lead.metadata);
   const excludeAgentIds = new Set(options.excludeAgentIds || []);
-  const attemptedAgentIds = new Set(options.resetCycle ? [] : routingState.attemptedAgentIds);
   const activeAgents = getActiveSalesAgents(config);
-  const orderedAgents = rotateAgents(
-    activeAgents,
-    routingState.nextStartAgentId || routingState.currentAssignedAgentId || null,
-  );
-  let scheduledFallbackAgent = null;
+  const priorityAgent = activeAgents.find((agent) => !excludeAgentIds.has(agent.id)) || null;
 
-  for (const agent of orderedAgents) {
-    if (excludeAgentIds.has(agent.id) || attemptedAgentIds.has(agent.id)) {
-      continue;
-    }
-
-    if (!scheduledFallbackAgent) {
-      scheduledFallbackAgent = agent;
-    }
-
+  if (priorityAgent) {
     const busy = await hasActiveLeadForAgent({
-      agentPhone: agent.phone,
+      agentPhone: priorityAgent.phone,
       excludeLeadId: lead.id,
       cooldownSeconds: config.agentCallCooldownSeconds,
       referenceTimeIso: referenceTime.toISOString(),
@@ -182,35 +140,26 @@ const buildLeadDispatchPlan = async (lead, config, referenceTime = new Date(), o
 
     if (!busy) {
       return {
-        agent,
+        agent: priorityAgent,
         immediate: true,
         scheduledAt: referenceTime,
-        resetCycle: Boolean(options.resetCycle),
+        resetCycle: false,
       };
     }
-  }
 
-  if (!scheduledFallbackAgent && attemptedAgentIds.size > 0 && !options.resetCycle) {
-    return buildLeadDispatchPlan(lead, config, referenceTime, {
-      ...options,
-      resetCycle: true,
-    });
-  }
-
-  if (!scheduledFallbackAgent) {
-    scheduledFallbackAgent =
-      orderedAgents.find((agent) => !excludeAgentIds.has(agent.id)) || null;
-  }
-
-  if (!scheduledFallbackAgent) {
-    return null;
+    return {
+      agent: priorityAgent,
+      immediate: false,
+      scheduledAt: buildRetryDate(config, referenceTime),
+      resetCycle: false,
+    };
   }
 
   return {
-    agent: scheduledFallbackAgent,
+    agent: null,
     immediate: false,
     scheduledAt: buildRetryDate(config, referenceTime),
-    resetCycle: Boolean(options.resetCycle || attemptedAgentIds.size >= activeAgents.length),
+    resetCycle: false,
   };
 };
 
@@ -218,14 +167,14 @@ const scheduleLeadWithPlan = async (lead, plan, config, reason = null) => {
   const routingState = getRoutingState(lead.metadata);
   const updatedRoutingState = {
     attemptedAgentIds: plan.resetCycle ? [] : routingState.attemptedAgentIds,
-    currentAssignedAgentId: plan.agent.id,
-    nextStartAgentId: getNextAgentId(getActiveSalesAgents(config), plan.agent.id),
+    currentAssignedAgentId: plan.agent?.id || null,
+    nextStartAgentId: null,
   };
   const scheduledAtIso = toIsoString(plan.scheduledAt);
   const updatedLead = await updateSpeedLead(lead.id, {
-    assigned_agent_name: plan.agent.name,
-    assigned_agent_phone: plan.agent.phone,
-    assigned_agent_email: plan.agent.email || null,
+    assigned_agent_name: plan.agent?.name || null,
+    assigned_agent_phone: plan.agent?.phone || null,
+    assigned_agent_email: plan.agent?.email || null,
     dispatch_scheduled_at: scheduledAtIso,
     status: plan.immediate ? "received" : "scheduled",
     sales_call_status: plan.immediate ? "queued" : "scheduled",
@@ -237,8 +186,8 @@ const scheduleLeadWithPlan = async (lead, plan, config, reason = null) => {
   if (!plan.immediate) {
     await insertSpeedLeadEvent(lead.id, "sales_call.scheduled", {
       scheduledAt: scheduledAtIso,
-      agent: plan.agent.name,
-      reason: normalizeText(reason) || "No habia una asesora libre en este instante.",
+      agent: plan.agent?.name || null,
+      reason: normalizeText(reason) || (plan.agent ? "La asesora prioritaria estaba ocupada." : "No habia asesoras activas."),
     });
   }
 
@@ -276,11 +225,8 @@ const scheduleLeadRetryDelay = async (lead, config, reason = null, preferredAgen
   const preferredAgentActive = isAgentActive(preferredAgent) ? preferredAgent : null;
   const currentAssignedAgent = getAssignedAgent(config, lead);
   const assignedAgentActive = isAgentActive(currentAssignedAgent) ? currentAssignedAgent : null;
-  const rotationAgent = getAgentById(config, routingState.nextStartAgentId);
-  const rotationAgentActive = isAgentActive(rotationAgent) ? rotationAgent : null;
   const nextAgent =
     preferredAgentActive ||
-    rotationAgentActive ||
     assignedAgentActive ||
     activeAgents[0] ||
     null;
@@ -301,7 +247,7 @@ const scheduleLeadRetryDelay = async (lead, config, reason = null, preferredAgen
     metadata: withRoutingState(lead.metadata, {
       attemptedAgentIds,
       currentAssignedAgentId: nextAgent?.id || null,
-      nextStartAgentId: nextAgent ? getNextAgentId(activeAgents, nextAgent.id) : null,
+      nextStartAgentId: null,
     }),
   });
 
@@ -344,7 +290,7 @@ export const dispatchLeadToAssignedAgent = async (lead, config, options = {}) =>
   const updatedMetadata = withRoutingState(lead.metadata, {
     attemptedAgentIds: uniqueStrings([...routingState.attemptedAgentIds, assignedAgent.id]),
     currentAssignedAgentId: assignedAgent.id,
-    nextStartAgentId: getNextAgentId(getActiveSalesAgents(config), assignedAgent.id),
+    nextStartAgentId: null,
   });
   const call = await client.calls.create({
     to: assignedAgent.phone,

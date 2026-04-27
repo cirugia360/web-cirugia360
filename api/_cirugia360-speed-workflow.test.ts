@@ -30,6 +30,7 @@ import {
   extractExternalReferenceCandidates,
   extractPaymentReference,
   isPositivePaymentStatus,
+  scheduleLeadForNextAttempt,
 } from "./_cirugia360-speed-workflow.js";
 
 beforeEach(() => {
@@ -243,5 +244,86 @@ describe("cirugia360 speed-to-lead inactive-agent pause", () => {
 
     const eventNames = dbMocks.insertSpeedLeadEvent.mock.calls.map(([, eventType]) => eventType);
     expect(eventNames).toContain("sales_call.paused_inactive_agent");
+  });
+});
+
+describe("cirugia360 strict agent priority", () => {
+  const lead = {
+    id: "lead-priority",
+    status: "received",
+    payment_status: "not_required",
+    assigned_agent_name: null,
+    assigned_agent_phone: null,
+    assigned_agent_email: null,
+    agent_attempts: 0,
+    metadata: {
+      routing: {
+        attemptedAgentIds: [],
+        currentAssignedAgentId: null,
+        nextStartAgentId: null,
+      },
+    },
+  };
+
+  const config = {
+    defaultCountryDialCode: "56",
+    retryDelaySeconds: 180,
+    agentCallCooldownSeconds: 180,
+    salesAgents: [
+      { id: "agent-1", name: "Prioridad 1", phone: "+56911111111", email: "uno@clinic.cl", active: true },
+      { id: "agent-2", name: "Prioridad 2", phone: "+56922222222", email: "dos@clinic.cl", active: true },
+    ],
+    twilioConfigured: false,
+    twilioPhoneNumber: "+56229146709",
+    appUrl: "https://example.com",
+    queuePaused: false,
+  };
+
+  it("waits for the first active agent instead of falling through to the next one", async () => {
+    dbMocks.hasActiveLeadForAgent.mockResolvedValueOnce(true);
+
+    const result = await scheduleLeadForNextAttempt(lead, config, {
+      reason: "Lead nuevo.",
+      referenceTime: new Date("2026-04-27T12:00:00.000Z"),
+    });
+
+    expect(result.kind).toBe("scheduled");
+    expect(dbMocks.hasActiveLeadForAgent).toHaveBeenCalledTimes(1);
+    expect(dbMocks.hasActiveLeadForAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentPhone: "+56911111111",
+      }),
+    );
+    expect(dbMocks.updateSpeedLead).toHaveBeenCalledWith(
+      "lead-priority",
+      expect.objectContaining({
+        assigned_agent_name: "Prioridad 1",
+        assigned_agent_email: "uno@clinic.cl",
+        status: "scheduled",
+      }),
+    );
+  });
+
+  it("uses the next priority only when the higher priority agent is inactive", async () => {
+    dbMocks.hasActiveLeadForAgent.mockResolvedValueOnce(false);
+
+    const result = await scheduleLeadForNextAttempt(
+      lead,
+      {
+        ...config,
+        salesAgents: [
+          { ...config.salesAgents[0], active: false },
+          config.salesAgents[1],
+        ],
+      },
+      { reason: "Lead nuevo." },
+    );
+
+    expect(result.kind).toBe("dispatch");
+    expect(dbMocks.hasActiveLeadForAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentPhone: "+56922222222",
+      }),
+    );
   });
 });
