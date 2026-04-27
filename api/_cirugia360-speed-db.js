@@ -137,6 +137,49 @@ export const claimQueuedSpeedLeads = async (limit = 50) => {
   return Array.isArray(data) ? data : [];
 };
 
+export const claimStaleAgentCallLeads = async ({
+  limit = 20,
+  staleBeforeIso = new Date(Date.now() - DEFAULT_PENDING_CALL_STALE_SECONDS * 1000).toISOString(),
+} = {}) => {
+  const client = getSpeedAdminClient();
+  const { data: staleLeads, error: selectError } = await client
+    .from(LEADS_TABLE)
+    .select("*")
+    .in("status", Array.from(PENDING_AGENT_STATUSES))
+    .lt("updated_at", staleBeforeIso)
+    .neq("payment_status", "confirmed")
+    .order("created_at", { ascending: false })
+    .limit(Math.max(Number(limit) || 20, 1));
+
+  throwIfError(selectError, "No se pudo buscar llamadas vencidas.");
+
+  const claimedLeads = [];
+
+  for (const lead of staleLeads || []) {
+    const { data, error } = await client
+      .from(LEADS_TABLE)
+      .update({
+        status: "dispatching",
+        sales_call_status: "stale",
+        twilio_sales_call_sid: null,
+        last_error: "El intento de llamada a la asesora vencio.",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", lead.id)
+      .in("status", Array.from(PENDING_AGENT_STATUSES))
+      .select("*")
+      .maybeSingle();
+
+    throwIfError(error, "No se pudo recuperar una llamada vencida.");
+
+    if (data) {
+      claimedLeads.push(data);
+    }
+  }
+
+  return claimedLeads;
+};
+
 export const hasActiveLeadForAgent = async ({
   agentPhone,
   excludeLeadId = null,

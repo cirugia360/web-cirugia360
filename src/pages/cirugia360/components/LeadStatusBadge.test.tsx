@@ -7,6 +7,7 @@ import type { DashboardLead } from "../lib/types";
 const makeLead = (status: string): DashboardLead => ({
   id: status,
   createdAt: "2026-04-24T10:00:00.000Z",
+  updatedAt: new Date().toISOString(),
   status,
   salesCallStatus: null,
   customerCallStatus: null,
@@ -45,5 +46,18 @@ describe("LeadStatusBadge", () => {
     render(<LeadStatusBadge lead={makeLead("custom_status")} />);
 
     expect(screen.getByText("Custom Status")).toBeInTheDocument();
+  });
+
+  it("shows stale agent calls as expired attempts", () => {
+    render(
+      <LeadStatusBadge
+        lead={{
+          ...makeLead("dialing_agent"),
+          updatedAt: new Date(Date.now() - 3 * 60 * 1000).toISOString(),
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Intento vencido")).toBeInTheDocument();
   });
 });

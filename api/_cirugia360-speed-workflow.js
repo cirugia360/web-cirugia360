@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import {
   claimDueSpeedLeads,
   claimQueuedSpeedLeads,
+  claimStaleAgentCallLeads,
   findLeadForPaymentCallback,
   getSpeedLeadById,
   hasActiveLeadForAgent,
@@ -828,6 +829,7 @@ export const dispatchDueLeads = async (config, limit = 20, options = {}) => {
     exhausted: 0,
     skippedPaid: 0,
     pausedInactiveAgent: 0,
+    staleRecovered: 0,
     failed: 0,
     paused: config.queuePaused,
     leadIds: [],
@@ -840,9 +842,26 @@ export const dispatchDueLeads = async (config, limit = 20, options = {}) => {
   const claimedLeads = options.includeFuture === true
     ? await claimQueuedSpeedLeads(limit)
     : await claimDueSpeedLeads(limit);
-  result.claimed = claimedLeads.length;
+  const staleLeads = await claimStaleAgentCallLeads({
+    limit,
+    staleBeforeIso: new Date(
+      Date.now() - (config.agentPendingCallStaleSeconds || 120) * 1000,
+    ).toISOString(),
+  });
+  const claimedLeadIds = new Set();
+  const leadsToProcess = [];
 
-  for (const claimedLead of claimedLeads) {
+  for (const lead of [...staleLeads, ...claimedLeads]) {
+    if (!claimedLeadIds.has(lead.id)) {
+      claimedLeadIds.add(lead.id);
+      leadsToProcess.push(lead);
+    }
+  }
+
+  result.staleRecovered = staleLeads.length;
+  result.claimed = leadsToProcess.length;
+
+  for (const claimedLead of leadsToProcess) {
     result.leadIds.push(claimedLead.id);
 
     if (normalizeText(claimedLead.payment_status).toLowerCase() === "confirmed") {

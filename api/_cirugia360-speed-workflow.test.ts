@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const dbMocks = vi.hoisted(() => ({
   claimDueSpeedLeads: vi.fn(),
   claimQueuedSpeedLeads: vi.fn(),
+  claimStaleAgentCallLeads: vi.fn(),
   findLeadForPaymentCallback: vi.fn(),
   getSpeedLeadById: vi.fn(),
   hasActiveLeadForAgent: vi.fn(),
@@ -43,6 +44,7 @@ beforeEach(() => {
     return lead;
   });
   dbMocks.insertSpeedLeadEvent.mockResolvedValue(undefined);
+  dbMocks.claimStaleAgentCallLeads.mockResolvedValue([]);
   dbMocks.hasActiveLeadForAgent.mockResolvedValue(true);
   dbMocks.updateSpeedLead.mockImplementation(async (leadId, updates) => ({
     ...(insertedLead || {}),

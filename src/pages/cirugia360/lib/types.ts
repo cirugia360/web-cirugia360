@@ -23,6 +23,7 @@ export type LeadNote = {
 export type DashboardLead = {
   id: string;
   createdAt: string;
+  updatedAt: string;
   status: string;
   salesCallStatus: string | null;
   customerCallStatus: string | null;

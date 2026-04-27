@@ -21,6 +21,10 @@ export const STATUS_LABELS: Record<string, { label: string; className: string }>
     label: "Llamando",
     className: "border-blue-200 bg-blue-50 text-blue-700",
   },
+  agent_call_stale: {
+    label: "Intento vencido",
+    className: "border-amber-200 bg-amber-50 text-amber-700",
+  },
   dialing_agent: {
     label: "Llamando asesora",
     className: "border-blue-200 bg-blue-50 text-blue-700",
@@ -100,6 +104,8 @@ export const STATUS_LABELS: Record<string, { label: string; className: string }>
 };
 
 const FALLBACK_STATUS_CLASSNAME = "border-slate-200 bg-slate-50 text-slate-700";
+const PENDING_AGENT_STATUSES = new Set(["dialing_agent", "waiting_agent_confirmation"]);
+const PENDING_CALL_STALE_MS = 2 * 60 * 1000;
 
 const humanizeStatus = (status: string) =>
   status
@@ -108,9 +114,18 @@ const humanizeStatus = (status: string) =>
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ") || "Sin estado";
 
-export const getLeadStatus = (lead: Pick<DashboardLead, "status" | "customerConnectedAt" | "lastError">) => {
+export const getLeadStatus = (
+  lead: Pick<DashboardLead, "createdAt" | "updatedAt" | "status" | "customerConnectedAt" | "lastError">,
+) => {
+  const updatedAt = Date.parse(lead.updatedAt || lead.createdAt || "");
+  const isStaleAgentCall =
+    PENDING_AGENT_STATUSES.has(lead.status) &&
+    Number.isFinite(updatedAt) &&
+    Date.now() - updatedAt > PENDING_CALL_STALE_MS;
   const statusKey =
-    lead.customerConnectedAt && ["received", "scheduled", "dispatching", "connecting_customer"].includes(lead.status)
+    isStaleAgentCall
+      ? "agent_call_stale"
+      : lead.customerConnectedAt && ["received", "scheduled", "dispatching", "connecting_customer"].includes(lead.status)
       ? "customer_connected"
       : lead.status;
 
