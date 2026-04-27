@@ -21,8 +21,16 @@ export const STATUS_LABELS: Record<string, { label: string; className: string }>
     label: "Llamando",
     className: "border-blue-200 bg-blue-50 text-blue-700",
   },
+  dialing_agent: {
+    label: "Llamando asesora",
+    className: "border-blue-200 bg-blue-50 text-blue-700",
+  },
+  waiting_agent_confirmation: {
+    label: "Esperando confirmacion",
+    className: "border-blue-200 bg-blue-50 text-blue-700",
+  },
   connecting_customer: {
-    label: "Conectando",
+    label: "Conectando paciente",
     className: "border-blue-200 bg-blue-50 text-blue-700",
   },
   customer_connected: {
@@ -51,6 +59,10 @@ export const STATUS_LABELS: Record<string, { label: string; className: string }>
   },
   customer_unreachable: {
     label: "No contactable",
+    className: "border-red-200 bg-red-50 text-red-700",
+  },
+  agent_unreachable: {
+    label: "Asesora no contesto",
     className: "border-red-200 bg-red-50 text-red-700",
   },
   no_agent_available: {
