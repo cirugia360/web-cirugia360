@@ -26,6 +26,23 @@ const ACTIVE_AGENT_STATUSES = new Set([
   "connecting_customer",
   "customer_connected",
 ]);
+const PENDING_AGENT_STATUSES = new Set(["dialing_agent", "waiting_agent_confirmation"]);
+const PENDING_CALL_STALE_MS = 2 * 60 * 1000;
+const ACTIVE_CONVERSATION_STALE_MS = 3 * 60 * 60 * 1000;
+
+const isFreshActiveAgentLead = (lead, now = Date.now()) => {
+  const updatedAt = Date.parse(lead?.updated_at || lead?.created_at || "");
+
+  if (!Number.isFinite(updatedAt) || !ACTIVE_AGENT_STATUSES.has(lead?.status)) {
+    return false;
+  }
+
+  const maxAgeMs = PENDING_AGENT_STATUSES.has(lead.status)
+    ? PENDING_CALL_STALE_MS
+    : ACTIVE_CONVERSATION_STALE_MS;
+
+  return now - updatedAt <= maxAgeMs;
+};
 
 export const PIPELINE_STAGES = [
   { id: "nuevo", label: "Nuevo" },
@@ -308,12 +325,13 @@ const buildAgentPerformance = (leads) => {
 
 const buildAgentStatuses = (agents = [], leads = []) =>
   agents.map((agent, index) => {
+    const now = Date.now();
     const activeLead = leads.find((lead) => {
       const sameAgent =
         normalizeEmail(lead.assigned_agent_email) === normalizeEmail(agent.email) ||
         (agent.phone && lead.assigned_agent_phone === agent.phone);
 
-      return sameAgent && ACTIVE_AGENT_STATUSES.has(lead.status);
+      return sameAgent && isFreshActiveAgentLead(lead, now);
     });
 
     return {

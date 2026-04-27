@@ -11,6 +11,9 @@ import { mergeRuntimeSettingsIntoConfig } from "./_cirugia360-speed-settings.js"
 const DEFAULT_BUSINESS_TIME_ZONE = "America/Santiago";
 const DEFAULT_RETRY_DELAY_SECONDS = 180;
 const DEFAULT_AGENT_CALL_COOLDOWN_SECONDS = 180;
+const DEFAULT_AGENT_CALL_TIMEOUT_SECONDS = 20;
+const DEFAULT_AGENT_PENDING_CALL_STALE_SECONDS = 2 * 60;
+const DEFAULT_AGENT_ACTIVE_CONVERSATION_STALE_SECONDS = 3 * 60 * 60;
 
 const requireEnv = (name) => {
   const value = normalizeText(process.env[name]);
@@ -143,6 +146,15 @@ export const getCirugia360SpeedConfig = (request, options = {}) => {
       parseOptionalPositiveIntegerEnv("CIRUGIA360_STL_AGENT_CALL_COOLDOWN_SECONDS") ||
       parseOptionalPositiveIntegerEnv("AGENT_CALL_COOLDOWN_SECONDS") ||
       DEFAULT_AGENT_CALL_COOLDOWN_SECONDS,
+    agentCallTimeoutSeconds:
+      parseOptionalPositiveIntegerEnv("CIRUGIA360_STL_AGENT_CALL_TIMEOUT_SECONDS") ||
+      DEFAULT_AGENT_CALL_TIMEOUT_SECONDS,
+    agentPendingCallStaleSeconds:
+      parseOptionalPositiveIntegerEnv("CIRUGIA360_STL_AGENT_PENDING_CALL_STALE_SECONDS") ||
+      DEFAULT_AGENT_PENDING_CALL_STALE_SECONDS,
+    agentActiveConversationStaleSeconds:
+      parseOptionalPositiveIntegerEnv("CIRUGIA360_STL_AGENT_ACTIVE_CONVERSATION_STALE_SECONDS") ||
+      DEFAULT_AGENT_ACTIVE_CONVERSATION_STALE_SECONDS,
     queuePaused: parseOptionalBooleanEnv("CIRUGIA360_STL_QUEUE_PAUSED") ?? false,
     cronSecret:
       normalizeText(process.env.CRON_SECRET) || normalizeText(process.env.CIRUGIA360_STL_CRON_SECRET),

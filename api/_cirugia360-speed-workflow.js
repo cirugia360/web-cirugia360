@@ -136,6 +136,8 @@ const buildLeadDispatchPlan = async (lead, config, referenceTime = new Date(), o
       agentPhone: priorityAgent.phone,
       excludeLeadId: lead.id,
       cooldownSeconds: config.agentCallCooldownSeconds,
+      pendingCallStaleSeconds: config.agentPendingCallStaleSeconds,
+      activeConversationStaleSeconds: config.agentActiveConversationStaleSeconds,
       referenceTimeIso: referenceTime.toISOString(),
     });
 
@@ -278,6 +280,8 @@ export const dispatchLeadToAssignedAgent = async (lead, config, options = {}) =>
     agentPhone: assignedAgent.phone,
     excludeLeadId: lead.id,
     cooldownSeconds: config.agentCallCooldownSeconds,
+    pendingCallStaleSeconds: config.agentPendingCallStaleSeconds,
+    activeConversationStaleSeconds: config.agentActiveConversationStaleSeconds,
     referenceTimeIso: new Date().toISOString(),
   });
 
@@ -300,6 +304,7 @@ export const dispatchLeadToAssignedAgent = async (lead, config, options = {}) =>
       lead.id,
     )}`,
     method: "POST",
+    timeout: config.agentCallTimeoutSeconds,
     statusCallback: `${config.appUrl}/api/cirugia360-speed/twilio/sales-status?leadId=${encodeURIComponent(
       lead.id,
     )}`,

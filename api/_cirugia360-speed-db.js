@@ -15,6 +15,29 @@ const ACTIVE_AGENT_STATUSES = [
   "connecting_customer",
   "customer_connected",
 ];
+const PENDING_AGENT_STATUSES = new Set(["dialing_agent", "waiting_agent_confirmation"]);
+const DEFAULT_PENDING_CALL_STALE_SECONDS = 2 * 60;
+const DEFAULT_ACTIVE_CONVERSATION_STALE_SECONDS = 3 * 60 * 60;
+
+const isFreshActiveLead = (
+  lead,
+  referenceTimeIso,
+  pendingCallStaleSeconds = DEFAULT_PENDING_CALL_STALE_SECONDS,
+  activeConversationStaleSeconds = DEFAULT_ACTIVE_CONVERSATION_STALE_SECONDS,
+) => {
+  const updatedAt = Date.parse(lead?.updated_at || lead?.created_at || "");
+
+  if (!Number.isFinite(updatedAt)) {
+    return false;
+  }
+
+  const referenceTime = Date.parse(referenceTimeIso);
+  const maxAgeSeconds = PENDING_AGENT_STATUSES.has(lead.status)
+    ? pendingCallStaleSeconds
+    : activeConversationStaleSeconds;
+
+  return Number.isFinite(referenceTime) && referenceTime - updatedAt <= maxAgeSeconds * 1000;
+};
 
 export const getSpeedAdminClient = () => {
   const supabaseUrl = normalizeText(process.env.SUPABASE_URL);
@@ -119,14 +142,16 @@ export const hasActiveLeadForAgent = async ({
   excludeLeadId = null,
   cooldownSeconds = 0,
   referenceTimeIso = new Date().toISOString(),
+  pendingCallStaleSeconds = DEFAULT_PENDING_CALL_STALE_SECONDS,
+  activeConversationStaleSeconds = DEFAULT_ACTIVE_CONVERSATION_STALE_SECONDS,
 }) => {
   const client = getSpeedAdminClient();
   let activeQuery = client
     .from(LEADS_TABLE)
-    .select("id")
+    .select("id, status, created_at, updated_at")
     .eq("assigned_agent_phone", agentPhone)
     .in("status", ACTIVE_AGENT_STATUSES)
-    .limit(1);
+    .limit(20);
 
   if (excludeLeadId) {
     activeQuery = activeQuery.neq("id", excludeLeadId);
@@ -135,7 +160,17 @@ export const hasActiveLeadForAgent = async ({
   const { data: activeRows, error: activeError } = await activeQuery;
   throwIfError(activeError, "No se pudo revisar si la asesora esta ocupada.");
 
-  if (Array.isArray(activeRows) && activeRows.length > 0) {
+  if (
+    Array.isArray(activeRows) &&
+    activeRows.some((lead) =>
+      isFreshActiveLead(
+        lead,
+        referenceTimeIso,
+        pendingCallStaleSeconds,
+        activeConversationStaleSeconds,
+      ),
+    )
+  ) {
     return true;
   }
 
