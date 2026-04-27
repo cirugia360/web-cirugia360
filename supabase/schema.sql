@@ -274,3 +274,147 @@ begin
   select * from claimed_rows;
 end
 $$;
+
+create or replace function public.c360_dashboard_role()
+returns text
+language sql
+stable
+as $$
+  select coalesce(
+    nullif(auth.jwt() -> 'app_metadata' ->> 'c360_role', ''),
+    nullif(auth.jwt() -> 'app_metadata' ->> 'dashboard_role', ''),
+    nullif(auth.jwt() -> 'user_metadata' ->> 'c360_role', ''),
+    nullif(auth.jwt() -> 'user_metadata' ->> 'dashboard_role', ''),
+    'agent'
+  );
+$$;
+
+create or replace function public.c360_dashboard_email()
+returns text
+language sql
+stable
+as $$
+  select lower(coalesce(auth.jwt() ->> 'email', ''));
+$$;
+
+alter table public.c360_speed_leads enable row level security;
+alter table public.c360_speed_lead_events enable row level security;
+alter table public.c360_speed_lead_notes enable row level security;
+alter table public.c360_speed_tracking_events enable row level security;
+alter table public.c360_speed_settings enable row level security;
+
+drop policy if exists "c360 dashboard admins can read leads" on public.c360_speed_leads;
+create policy "c360 dashboard admins can read leads"
+  on public.c360_speed_leads
+  for select
+  to authenticated
+  using (public.c360_dashboard_role() = 'admin');
+
+drop policy if exists "c360 dashboard agents can read own leads" on public.c360_speed_leads;
+create policy "c360 dashboard agents can read own leads"
+  on public.c360_speed_leads
+  for select
+  to authenticated
+  using (
+    public.c360_dashboard_role() = 'agent'
+    and lower(coalesce(assigned_agent_email, '')) = public.c360_dashboard_email()
+  );
+
+drop policy if exists "c360 dashboard admins can mutate leads" on public.c360_speed_leads;
+create policy "c360 dashboard admins can mutate leads"
+  on public.c360_speed_leads
+  for all
+  to authenticated
+  using (public.c360_dashboard_role() = 'admin')
+  with check (public.c360_dashboard_role() = 'admin');
+
+drop policy if exists "c360 dashboard agents can mutate own leads" on public.c360_speed_leads;
+create policy "c360 dashboard agents can mutate own leads"
+  on public.c360_speed_leads
+  for update
+  to authenticated
+  using (
+    public.c360_dashboard_role() = 'agent'
+    and lower(coalesce(assigned_agent_email, '')) = public.c360_dashboard_email()
+  )
+  with check (
+    public.c360_dashboard_role() = 'agent'
+    and lower(coalesce(assigned_agent_email, '')) = public.c360_dashboard_email()
+  );
+
+drop policy if exists "c360 dashboard admins can read settings" on public.c360_speed_settings;
+create policy "c360 dashboard admins can read settings"
+  on public.c360_speed_settings
+  for select
+  to authenticated
+  using (public.c360_dashboard_role() = 'admin');
+
+drop policy if exists "c360 dashboard admins can mutate settings" on public.c360_speed_settings;
+create policy "c360 dashboard admins can mutate settings"
+  on public.c360_speed_settings
+  for all
+  to authenticated
+  using (public.c360_dashboard_role() = 'admin')
+  with check (public.c360_dashboard_role() = 'admin');
+
+drop policy if exists "c360 dashboard users can read accessible notes" on public.c360_speed_lead_notes;
+create policy "c360 dashboard users can read accessible notes"
+  on public.c360_speed_lead_notes
+  for select
+  to authenticated
+  using (
+    exists (
+      select 1
+      from public.c360_speed_leads leads
+      where leads.id = c360_speed_lead_notes.lead_id
+        and (
+          public.c360_dashboard_role() = 'admin'
+          or lower(coalesce(leads.assigned_agent_email, '')) = public.c360_dashboard_email()
+        )
+    )
+  );
+
+drop policy if exists "c360 dashboard users can mutate accessible notes" on public.c360_speed_lead_notes;
+create policy "c360 dashboard users can mutate accessible notes"
+  on public.c360_speed_lead_notes
+  for all
+  to authenticated
+  using (
+    exists (
+      select 1
+      from public.c360_speed_leads leads
+      where leads.id = c360_speed_lead_notes.lead_id
+        and (
+          public.c360_dashboard_role() = 'admin'
+          or lower(coalesce(leads.assigned_agent_email, '')) = public.c360_dashboard_email()
+        )
+    )
+  )
+  with check (
+    exists (
+      select 1
+      from public.c360_speed_leads leads
+      where leads.id = c360_speed_lead_notes.lead_id
+        and (
+          public.c360_dashboard_role() = 'admin'
+          or lower(coalesce(leads.assigned_agent_email, '')) = public.c360_dashboard_email()
+        )
+    )
+  );
+
+drop policy if exists "c360 dashboard users can read accessible events" on public.c360_speed_lead_events;
+create policy "c360 dashboard users can read accessible events"
+  on public.c360_speed_lead_events
+  for select
+  to authenticated
+  using (
+    exists (
+      select 1
+      from public.c360_speed_leads leads
+      where leads.id = c360_speed_lead_events.lead_id
+        and (
+          public.c360_dashboard_role() = 'admin'
+          or lower(coalesce(leads.assigned_agent_email, '')) = public.c360_dashboard_email()
+        )
+    )
+  );

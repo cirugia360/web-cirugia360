@@ -1,4 +1,11 @@
-import { requireDashboardAuth } from "../_cirugia360-dashboard-auth.js";
+import {
+  getDashboardAuthAdminClient,
+  getDashboardUserContext,
+  canAccessLead,
+  requireDashboardAdmin,
+  requireDashboardAuth,
+  sendForbiddenLead,
+} from "../_cirugia360-dashboard-auth.js";
 import {
   addLeadNote,
   buildDashboardSnapshot,
@@ -12,7 +19,7 @@ import {
   getCirugia360SpeedConfig,
   getCirugia360SpeedConfigWithSettings,
 } from "../_cirugia360-speed-config.js";
-import { getSpeedLeadById } from "../_cirugia360-speed-db.js";
+import { getSpeedAdminClient, getSpeedLeadById } from "../_cirugia360-speed-db.js";
 import {
   buildSettingsFromConfig,
   loadSpeedRuntimeSettings,
@@ -38,7 +45,45 @@ const getClientIp = (request) =>
   normalizeText(getHeader(request, "x-forwarded-for")).split(",")[0]?.trim() ||
   normalizeText(request.socket?.remoteAddress);
 
-const handleGetSalesAgents = async (request, response) => {
+const assertLeadAccessByNoteId = async (noteId, user, response) => {
+  const client = getSpeedAdminClient();
+  const { data: note, error } = await client
+    .from("c360_speed_lead_notes")
+    .select("lead_id")
+    .eq("id", noteId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message || "No pudimos cargar la nota.");
+  }
+
+  if (!note) {
+    sendJson(response, 404, {
+      success: false,
+      error: "No encontramos esa nota.",
+    });
+    return false;
+  }
+
+  const lead = await getSpeedLeadById(note.lead_id);
+
+  if (!lead) {
+    sendJson(response, 404, {
+      success: false,
+      error: "No encontramos ese lead.",
+    });
+    return false;
+  }
+
+  if (!canAccessLead(user, lead)) {
+    sendForbiddenLead(response);
+    return false;
+  }
+
+  return true;
+};
+
+const handleGetSalesAgents = async (request, response, user) => {
   const baseConfig = getCirugia360SpeedConfig(request, {
     requireAgents: false,
     requireTwilio: false,
@@ -51,20 +96,40 @@ const handleGetSalesAgents = async (request, response) => {
       }
     : baseConfig;
 
+  const userContext = getDashboardUserContext(user);
+
+  const settingsPayload = buildSettingsFromConfig(mergedConfig);
+  const publicSettings =
+    userContext.role === "admin"
+      ? settingsPayload
+      : {
+          ...settingsPayload,
+          agents: settingsPayload.agents.filter(
+            (agent) => agent.email?.toLowerCase() === userContext.email,
+          ),
+        };
+
   return sendJson(response, 200, {
     success: true,
-    data: buildSettingsFromConfig(mergedConfig),
+    data: publicSettings,
   });
 };
 
 const handleSaveSalesAgents = async (request, response, user) => {
+  const adminContext = requireDashboardAdmin(user, response);
+
+  if (!adminContext) {
+    return;
+  }
+
   const baseConfig = getCirugia360SpeedConfig(request, {
     requireAgents: false,
     requireTwilio: false,
   });
   const body = await readJsonBody(request);
+  const settingsWithAccounts = await syncSalesAgentAccounts(body);
   const settings = await saveSpeedRuntimeSettings({
-    settings: body,
+    settings: settingsWithAccounts,
     defaultCountryDialCode: baseConfig.defaultCountryDialCode,
     updatedBy: user.email,
   });
@@ -76,6 +141,12 @@ const handleSaveSalesAgents = async (request, response, user) => {
 };
 
 const handleQueueControl = async (request, response, user) => {
+  const adminContext = requireDashboardAdmin(user, response);
+
+  if (!adminContext) {
+    return;
+  }
+
   const baseConfig = getCirugia360SpeedConfig(request, {
     requireAgents: false,
     requireTwilio: false,
@@ -108,6 +179,121 @@ const handleQueueControl = async (request, response, user) => {
   });
 };
 
+const listDashboardUsersByEmail = async (authAdmin) => {
+  const usersByEmail = new Map();
+  let page = 1;
+
+  while (page < 20) {
+    const { data, error } = await authAdmin.auth.admin.listUsers({ page, perPage: 100 });
+
+    if (error) {
+      throw new Error(error.message || "No pudimos cargar las cuentas del equipo.");
+    }
+
+    for (const user of data?.users || []) {
+      const email = normalizeText(user.email).toLowerCase();
+
+      if (email) {
+        usersByEmail.set(email, user);
+      }
+    }
+
+    if (!data?.users?.length || data.users.length < 100) {
+      break;
+    }
+
+    page += 1;
+  }
+
+  return usersByEmail;
+};
+
+const syncSalesAgentAccounts = async (settings) => {
+  const agents = Array.isArray(settings?.agents) ? settings.agents : [];
+  const agentsWithEmail = agents.filter((agent) => normalizeText(agent?.email));
+
+  if (!agentsWithEmail.length) {
+    return settings;
+  }
+
+  const authAdmin = getDashboardAuthAdminClient();
+  const usersByEmail = await listDashboardUsersByEmail(authAdmin);
+  const syncedAgents = [];
+
+  for (const agent of agents) {
+    const email = normalizeText(agent?.email).toLowerCase();
+    const password = normalizeText(agent?.password);
+    const accountActive = agent?.accountActive !== false;
+
+    if (!email) {
+      syncedAgents.push(agent);
+      continue;
+    }
+
+    const existingUser = usersByEmail.get(email);
+    let authUserId = existingUser?.id || null;
+
+    if (existingUser) {
+      const { data, error } = await authAdmin.auth.admin.updateUserById(existingUser.id, {
+        password: password || undefined,
+        ban_duration: accountActive ? "none" : "876000h",
+        user_metadata: {
+          ...(existingUser.user_metadata || {}),
+          name: normalizeText(agent?.name),
+          c360_role: "agent",
+        },
+        app_metadata: {
+          ...(existingUser.app_metadata || {}),
+          c360_role: "agent",
+        },
+      });
+
+      if (error) {
+        throw new Error(error.message || `No pudimos actualizar la cuenta de ${email}.`);
+      }
+
+      authUserId = data?.user?.id || existingUser.id;
+    } else {
+      if (!password) {
+        throw new Error(`Ingresa una contrasena inicial para crear la cuenta de ${email}.`);
+      }
+
+      const { data, error } = await authAdmin.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true,
+        ban_duration: accountActive ? "none" : "876000h",
+        user_metadata: {
+          name: normalizeText(agent?.name),
+          c360_role: "agent",
+        },
+        app_metadata: {
+          c360_role: "agent",
+        },
+      });
+
+      if (error) {
+        throw new Error(error.message || `No pudimos crear la cuenta de ${email}.`);
+      }
+
+      authUserId = data?.user?.id || null;
+    }
+
+    const { password: _password, ...agentWithoutPassword } = agent;
+    syncedAgents.push({
+      ...agentWithoutPassword,
+      email,
+      accountActive,
+      authUserId,
+    });
+  }
+
+  return {
+    ...settings,
+    agents: syncedAgents,
+  };
+};
+
 const handleLeadNote = async (request, response, user) => {
   const body = await readJsonBody(request);
   const noteId = Number(body.noteId || 0);
@@ -116,6 +302,10 @@ const handleLeadNote = async (request, response, user) => {
   const action = normalizeText(body.action).toLowerCase();
 
   if (request.method === "PATCH") {
+    if (noteId && !(await assertLeadAccessByNoteId(noteId, user, response))) {
+      return;
+    }
+
     if (action === "restore") {
       if (!noteId) {
         return sendJson(response, 400, {
@@ -176,6 +366,10 @@ const handleLeadNote = async (request, response, user) => {
       });
     }
 
+    if (!(await assertLeadAccessByNoteId(noteId, user, response))) {
+      return;
+    }
+
     const note = await deleteLeadNote({
       noteId,
       authorEmail: user.email,
@@ -201,6 +395,19 @@ const handleLeadNote = async (request, response, user) => {
     });
   }
 
+  const lead = await getSpeedLeadById(leadId);
+
+  if (!lead) {
+    return sendJson(response, 404, {
+      success: false,
+      error: "No encontramos ese lead.",
+    });
+  }
+
+  if (!canAccessLead(user, lead)) {
+    return sendForbiddenLead(response);
+  }
+
   const note = await addLeadNote({
     leadId,
     body: noteBody,
@@ -220,7 +427,7 @@ const handleLeadNote = async (request, response, user) => {
   });
 };
 
-const handleLeadCall = async (request, response) => {
+const handleLeadCall = async (request, response, user) => {
   const body = await readJsonBody(request);
   const leadId = normalizeText(body.leadId);
 
@@ -229,6 +436,19 @@ const handleLeadCall = async (request, response) => {
       success: false,
       error: "Selecciona un lead para llamar.",
     });
+  }
+
+  const lead = await getSpeedLeadById(leadId);
+
+  if (!lead) {
+    return sendJson(response, 404, {
+      success: false,
+      error: "No encontramos ese lead.",
+    });
+  }
+
+  if (!canAccessLead(user, lead)) {
+    return sendForbiddenLead(response);
   }
 
   const config = await getCirugia360SpeedConfigWithSettings(request, {
@@ -295,8 +515,8 @@ const handleTrack = async (request, response) => {
 };
 
 export default async function handler(request, response) {
-  if (!["GET", "POST"].includes(request.method || "")) {
-    return methodNotAllowed(response, ["GET", "POST"]);
+  if (!["GET", "POST", "PATCH", "DELETE"].includes(request.method || "")) {
+    return methodNotAllowed(response, ["GET", "POST", "PATCH", "DELETE"]);
   }
 
   const user = await requireDashboardAuth(request, response);
@@ -311,8 +531,12 @@ export default async function handler(request, response) {
     const resource = getFirstQueryValue(request.query?.resource);
 
     if (resource === "sales-agents") {
+      if (!["GET", "POST"].includes(request.method || "")) {
+        return methodNotAllowed(response, ["GET", "POST"]);
+      }
+
       return request.method === "GET"
-        ? handleGetSalesAgents(request, response)
+        ? handleGetSalesAgents(request, response, user)
         : handleSaveSalesAgents(request, response, user);
     }
 
@@ -337,7 +561,7 @@ export default async function handler(request, response) {
         return methodNotAllowed(response, ["POST"]);
       }
 
-      return handleLeadCall(request, response);
+      return handleLeadCall(request, response, user);
     }
 
     if (resource === "track") {
@@ -355,6 +579,7 @@ export default async function handler(request, response) {
     const data = await buildDashboardSnapshot({
       dateFrom: getFirstQueryValue(request.query?.dateFrom),
       dateTo: getFirstQueryValue(request.query?.dateTo),
+      viewer: getDashboardUserContext(user),
     });
 
     return sendJson(response, 200, {

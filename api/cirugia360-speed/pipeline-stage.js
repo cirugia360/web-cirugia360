@@ -1,10 +1,11 @@
 import { z, ZodError } from "zod";
-import { requireDashboardAuth } from "../_cirugia360-dashboard-auth.js";
+import { canAccessLead, requireDashboardAuth, sendForbiddenLead } from "../_cirugia360-dashboard-auth.js";
 import {
   updatePipelineOutcome,
   updatePipelineStage,
   updatePipelineValue,
 } from "../_cirugia360-dashboard-data.js";
+import { getSpeedLeadById } from "../_cirugia360-speed-db.js";
 import { methodNotAllowed, readJsonBody, sendJson } from "../_cirugia360-speed-shared.js";
 
 const stageSchema = z.object({
@@ -72,6 +73,19 @@ export default async function handler(request, response) {
 
   try {
     const payload = parsePayload(await readJsonBody(request));
+    const currentLead = await getSpeedLeadById(payload.leadId);
+
+    if (!currentLead) {
+      return sendJson(response, 404, {
+        success: false,
+        error: "No encontramos ese lead.",
+      });
+    }
+
+    if (!canAccessLead(user, currentLead)) {
+      return sendForbiddenLead(response);
+    }
+
     let lead = null;
 
     if (payload.action === "stage") {

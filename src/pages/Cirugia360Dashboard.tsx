@@ -80,6 +80,9 @@ const navItems = [
   { id: "team", label: "Equipo", icon: Settings },
 ];
 
+const roleVisibleNavItems = (role: "admin" | "agent") =>
+  role === "admin" ? navItems : navItems.filter((item) => ["pipeline", "leads"].includes(item.id));
+
 const periodOptions: Array<{ id: DashboardPeriod; label: string }> = [
   { id: "today", label: "Hoy" },
   { id: "7d", label: "7d" },
@@ -2227,7 +2230,11 @@ const TeamSettings = ({
     setError("");
   };
 
-  const updateAgent = (index: number, key: "name" | "phone" | "email" | "active", value: string | boolean) => {
+  const updateAgent = (
+    index: number,
+    key: "name" | "phone" | "email" | "active" | "accountActive" | "password",
+    value: string | boolean,
+  ) => {
     setDraft((current) => ({
       ...current,
       agents: current.agents.map((agent, agentIndex) =>
@@ -2265,6 +2272,12 @@ const TeamSettings = ({
 
     if (invalidEmailAgent) {
       return "El email de cada asesora debe tener un formato valido.";
+    }
+
+    const missingEmailAgent = draft.agents.find((agent) => !agent.email?.trim());
+
+    if (missingEmailAgent) {
+      return "Cada asesora debe tener email para vincular su cuenta del dashboard.";
     }
 
     return "";
@@ -2438,7 +2451,7 @@ const TeamSettings = ({
 
       <div className="mt-5 space-y-3">
         {draft.agents.map((agent, index) => (
-          <div key={agent.id || index} className="grid gap-3 rounded-lg border border-slate-200 p-3 md:grid-cols-[1fr_1fr_1fr_auto_auto]">
+          <div key={agent.id || index} className="grid gap-3 rounded-lg border border-slate-200 p-3 md:grid-cols-[1fr_1fr_1fr_1fr_auto_auto_auto]">
             <input
               className="rounded-md border border-slate-200 px-3 py-2 text-sm"
               value={agent.name}
@@ -2457,6 +2470,14 @@ const TeamSettings = ({
               onChange={(event) => updateAgent(index, "email", event.target.value)}
               placeholder="email@clinica.cl"
             />
+            <input
+              className="rounded-md border border-slate-200 px-3 py-2 text-sm"
+              value={agent.password || ""}
+              onChange={(event) => updateAgent(index, "password", event.target.value)}
+              placeholder={agent.authUserId ? "Nueva contrasena" : "Contrasena inicial"}
+              type="password"
+              autoComplete="new-password"
+            />
             <label className="inline-flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
@@ -2464,6 +2485,14 @@ const TeamSettings = ({
                 onChange={(event) => updateAgent(index, "active", event.target.checked)}
               />
               Activa
+            </label>
+            <label className="inline-flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={agent.accountActive !== false}
+                onChange={(event) => updateAgent(index, "accountActive", event.target.checked)}
+              />
+              Cuenta
             </label>
             <button
               type="button"
@@ -2491,6 +2520,7 @@ const TeamSettings = ({
                   phone: "",
                   email: "",
                   active: true,
+                  accountActive: true,
                 },
               ],
             }))
@@ -2726,6 +2756,18 @@ const Cirugia360Dashboard = () => {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    if (!snapshot?.viewer?.role) {
+      return;
+    }
+
+    const allowedItems = roleVisibleNavItems(snapshot.viewer.role);
+
+    if (!allowedItems.some((item) => item.id === activeView)) {
+      setActiveView(allowedItems[0]?.id || "pipeline");
+    }
+  }, [activeView, snapshot?.viewer?.role]);
 
   useEffect(() => {
     if (!isTeamSettingsDirty) {
@@ -3503,8 +3545,13 @@ const Cirugia360Dashboard = () => {
 
   const leads = snapshot?.leads || [];
   const stages = snapshot?.pipelineStages || [];
-  const activeNavItem = navItems.find((item) => item.id === activeView);
+  const viewerRole = snapshot?.viewer?.role || "admin";
+  const visibleNavItems = roleVisibleNavItems(viewerRole);
+  const activeNavItem = visibleNavItems.find((item) => item.id === activeView) || visibleNavItems[0];
   const currentUserEmail = session.user.email?.toLowerCase() || null;
+  const currentAgent = settings?.agents.find(
+    (agent) => agent.email?.toLowerCase() === currentUserEmail,
+  );
 
   return (
     <main className="grid min-h-screen grid-rows-[auto_1fr] bg-dashboard-page text-dashboard-ink lg:pl-[220px]">
@@ -3516,7 +3563,7 @@ const Cirugia360Dashboard = () => {
           </p>
         </div>
         <nav aria-label="Secciones del dashboard" className="flex-1 space-y-0.5 p-2.5">
-          {navItems.map((item) => {
+          {visibleNavItems.map((item) => {
             const Icon = item.icon;
             const active = activeView === item.id;
 
@@ -3554,6 +3601,17 @@ const Cirugia360Dashboard = () => {
             </p>
           </div>
           <div className="ml-auto flex shrink-0 flex-wrap items-center gap-2">
+            {viewerRole === "agent" && currentAgent ? (
+              <span
+                className={`inline-flex items-center rounded-full px-3 py-1.5 text-xs font-bold ${
+                  currentAgent?.active !== false
+                    ? "bg-emerald-50 text-emerald-700"
+                    : "bg-slate-100 text-slate-600"
+                }`}
+              >
+                {currentAgent?.active !== false ? "Activa" : "Inactiva"}
+              </span>
+            ) : null}
             <button
               type="button"
               onClick={() => setIsCreateLeadOpen(true)}
@@ -3616,7 +3674,7 @@ const Cirugia360Dashboard = () => {
           aria-label="Secciones del dashboard"
           className="flex gap-1 overflow-x-auto border-t border-dashboard-line-soft bg-white px-4 py-2 lg:hidden"
         >
-          {navItems.map((item) => {
+          {visibleNavItems.map((item) => {
             const Icon = item.icon;
             const active = activeView === item.id;
 

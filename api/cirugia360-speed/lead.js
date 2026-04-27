@@ -1,5 +1,11 @@
 import { z, ZodError } from "zod";
-import { requireDashboardAuth } from "../_cirugia360-dashboard-auth.js";
+import {
+  canAccessLead,
+  getDashboardUserContext,
+  requireDashboardAdmin,
+  requireDashboardAuth,
+  sendForbiddenLead,
+} from "../_cirugia360-dashboard-auth.js";
 import { toPublicLead } from "../_cirugia360-dashboard-data.js";
 import { getCirugia360SpeedConfigWithSettings } from "../_cirugia360-speed-config.js";
 import { getSpeedLeadById, insertSpeedLead, insertSpeedLeadEvent, updateSpeedLead } from "../_cirugia360-speed-db.js";
@@ -67,6 +73,10 @@ export default async function handler(request, response) {
         });
       }
 
+      if (!canAccessLead(user, lead)) {
+        return sendForbiddenLead(response);
+      }
+
       const config = await getCirugia360SpeedConfigWithSettings(request, {
         requireAgents: false,
         requireTwilio: false,
@@ -75,6 +85,10 @@ export default async function handler(request, response) {
       const events = [];
 
       if (Object.prototype.hasOwnProperty.call(rawPayload, "assignedAgentId")) {
+        if (!requireDashboardAdmin(user, response)) {
+          return;
+        }
+
         const assignableAgents = config.dashboardSettings?.agents?.length
           ? config.dashboardSettings.agents
           : config.salesAgents || [];
@@ -165,11 +179,25 @@ export default async function handler(request, response) {
     }
 
     const payload = createLeadSchema.parse(await readJsonBody(request));
+    const userContext = getDashboardUserContext(user);
     const config = await getCirugia360SpeedConfigWithSettings(request, {
       requireAgents: false,
       requireTwilio: false,
     });
-    const assignedAgent = findAssignedAgent(config.salesAgents || [], payload.assignedAgentId);
+    const assignableAgents = config.dashboardSettings?.agents?.length
+      ? config.dashboardSettings.agents
+      : config.salesAgents || [];
+    const assignedAgent =
+      userContext.role === "admin"
+        ? findAssignedAgent(assignableAgents, payload.assignedAgentId)
+        : assignableAgents.find((agent) => agent.email?.toLowerCase() === userContext.email) || null;
+
+    if (userContext.role !== "admin" && !assignedAgent) {
+      return sendJson(response, 403, {
+        success: false,
+        error: "Tu cuenta no esta asociada a una asesora activa del dashboard.",
+      });
+    }
     const procedureInterest = normalizeText(payload.procedureInterest) || "Evaluacion";
     const fullName = normalizeText(payload.fullName);
     const row = {

@@ -59,10 +59,17 @@ export type AgentSettings = {
     phone: string;
     email?: string | null;
     active?: boolean;
+    accountActive?: boolean;
+    authUserId?: string | null;
+    password?: string;
   }>;
 };
 
 export type DashboardSnapshot = {
+  viewer?: {
+    role: "admin" | "agent";
+    email: string | null;
+  };
   dateRange?: {
     dateFrom: string | null;
     dateTo: string | null;

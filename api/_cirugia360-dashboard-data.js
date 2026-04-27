@@ -289,6 +289,8 @@ const buildAgentPerformance = (leads) => {
 export const buildDashboardSnapshot = async (options = {}) => {
   const client = getSpeedAdminClient();
   const dateRange = getDateRange(options);
+  const viewerRole = options.viewer?.role === "admin" ? "admin" : "agent";
+  const viewerEmail = normalizeEmail(options.viewer?.email);
   let query = client
     .from(LEADS_TABLE)
     .select("*")
@@ -303,6 +305,10 @@ export const buildDashboardSnapshot = async (options = {}) => {
     query = query.lte("created_at", dateRange.dateTo);
   }
 
+  if (viewerRole !== "admin") {
+    query = query.eq("assigned_agent_email", viewerEmail || "__no_agent_email__");
+  }
+
   const { data: leads, error } = await query;
 
   if (error) {
@@ -314,6 +320,10 @@ export const buildDashboardSnapshot = async (options = {}) => {
   const publicLeads = (leads || []).map((lead) => toPublicLead(lead, notesByLead.get(lead.id) || []));
 
   return {
+    viewer: {
+      role: viewerRole,
+      email: viewerEmail || null,
+    },
     dateRange,
     generatedAt: new Date().toISOString(),
     pipelineStages: PIPELINE_STAGES,

@@ -23,6 +23,8 @@ const normalizeAgent = (agent, index, defaultCountryDialCode) => {
     phone,
     email,
     active: agent?.active !== false,
+    accountActive: agent?.accountActive !== false,
+    authUserId: normalizeText(agent?.authUserId) || null,
   };
 };
 
@@ -123,12 +125,14 @@ export const mergeRuntimeSettingsIntoConfig = async (config, options = {}) => {
   // Keep ALL agents (active and inactive) in the merged list. Inactive agents
   // carry `active: false` so the workflow can recognise them without losing
   // the historical assignment on each lead.
-  const settingsAgents = (settings?.agents || []).map(({ id, name, phone, email, active }) => ({
+  const settingsAgents = (settings?.agents || []).map(({ id, name, phone, email, active, accountActive, authUserId }) => ({
     id,
     name,
     phone,
     email,
     active: active !== false,
+    accountActive: accountActive !== false,
+    authUserId: authUserId || null,
   }));
   const mergedAgents = settingsAgents.length
     ? settingsAgents
