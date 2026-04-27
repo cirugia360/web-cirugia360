@@ -2,6 +2,7 @@ import { getCirugia360SpeedConfigWithSettings } from "../../_cirugia360-speed-co
 import {
   getFirstQueryValue,
   methodNotAllowed,
+  normalizeText,
   readFormBody,
   sendJson,
 } from "../../_cirugia360-speed-shared.js";
@@ -20,6 +21,15 @@ import {
 import { tryNextAgent } from "../../_cirugia360-speed-workflow.js";
 
 const FAILURE_STATUSES = new Set(["busy", "failed", "no-answer", "canceled"]);
+const AGENT_ANSWERED_STATUSES = new Set(["answered", "in-progress", "prompting", "accepted"]);
+
+const getTwilioErrorDetail = (form) =>
+  [
+    form.ErrorCode ? `Twilio ${normalizeText(form.ErrorCode)}` : null,
+    normalizeText(form.ErrorMessage),
+  ]
+    .filter(Boolean)
+    .join(": ");
 
 const getLeadFromRequest = async (request, callSid) => {
   const leadId = getFirstQueryValue(request.query?.leadId);
@@ -35,19 +45,40 @@ const getLeadFromRequest = async (request, callSid) => {
   return null;
 };
 
-const getFailureMessage = (callStatus) => {
+const getFailureMessage = (callStatus, form = {}) => {
+  const errorDetail = getTwilioErrorDetail(form);
+  const suffix = errorDetail ? ` ${errorDetail}.` : "";
+
   switch (callStatus) {
     case "busy":
-      return "La llamada a la asesora devolvio ocupado.";
+      return `La llamada a la asesora devolvio ocupado.${suffix}`;
     case "failed":
-      return "No pudimos completar la llamada saliente a la asesora.";
+      return `No pudimos completar la llamada saliente a la asesora.${suffix}`;
     case "no-answer":
-      return "La asesora no contesto la llamada.";
+      return `La asesora no contesto la llamada.${suffix}`;
     case "canceled":
-      return "La llamada a la asesora fue cancelada.";
+      return `La llamada a la asesora fue cancelada.${suffix}`;
     default:
-      return `La llamada a la asesora termino en estado ${callStatus}.`;
+      return `La llamada a la asesora termino en estado ${callStatus}.${suffix}`;
   }
+};
+
+export const didSalesCallReachAgent = (lead) =>
+  AGENT_ANSWERED_STATUSES.has(normalizeText(lead?.sales_call_status));
+
+export const shouldAutoDeactivateAgentForSalesStatus = (lead, callStatus) => {
+  const normalizedStatus = normalizeText(callStatus);
+  const salesCallReachedAgent = didSalesCallReachAgent(lead);
+
+  if (normalizedStatus === "completed") {
+    return ["prompting", "accepted"].includes(normalizeText(lead?.sales_call_status));
+  }
+
+  if (["busy", "failed", "no-answer", "canceled"].includes(normalizedStatus)) {
+    return salesCallReachedAgent;
+  }
+
+  return false;
 };
 
 const getCompletedFallbackReason = (lead) => {
@@ -130,6 +161,10 @@ export default async function handler(request, response) {
     await insertSpeedLeadEvent(lead.id, "sales_call.status", {
       callSid,
       callStatus,
+      from: normalizeText(form.From) || null,
+      to: normalizeText(form.To) || null,
+      errorCode: normalizeText(form.ErrorCode) || null,
+      errorMessage: normalizeText(form.ErrorMessage) || null,
     });
 
     if (["initiated", "ringing"].includes(callStatus)) {
@@ -155,7 +190,7 @@ export default async function handler(request, response) {
     if (callStatus === "completed") {
       const fallbackReason = getCompletedFallbackReason(lead);
 
-      if (fallbackReason) {
+      if (fallbackReason && shouldAutoDeactivateAgentForSalesStatus(lead, callStatus)) {
         await deactivateAssignedAgent(lead, config, fallbackReason);
       }
 
@@ -182,12 +217,15 @@ export default async function handler(request, response) {
     }
 
     if (FAILURE_STATUSES.has(callStatus)) {
-      const failureMessage = getFailureMessage(callStatus);
-      await deactivateAssignedAgent(lead, config, failureMessage);
+      const failureMessage = getFailureMessage(callStatus, form);
+
+      if (shouldAutoDeactivateAgentForSalesStatus(lead, callStatus)) {
+        await deactivateAssignedAgent(lead, config, failureMessage);
+      }
     }
 
     if (FAILURE_STATUSES.has(callStatus) && canRetryAgent(lead)) {
-      const failureMessage = getFailureMessage(callStatus);
+      const failureMessage = getFailureMessage(callStatus, form);
       const retryResult = await tryNextAgent(lead, config, failureMessage);
 
       return sendJson(response, 200, {
@@ -202,7 +240,7 @@ export default async function handler(request, response) {
       await updateSpeedLead(lead.id, {
         status: "agent_unreachable",
         sales_call_status: callStatus,
-        last_error: getFailureMessage(callStatus),
+        last_error: getFailureMessage(callStatus, form),
       });
 
       return sendJson(response, 200, { success: true });
