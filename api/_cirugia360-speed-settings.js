@@ -171,11 +171,9 @@ export const mergeRuntimeSettingsIntoConfig = async (config, options = {}) => {
   const mergedAgents = settingsAgents.length
     ? settingsAgents
     : config.salesAgents.map((agent) => ({ ...agent, active: agent.active !== false }));
-  const activeMergedAgents = mergedAgents.filter((agent) => agent.active !== false);
-
-  if (requireAgents && activeMergedAgents.length === 0) {
+  if (requireAgents && mergedAgents.length === 0) {
     throw new Error(
-      "Define al menos una asesora activa en el dashboard o en CIRUGIA360_STL_AGENTS_JSON antes de iniciar llamadas.",
+      "Define al menos una asesora en el dashboard o en CIRUGIA360_STL_AGENTS_JSON antes de iniciar llamadas.",
     );
   }
 
