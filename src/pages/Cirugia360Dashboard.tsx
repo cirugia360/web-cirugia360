@@ -432,6 +432,29 @@ const formatHoursMinutes = (seconds: number | null | undefined) => {
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")} horas`;
 };
 
+const formatElapsed = (value: string | null | undefined) => {
+  if (!value) {
+    return "Sin dato";
+  }
+
+  const elapsedMs = Date.now() - Date.parse(value);
+
+  if (!Number.isFinite(elapsedMs) || elapsedMs < 0) {
+    return "Recién";
+  }
+
+  const totalMinutes = Math.max(0, Math.floor(elapsedMs / 60000));
+
+  if (totalMinutes < 60) {
+    return `${totalMinutes} min`;
+  }
+
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+
+  return `${hours}h ${String(minutes).padStart(2, "0")}m`;
+};
+
 const leadMatchesSearch = (lead: DashboardLead, search: string) => {
   const normalizedSearch = search.trim().toLowerCase();
 
@@ -2187,12 +2210,14 @@ const CreateLeadModal = ({
 const TeamSettings = ({
   settings,
   agentPerformance,
+  agentStatuses,
   onRefresh,
   onSessionExpired,
   onDirtyChange,
 }: {
   settings: AgentSettings | null;
   agentPerformance: DashboardSnapshot["agentPerformance"];
+  agentStatuses: DashboardSnapshot["agentStatuses"];
   onRefresh: (options?: RefreshOptions) => void;
   onSessionExpired: () => Promise<void>;
   onDirtyChange: (hasUnsavedChanges: boolean) => void;
@@ -2598,6 +2623,44 @@ const TeamSettings = ({
 
       <section className="mt-6 border-t border-slate-200 pt-5">
         <div className="mb-3">
+          <h3 className="text-base font-semibold">Estado en vivo</h3>
+          <p className="text-sm text-slate-500">Disponibilidad actual segun prioridad.</p>
+        </div>
+        <div className="grid gap-3 md:grid-cols-3">
+          {(agentStatuses || []).map((agent) => {
+            const statusCopy =
+              agent.status === "busy"
+                ? { label: "Activa, en llamada", dot: "bg-amber-400", card: "border-amber-200 bg-amber-50" }
+                : agent.status === "free"
+                  ? { label: "Activa y libre", dot: "bg-emerald-500", card: "border-emerald-200 bg-emerald-50" }
+                  : { label: "Inactiva", dot: "bg-slate-500", card: "border-slate-200 bg-slate-50" };
+
+            return (
+              <article key={agent.id} className={`rounded-lg border p-3 ${statusCopy.card}`}>
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-bold text-slate-900">{agent.priority}. {agent.name}</p>
+                    {agent.email ? <p className="text-xs text-slate-500">{agent.email}</p> : null}
+                  </div>
+                  <span className={`h-3 w-3 rounded-full ${statusCopy.dot}`} />
+                </div>
+                <p className="mt-2 text-sm font-semibold text-slate-700">{statusCopy.label}</p>
+                {agent.activeLeadName ? (
+                  <p className="mt-1 text-xs text-slate-600">Atendiendo a {agent.activeLeadName}</p>
+                ) : null}
+                {agent.lastAutoDeactivation?.reason ? (
+                  <p className="mt-2 text-xs leading-5 text-amber-800">
+                    Última auto-desactivación: {formatDate(agent.lastAutoDeactivation.at)} - {agent.lastAutoDeactivation.reason}
+                  </p>
+                ) : null}
+              </article>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="mt-6 border-t border-slate-200 pt-5">
+        <div className="mb-3">
           <h3 className="text-base font-semibold">Rendimiento</h3>
           <p className="text-sm text-slate-500">Metricas por asesora en el periodo activo.</p>
         </div>
@@ -2885,7 +2948,7 @@ const Cirugia360Dashboard = () => {
       .on(
         "postgres_changes",
         {
-          event: "INSERT",
+          event: "*",
           schema: "public",
           table: "c360_speed_leads",
         },
@@ -3842,6 +3905,48 @@ const Cirugia360Dashboard = () => {
                   </div>
                 </section>
                 <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                  <div className="mb-4 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-5 w-5 text-teal-700" />
+                      <h2 className="font-semibold">Cola en vivo</h2>
+                    </div>
+                    <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-700">
+                      {snapshot.queue?.length || 0} esperando
+                    </span>
+                  </div>
+                  <div className="space-y-2">
+                    {(snapshot.queue || []).slice(0, 8).map((queuedLead) => (
+                      <button
+                        key={queuedLead.id}
+                        type="button"
+                        className="w-full rounded-lg border border-slate-100 bg-slate-50 p-3 text-left transition hover:border-dashboard-primary hover:bg-white"
+                        onClick={() => {
+                          const lead = leads.find((currentLead) => currentLead.id === queuedLead.id);
+
+                          if (lead) {
+                            openLeadDetail(lead);
+                          }
+                        }}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="truncate text-sm font-bold text-slate-900">{queuedLead.fullName}</p>
+                          <span className="shrink-0 text-xs font-semibold text-slate-500">
+                            {formatElapsed(queuedLead.waitingSince)}
+                          </span>
+                        </div>
+                        <p className="mt-1 truncate text-xs text-slate-600">
+                          Esperando a {queuedLead.assignedAgentName || "vendedora disponible"}
+                        </p>
+                      </button>
+                    ))}
+                  </div>
+                  {snapshot.queue?.length ? null : (
+                    <p className="rounded-md border border-dashed border-slate-200 p-4 text-sm text-slate-500">
+                      No hay leads esperando.
+                    </p>
+                  )}
+                </section>
+                <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                   <div className="mb-4 flex items-center gap-2">
                     <Clock className="h-5 w-5 text-teal-700" />
                     <h2 className="font-semibold">Llamadas</h2>
@@ -3888,6 +3993,7 @@ const Cirugia360Dashboard = () => {
             <TeamSettings
               settings={settings}
               agentPerformance={snapshot?.agentPerformance || []}
+              agentStatuses={snapshot?.agentStatuses || []}
               onRefresh={refresh}
               onSessionExpired={expireDashboardSession}
               onDirtyChange={handleTeamDirtyChange}

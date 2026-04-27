@@ -102,6 +102,32 @@ export type DashboardSnapshot = {
     activityAverageSeconds?: number;
   }>;
   agentActivityAverages?: Record<string, number>;
+  agentStatuses?: Array<{
+    id: string;
+    name: string;
+    email: string | null;
+    priority: number;
+    status: "free" | "busy" | "inactive";
+    activeLeadId: string | null;
+    activeLeadName: string | null;
+    lastAutoDeactivation?: {
+      at: string | null;
+      reason: string | null;
+      leadId: string | null;
+      leadName: string | null;
+    } | null;
+  }>;
+  queue?: Array<{
+    id: string;
+    createdAt: string;
+    fullName: string;
+    procedureInterest: string | null;
+    assignedAgentName: string | null;
+    assignedAgentEmail: string | null;
+    waitingSince: string;
+    dispatchScheduledAt: string | null;
+    status: string;
+  }>;
   leads: DashboardLead[];
 };
 

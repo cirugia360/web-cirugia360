@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { getSpeedAdminClient, getSpeedLeadById, insertSpeedLeadEvent, updateSpeedLead } from "./_cirugia360-speed-db.js";
+import { loadSpeedRuntimeSettings } from "./_cirugia360-speed-settings.js";
 import { normalizeEmail, normalizeText } from "./_cirugia360-speed-shared.js";
 
 const LEADS_TABLE = "c360_speed_leads";
@@ -7,6 +8,12 @@ const EVENTS_TABLE = "c360_speed_lead_events";
 const NOTES_TABLE = "c360_speed_lead_notes";
 const TRACKING_TABLE = "c360_speed_tracking_events";
 const AGENT_ACTIVITY_TABLE = "c360_speed_agent_activity";
+const ACTIVE_AGENT_STATUSES = new Set([
+  "dialing_agent",
+  "waiting_agent_confirmation",
+  "connecting_customer",
+  "customer_connected",
+]);
 
 export const PIPELINE_STAGES = [
   { id: "nuevo", label: "Nuevo" },
@@ -287,6 +294,44 @@ const buildAgentPerformance = (leads) => {
     });
 };
 
+const buildAgentStatuses = (agents = [], leads = []) =>
+  agents.map((agent, index) => {
+    const activeLead = leads.find((lead) => {
+      const sameAgent =
+        normalizeEmail(lead.assigned_agent_email) === normalizeEmail(agent.email) ||
+        (agent.phone && lead.assigned_agent_phone === agent.phone);
+
+      return sameAgent && ACTIVE_AGENT_STATUSES.has(lead.status);
+    });
+
+    return {
+      id: agent.id,
+      name: agent.name,
+      email: agent.email || null,
+      priority: index + 1,
+      status: agent.active === false ? "inactive" : activeLead ? "busy" : "free",
+      activeLeadId: activeLead?.id || null,
+      activeLeadName: activeLead?.full_name || null,
+      lastAutoDeactivation: agent.lastAutoDeactivation || null,
+    };
+  });
+
+const buildQueueSnapshot = (leads = []) =>
+  leads
+    .filter((lead) => ["scheduled", "dispatching"].includes(lead.status))
+    .sort((firstLead, secondLead) => Date.parse(secondLead.created_at) - Date.parse(firstLead.created_at))
+    .map((lead) => ({
+      id: lead.id,
+      createdAt: lead.created_at,
+      fullName: lead.full_name,
+      procedureInterest: lead.procedure_interest,
+      assignedAgentName: lead.assigned_agent_name,
+      assignedAgentEmail: lead.assigned_agent_email,
+      waitingSince: lead.created_at,
+      dispatchScheduledAt: lead.dispatch_scheduled_at,
+      status: lead.status,
+    }));
+
 const getAgentActivityAverages = async () => {
   const client = getSpeedAdminClient();
   const today = new Date();
@@ -393,6 +438,7 @@ export const buildDashboardSnapshot = async (options = {}) => {
   const leadIds = (leads || []).map((lead) => lead.id);
   const notesByLead = await getLeadNotes(leadIds);
   const activityAveragesByEmail = await getAgentActivityAverages();
+  const settings = await loadSpeedRuntimeSettings().catch(() => null);
   const publicLeads = (leads || []).map((lead) => toPublicLead(lead, notesByLead.get(lead.id) || []));
   const agentPerformance = buildAgentPerformance(leads || []).map((agent) => ({
     ...agent,
@@ -412,6 +458,8 @@ export const buildDashboardSnapshot = async (options = {}) => {
     callMetrics: buildCallMetrics(leads || []),
     agentPerformance,
     agentActivityAverages: Object.fromEntries(activityAveragesByEmail.entries()),
+    agentStatuses: buildAgentStatuses(settings?.agents || [], leads || []),
+    queue: viewerRole === "admin" ? buildQueueSnapshot(leads || []) : [],
     leads: publicLeads,
   };
 };
