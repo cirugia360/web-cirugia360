@@ -14,9 +14,7 @@ import {
   LogOut,
   MoreHorizontal,
   MessageCircle,
-  Pause,
   Phone,
-  Play,
   Plus,
   RefreshCcw,
   Save,
@@ -2426,30 +2424,9 @@ const TeamSettings = ({
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold">Equipo y cola</h2>
-          <p className="text-sm text-slate-500">Asesoras, zona horaria y estado de la cola</p>
+          <h2 className="text-lg font-semibold">Equipo</h2>
+          <p className="text-sm text-slate-500">Asesoras, prioridad, cuentas y zona horaria</p>
         </div>
-        <button
-          type="button"
-          onClick={toggleQueue}
-          disabled={isTogglingQueue}
-          className="inline-flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {isTogglingQueue ? (
-            <RefreshCcw className="h-4 w-4 animate-spin" />
-          ) : draft.queuePaused ? (
-            <Play className="h-4 w-4" />
-          ) : (
-            <Pause className="h-4 w-4" />
-          )}
-          {isTogglingQueue
-            ? draft.queuePaused
-              ? "Reanudando..."
-              : "Pausando..."
-            : draft.queuePaused
-              ? "Reanudar cola"
-              : "Pausar cola"}
-        </button>
       </div>
 
       <label className="mt-5 block max-w-sm text-sm font-medium">

@@ -201,6 +201,10 @@ create index if not exists c360_speed_leads_status_idx
 create index if not exists c360_speed_leads_dispatch_scheduled_at_idx
   on public.c360_speed_leads (dispatch_scheduled_at asc);
 
+create index if not exists c360_speed_leads_queue_lifo_idx
+  on public.c360_speed_leads (created_at desc, dispatch_scheduled_at asc)
+  where status = 'scheduled';
+
 create index if not exists c360_speed_leads_payment_reference_idx
   on public.c360_speed_leads (payment_reference);
 
@@ -258,7 +262,7 @@ begin
       and leads.dispatch_scheduled_at is not null
       and leads.dispatch_scheduled_at <= p_now
       and coalesce(leads.payment_status, 'not_required') <> 'confirmed'
-    order by leads.dispatch_scheduled_at asc, leads.created_at asc
+    order by leads.created_at desc, leads.dispatch_scheduled_at asc
     limit greatest(coalesce(p_limit, 20), 1)
     for update skip locked
   ),
