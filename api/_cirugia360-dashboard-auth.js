@@ -63,7 +63,7 @@ export const requireDashboardAuth = async (request, response) => {
   return data.user;
 };
 
-const getAdminEmails = () =>
+export const getDashboardAdminEmails = () =>
   normalizeText(process.env.CIRUGIA360_DASHBOARD_ADMIN_EMAILS || process.env.DASHBOARD_ADMIN_EMAILS)
     .split(",")
     .map((email) => normalizeEmail(email))
@@ -78,7 +78,7 @@ export const getDashboardUserRole = (user) => {
       user?.user_metadata?.dashboard_role,
   ).toLowerCase();
 
-  if (metadataRole === "admin" || getAdminEmails().includes(email)) {
+  if (metadataRole === "admin" || getDashboardAdminEmails().includes(email)) {
     return "admin";
   }
 

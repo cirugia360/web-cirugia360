@@ -1,6 +1,8 @@
 import {
   getDashboardAuthAdminClient,
+  getDashboardAdminEmails,
   getDashboardUserContext,
+  getDashboardUserRole,
   canAccessLead,
   requireDashboardAdmin,
   requireDashboardAuth,
@@ -99,9 +101,16 @@ const handleGetSalesAgents = async (request, response, user) => {
   const userContext = getDashboardUserContext(user);
 
   const settingsPayload = buildSettingsFromConfig(mergedConfig);
+  const accounts =
+    userContext.role === "admin"
+      ? await listDashboardAccounts(getDashboardAuthAdminClient(), settingsPayload.agents)
+      : [];
   const publicSettings =
     userContext.role === "admin"
-      ? settingsPayload
+      ? {
+          ...settingsPayload,
+          accounts,
+        }
       : {
           ...settingsPayload,
           agents: settingsPayload.agents.filter(
@@ -127,7 +136,10 @@ const handleSaveSalesAgents = async (request, response, user) => {
     requireTwilio: false,
   });
   const body = await readJsonBody(request);
-  const settingsWithAccounts = await syncSalesAgentAccounts(body);
+  const previousSettings = await loadSpeedRuntimeSettings(baseConfig.defaultCountryDialCode).catch(
+    () => buildSettingsFromConfig(baseConfig),
+  );
+  const settingsWithAccounts = await syncSalesAgentAccounts(body, previousSettings);
   const settings = await saveSpeedRuntimeSettings({
     settings: settingsWithAccounts,
     defaultCountryDialCode: baseConfig.defaultCountryDialCode,
@@ -136,7 +148,10 @@ const handleSaveSalesAgents = async (request, response, user) => {
 
   return sendJson(response, 200, {
     success: true,
-    data: settings,
+    data: {
+      ...settings,
+      accounts: await listDashboardAccounts(getDashboardAuthAdminClient(), settings.agents),
+    },
   });
 };
 
@@ -208,17 +223,87 @@ const listDashboardUsersByEmail = async (authAdmin) => {
   return usersByEmail;
 };
 
-const syncSalesAgentAccounts = async (settings) => {
-  const agents = Array.isArray(settings?.agents) ? settings.agents : [];
-  const agentsWithEmail = agents.filter((agent) => normalizeText(agent?.email));
-
-  if (!agentsWithEmail.length) {
-    return settings;
+const getUserAccountActive = (user) => {
+  if (!user) {
+    return false;
   }
 
+  if (user.banned_until) {
+    const bannedUntilMs = Date.parse(user.banned_until);
+
+    if (!Number.isNaN(bannedUntilMs) && bannedUntilMs > Date.now()) {
+      return false;
+    }
+  }
+
+  return true;
+};
+
+const toTeamAccount = (user, agents = []) => {
+  const email = normalizeText(user?.email).toLowerCase();
+  const linkedAgent = agents.find((agent) => normalizeText(agent.email).toLowerCase() === email) || null;
+
+  return {
+    id: user.id,
+    email,
+    name: normalizeText(user.user_metadata?.name) || linkedAgent?.name || null,
+    role: getDashboardUserRole(user),
+    accountActive: getUserAccountActive(user),
+    linkedAgentId: linkedAgent?.id || null,
+  };
+};
+
+const listDashboardAccounts = async (authAdmin, agents = []) => {
+  const usersByEmail = await listDashboardUsersByEmail(authAdmin);
+  const adminEmails = new Set(getDashboardAdminEmails());
+  const agentEmails = new Set((agents || []).map((agent) => normalizeText(agent.email).toLowerCase()).filter(Boolean));
+
+  return Array.from(usersByEmail.values())
+    .filter((user) => {
+      const email = normalizeText(user.email).toLowerCase();
+      const role = getDashboardUserRole(user);
+
+      return role === "admin" || adminEmails.has(email) || agentEmails.has(email);
+    })
+    .map((user) => toTeamAccount(user, agents))
+    .sort((firstAccount, secondAccount) => {
+      if (firstAccount.role !== secondAccount.role) {
+        return firstAccount.role === "admin" ? -1 : 1;
+      }
+
+      return firstAccount.email.localeCompare(secondAccount.email, "es");
+    });
+};
+
+const syncSalesAgentAccounts = async (settings, previousSettings = {}) => {
+  const agents = Array.isArray(settings?.agents) ? settings.agents : [];
+  const agentsWithEmail = agents.filter((agent) => normalizeText(agent?.email));
   const authAdmin = getDashboardAuthAdminClient();
   const usersByEmail = await listDashboardUsersByEmail(authAdmin);
+  const nextAgentEmails = new Set(agentsWithEmail.map((agent) => normalizeText(agent.email).toLowerCase()));
+  const removedAgents = (previousSettings?.agents || []).filter((agent) => {
+    const email = normalizeText(agent?.email).toLowerCase();
+
+    return email && !nextAgentEmails.has(email);
+  });
   const syncedAgents = [];
+
+  for (const removedAgent of removedAgents) {
+    const email = normalizeText(removedAgent.email).toLowerCase();
+    const existingUser = usersByEmail.get(email);
+
+    if (!existingUser || getDashboardUserRole(existingUser) === "admin") {
+      continue;
+    }
+
+    const { error } = await authAdmin.auth.admin.deleteUser(existingUser.id);
+
+    if (error) {
+      throw new Error(error.message || `No pudimos eliminar la cuenta de ${email}.`);
+    }
+
+    usersByEmail.delete(email);
+  }
 
   for (const agent of agents) {
     const email = normalizeText(agent?.email).toLowerCase();
