@@ -8,6 +8,18 @@ const ACTIVITY_TABLE = "c360_speed_agent_activity";
 const isPlainObject = (value) =>
   Boolean(value) && typeof value === "object" && !Array.isArray(value);
 
+const isOptionalActivityError = (error) => {
+  const code = normalizeText(error?.code);
+  const message = normalizeText(error?.message).toLowerCase();
+
+  return (
+    code === "42p01" ||
+    code === "pgrst205" ||
+    message.includes("c360_speed_agent_activity") ||
+    message.includes("schema cache")
+  );
+};
+
 const normalizeLastAutoDeactivation = (agent) => {
   if (agent?.active !== false || !isPlainObject(agent?.lastAutoDeactivation)) {
     return null;
@@ -217,6 +229,11 @@ export const insertAgentActivityChange = async ({
     .single();
 
   if (error) {
+    if (isOptionalActivityError(error)) {
+      console.warn("Cirugia360 agent activity log skipped:", error.message || error);
+      return null;
+    }
+
     throw new Error(error.message || "No se pudo registrar el cambio de actividad.");
   }
 

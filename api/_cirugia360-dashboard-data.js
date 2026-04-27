@@ -8,6 +8,18 @@ const EVENTS_TABLE = "c360_speed_lead_events";
 const NOTES_TABLE = "c360_speed_lead_notes";
 const TRACKING_TABLE = "c360_speed_tracking_events";
 const AGENT_ACTIVITY_TABLE = "c360_speed_agent_activity";
+
+const isOptionalActivityError = (error) => {
+  const code = normalizeText(error?.code);
+  const message = normalizeText(error?.message || error).toLowerCase();
+
+  return (
+    code === "42p01" ||
+    code === "pgrst205" ||
+    message.includes(AGENT_ACTIVITY_TABLE) ||
+    message.includes("schema cache")
+  );
+};
 const ACTIVE_AGENT_STATUSES = new Set([
   "dialing_agent",
   "waiting_agent_confirmation",
@@ -350,6 +362,11 @@ const getAgentActivityAverages = async () => {
     .order("created_at", { ascending: true });
 
   if (error) {
+    if (isOptionalActivityError(error)) {
+      console.warn("Cirugia360 dashboard activity averages skipped:", error.message || error);
+      return new Map();
+    }
+
     throw new Error(error.message || "No se pudo calcular la actividad de las vendedoras.");
   }
 

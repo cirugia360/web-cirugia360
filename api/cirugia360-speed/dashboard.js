@@ -48,6 +48,18 @@ const getClientIp = (request) =>
   normalizeText(getHeader(request, "x-forwarded-for")).split(",")[0]?.trim() ||
   normalizeText(request.socket?.remoteAddress);
 
+const isOptionalActivityError = (error) => {
+  const code = normalizeText(error?.code);
+  const message = normalizeText(error?.message || error).toLowerCase();
+
+  return (
+    code === "42p01" ||
+    code === "pgrst205" ||
+    message.includes("c360_speed_agent_activity") ||
+    message.includes("schema cache")
+  );
+};
+
 const getAgentActivityAverages = async () => {
   const client = getSpeedAdminClient();
   const today = new Date();
@@ -65,6 +77,11 @@ const getAgentActivityAverages = async () => {
     .order("created_at", { ascending: true });
 
   if (error) {
+    if (isOptionalActivityError(error)) {
+      console.warn("Cirugia360 agent activity averages skipped:", error.message || error);
+      return new Map();
+    }
+
     throw new Error(error.message || "No se pudo cargar la actividad del equipo.");
   }
 
@@ -307,7 +324,15 @@ const handleAgentStatus = async (request, response, user) => {
   });
 
   if (config.twilioConfigured) {
-    drainResult = await dispatchDueLeads(config, 50, { includeFuture: true });
+    try {
+      drainResult = await dispatchDueLeads(config, 50, { includeFuture: true });
+    } catch (error) {
+      console.warn("Cirugia360 queue drain after agent status skipped:", error?.message || error);
+      drainResult = {
+        success: false,
+        error: normalizeText(error?.message || error) || "No se pudo drenar la cola.",
+      };
+    }
   }
 
   return sendJson(response, 200, {
