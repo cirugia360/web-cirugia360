@@ -41,6 +41,40 @@ export const getDashboardErrorMessage = (error: unknown, fallback: string) => {
   return error instanceof Error ? error.message : fallback;
 };
 
+const stringifyApiError = (error: unknown, fallback: string) => {
+  if (!error) {
+    return fallback;
+  }
+
+  if (typeof error === "string") {
+    return error;
+  }
+
+  if (typeof error === "object") {
+    const record = error as Record<string, unknown>;
+
+    if (typeof record.message === "string") {
+      return record.message;
+    }
+
+    if (typeof record.error === "string") {
+      return record.error;
+    }
+
+    if (typeof record.details === "string") {
+      return record.details;
+    }
+
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return fallback;
+    }
+  }
+
+  return String(error);
+};
+
 export const apiRequest = async <T,>(path: string, options: RequestInit = {}, hasRetriedAuth = false): Promise<T> => {
   const token = await getDashboardAccessToken();
   const headers = new Headers(options.headers);
@@ -78,7 +112,10 @@ export const apiRequest = async <T,>(path: string, options: RequestInit = {}, ha
   }
 
   if (!response.ok || !payload?.success) {
-    throw new DashboardApiError(payload?.error || "No pudimos completar la accion.", response.status || 0);
+    throw new DashboardApiError(
+      stringifyApiError(payload?.error, "No pudimos completar la accion."),
+      response.status || 0,
+    );
   }
 
   return (payload.data ?? payload) as T;

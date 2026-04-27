@@ -303,9 +303,12 @@ const handleAgentStatus = async (request, response, user) => {
 
   const config = await getCirugia360SpeedConfigWithSettings(request, {
     requireAgents: false,
-    requireTwilio: true,
+    requireTwilio: false,
   });
-  drainResult = await dispatchDueLeads(config, 50, { includeFuture: true });
+
+  if (config.twilioConfigured) {
+    drainResult = await dispatchDueLeads(config, 50, { includeFuture: true });
+  }
 
   return sendJson(response, 200, {
     success: true,
@@ -747,9 +750,16 @@ export default async function handler(request, response) {
       data,
     });
   } catch (error) {
+    const errorMessage =
+      error instanceof Error
+        ? error.message
+        : typeof error === "object" && error && "message" in error
+          ? normalizeText(error.message)
+          : normalizeText(error);
+
     return sendJson(response, 500, {
       success: false,
-      error: error instanceof Error ? error.message : "No pudimos cargar el dashboard.",
+      error: errorMessage || "No pudimos cargar el dashboard.",
     });
   }
 }
