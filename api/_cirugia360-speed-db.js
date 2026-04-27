@@ -16,7 +16,7 @@ const ACTIVE_AGENT_STATUSES = [
   "customer_connected",
 ];
 const PENDING_AGENT_STATUSES = new Set(["dialing_agent", "waiting_agent_confirmation"]);
-const DEFAULT_PENDING_CALL_STALE_SECONDS = 2 * 60;
+const DEFAULT_PENDING_CALL_STALE_SECONDS = 45;
 const DEFAULT_ACTIVE_CONVERSATION_STALE_SECONDS = 3 * 60 * 60;
 
 const isFreshActiveLead = (
@@ -147,7 +147,7 @@ export const claimStaleAgentCallLeads = async ({
     .select("*")
     .in("status", Array.from(PENDING_AGENT_STATUSES))
     .lt("updated_at", staleBeforeIso)
-    .neq("payment_status", "confirmed")
+    .or("payment_status.is.null,payment_status.neq.confirmed")
     .order("created_at", { ascending: false })
     .limit(Math.max(Number(limit) || 20, 1));
 

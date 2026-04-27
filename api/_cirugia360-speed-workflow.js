@@ -851,7 +851,7 @@ export const dispatchDueLeads = async (config, limit = 20, options = {}) => {
   const claimedLeadIds = new Set();
   const leadsToProcess = [];
 
-  for (const lead of [...staleLeads, ...claimedLeads]) {
+  for (const lead of [...claimedLeads, ...staleLeads]) {
     if (!claimedLeadIds.has(lead.id)) {
       claimedLeadIds.add(lead.id);
       leadsToProcess.push(lead);
