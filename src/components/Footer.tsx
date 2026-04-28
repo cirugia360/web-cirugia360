@@ -73,18 +73,29 @@ const Footer = () => {
               {siteStrings.footer.columns.contact}
             </h4>
             <div className="flex flex-col gap-3">
+              <a
+                href={siteStrings.footer.contact.phone.href}
+                className="flex items-center gap-3 text-sm text-background/60 transition-colors hover:text-background"
+              >
+                <Phone size={14} /> {siteStrings.footer.contact.phone.label}
+              </a>
+              <a
+                href={siteStrings.footer.contact.email.href}
+                className="flex items-center gap-3 text-sm text-background/60 transition-colors hover:text-background"
+              >
+                <Mail size={14} /> {siteStrings.footer.contact.email.label}
+              </a>
               <div className="flex items-center gap-3 text-sm text-background/60">
-                <Phone size={14} /> +56 9 1234 5678
+                <MapPin size={14} /> {siteStrings.footer.contact.location}
               </div>
-              <div className="flex items-center gap-3 text-sm text-background/60">
-                <Mail size={14} /> contacto@cirugia360.cl
-              </div>
-              <div className="flex items-center gap-3 text-sm text-background/60">
-                <MapPin size={14} /> Santiago, Chile
-              </div>
-              <div className="flex items-center gap-3 text-sm text-background/60">
-                <Instagram size={14} /> @cirugia360
-              </div>
+              <a
+                href={siteStrings.footer.contact.instagram.href}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="flex items-center gap-3 text-sm text-background/60 transition-colors hover:text-background"
+              >
+                <Instagram size={14} /> {siteStrings.footer.contact.instagram.label}
+              </a>
             </div>
           </div>
         </div>

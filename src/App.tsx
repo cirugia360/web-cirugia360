@@ -3,8 +3,8 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ContactModalProvider } from "@/components/ContactModalProvider";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useEffect } from "react";
-import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
+import { useEffect, useLayoutEffect } from "react";
+import { BrowserRouter, Routes, Route, useLocation, useNavigationType } from "react-router-dom";
 import Index from "./pages/Index";
 import DoctorPage from "./pages/DoctorPage";
 import ProceduresPage from "./pages/ProceduresPage";
@@ -23,13 +23,48 @@ import Cirugia360Dashboard from "./pages/Cirugia360Dashboard";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
+const scrollPositions = new Map<string, { x: number; y: number }>();
 
-const ScrollToTop = () => {
-  const { pathname } = useLocation();
+const ScrollRestoration = () => {
+  const location = useLocation();
+  const navigationType = useNavigationType();
+  const scrollKey = location.key || `${location.pathname}${location.search}${location.hash}`;
 
   useEffect(() => {
-    window.scrollTo(0, 0);
-  }, [pathname]);
+    if (!("scrollRestoration" in window.history)) {
+      return undefined;
+    }
+
+    const previousScrollRestoration = window.history.scrollRestoration;
+    window.history.scrollRestoration = "manual";
+
+    return () => {
+      window.history.scrollRestoration = previousScrollRestoration;
+    };
+  }, []);
+
+  useLayoutEffect(() => {
+    if (navigationType === "POP") {
+      const position = scrollPositions.get(scrollKey) || { x: 0, y: 0 };
+
+      window.requestAnimationFrame(() => {
+        window.scrollTo(position.x, position.y);
+      });
+
+      window.setTimeout(() => {
+        window.scrollTo(position.x, position.y);
+      }, 100);
+    } else {
+      window.scrollTo(0, 0);
+    }
+
+    return () => {
+      scrollPositions.set(scrollKey, {
+        x: window.scrollX,
+        y: window.scrollY,
+      });
+    };
+  }, [navigationType, scrollKey]);
 
   return null;
 };
@@ -41,7 +76,7 @@ const App = () => (
       <Sonner position="top-right" />
       <BrowserRouter>
         <ContactModalProvider>
-          <ScrollToTop />
+          <ScrollRestoration />
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/el-doctor" element={<DoctorPage />} />

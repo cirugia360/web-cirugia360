@@ -30,8 +30,31 @@ export const siteStrings = {
       { label: "Torres Rhinoplasty", href: "/torres-rhinoplasty" },
       { label: "Subcision Magic", href: "/subcision-magic" },
     ],
+    contact: {
+      phone: {
+        label: "+56 9 5414 8181",
+        href: "tel:+56954148181",
+      },
+      email: {
+        label: "agendamiento.cirugia360@gmail.com",
+        href: "mailto:agendamiento.cirugia360@gmail.com",
+      },
+      location: "Santiago, Chile",
+      instagram: {
+        label: "@cirugia360oficial",
+        href: "https://www.instagram.com/cirugia360oficial/",
+      },
+    },
     copyright: "© 2026 Cirugía360. Todos los derechos reservados.",
     credential: "Dr. Sebastián Torres · RCM 40135-8",
+  },
+  notFound: {
+    eyebrow: "Error 404",
+    title: "Página no encontrada",
+    description:
+      "La dirección que intentaste abrir no existe o fue movida. Puedes continuar explorando el sitio desde una de estas secciones.",
+    blogCta: "Ir al blog",
+    proceduresCta: "Ver procedimientos",
   },
   contactBooking: {
     appointmentCard: {
