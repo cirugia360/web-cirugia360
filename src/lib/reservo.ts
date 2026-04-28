@@ -36,6 +36,7 @@ export type ReservoBookingPayload = {
     time: string;
   };
   sourceUrl?: string;
+  metadata?: Record<string, unknown>;
 };
 
 export type ReservoPaymentRedirect = {

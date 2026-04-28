@@ -13,6 +13,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { toast } from "@/components/ui/sonner";
 import { procedureCatalog } from "@/data/procedureCatalog";
 import { siteStrings } from "@/i18n/strings";
+import { getAttributionSnapshot } from "@/lib/attribution";
 import {
   createCirugia360ContactLead,
   createReservoBooking,
@@ -451,6 +452,8 @@ const ContactBookingForm = () => {
       .join(" ");
 
   const submitContactRequest = () => {
+    const attribution = getAttributionSnapshot();
+
     contactMutation.mutate({
       fullName: buildFullName(),
       phone: form.telefono,
@@ -464,6 +467,7 @@ const ContactBookingForm = () => {
         procedureInterest: selectedProcedureInterest,
         procedureOption: form.procedimiento,
         pageTitle: document.title,
+        attribution,
       },
     });
   };
@@ -499,6 +503,8 @@ const ContactBookingForm = () => {
       return;
     }
 
+    const attribution = getAttributionSnapshot();
+
     bookingMutation.mutate({
       appointmentType,
       procedureInterest: selectedProcedureInterest,
@@ -515,6 +521,14 @@ const ContactBookingForm = () => {
         time: selectedTime,
       },
       sourceUrl: window.location.href,
+      metadata: {
+        flow: "booking_option",
+        form: "contact_booking_modal",
+        procedureInterest: selectedProcedureInterest,
+        procedureOption: form.procedimiento,
+        pageTitle: document.title,
+        attribution,
+      },
     });
   };
 

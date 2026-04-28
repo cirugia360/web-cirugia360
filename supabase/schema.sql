@@ -258,6 +258,9 @@ create index if not exists c360_speed_tracking_events_lead_id_idx
 create index if not exists c360_speed_tracking_events_event_name_idx
   on public.c360_speed_tracking_events (event_name, created_at desc);
 
+create index if not exists c360_speed_tracking_events_lead_event_idx
+  on public.c360_speed_tracking_events (lead_id, event_name, created_at desc);
+
 create index if not exists c360_speed_agent_activity_email_created_idx
   on public.c360_speed_agent_activity (agent_email, created_at desc);
 

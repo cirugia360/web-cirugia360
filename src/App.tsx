@@ -5,6 +5,7 @@ import { ContactModalProvider } from "@/components/ContactModalProvider";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useEffect, useLayoutEffect } from "react";
 import { BrowserRouter, Routes, Route, useLocation, useNavigationType } from "react-router-dom";
+import { captureAttribution } from "@/lib/attribution";
 import Index from "./pages/Index";
 import DoctorPage from "./pages/DoctorPage";
 import ProceduresPage from "./pages/ProceduresPage";
@@ -69,6 +70,16 @@ const ScrollRestoration = () => {
   return null;
 };
 
+const AttributionCapture = () => {
+  const location = useLocation();
+
+  useEffect(() => {
+    captureAttribution();
+  }, [location.pathname, location.search]);
+
+  return null;
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
@@ -76,6 +87,7 @@ const App = () => (
       <Sonner position="top-right" />
       <BrowserRouter>
         <ContactModalProvider>
+          <AttributionCapture />
           <ScrollRestoration />
           <Routes>
             <Route path="/" element={<Index />} />

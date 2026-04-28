@@ -5,6 +5,7 @@ const dbMocks = vi.hoisted(() => ({
   claimQueuedSpeedLeads: vi.fn(),
   claimStaleAgentCallLeads: vi.fn(),
   findLeadForPaymentCallback: vi.fn(),
+  getSpeedAdminClient: vi.fn(),
   getSpeedLeadById: vi.fn(),
   hasActiveLeadForAgent: vi.fn(),
   insertSpeedLead: vi.fn(),
@@ -44,6 +45,19 @@ beforeEach(() => {
     return lead;
   });
   dbMocks.insertSpeedLeadEvent.mockResolvedValue(undefined);
+  dbMocks.getSpeedAdminClient.mockReturnValue({
+    from: vi.fn(() => ({
+      select: vi.fn().mockReturnThis(),
+      insert: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+      single: vi.fn().mockResolvedValue({
+        data: { id: 1, event_name: "tracking" },
+        error: null,
+      }),
+    })),
+  });
   dbMocks.claimStaleAgentCallLeads.mockResolvedValue([]);
   dbMocks.hasActiveLeadForAgent.mockResolvedValue(true);
   dbMocks.updateSpeedLead.mockImplementation(async (leadId, updates) => ({

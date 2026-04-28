@@ -46,8 +46,11 @@ export type DashboardLead = {
   pipelineOutcomeReasonCode: string | null;
   pipelineOutcomeReason: string | null;
   pipelineValue: number;
+  evaluationScheduledAt?: string | null;
+  surgeryBookedAt?: string | null;
   recordingUrl: string | null;
   transcriptionText: string | null;
+  metadata?: Record<string, unknown>;
   notes: LeadNote[];
 };
 

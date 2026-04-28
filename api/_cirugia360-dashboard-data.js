@@ -8,6 +8,11 @@ const EVENTS_TABLE = "c360_speed_lead_events";
 const NOTES_TABLE = "c360_speed_lead_notes";
 const TRACKING_TABLE = "c360_speed_tracking_events";
 const AGENT_ACTIVITY_TABLE = "c360_speed_agent_activity";
+export const META_EVENT_NAMES = {
+  prospectCaptured: normalizeText(process.env.META_EVENT_NAME_LEAD) || "ProspectCaptured",
+  prospectQualified: normalizeText(process.env.META_EVENT_NAME_SCHEDULE) || "ProspectQualified",
+  prospectClosed: normalizeText(process.env.META_EVENT_NAME_PURCHASE) || "ProspectClosed",
+};
 
 const isOptionalActivityError = (error) => {
   const code = normalizeText(error?.code);
@@ -526,6 +531,34 @@ export const updatePipelineStage = async ({ leadId, stage, at = new Date().toISO
     stage: nextStage,
   });
 
+  if (nextStage === "eval_presencial") {
+    await trackLeadMetaEvent({
+      lead: updatedLead,
+      eventName: META_EVENT_NAMES.prospectQualified,
+      eventSource: "dashboard",
+      metadata: {
+        trigger: "pipeline_stage_changed",
+        clinicalEvent: "schedule",
+        stage: nextStage,
+        at,
+      },
+    });
+  }
+
+  if (nextStage === "cirugia") {
+    await trackLeadMetaEvent({
+      lead: updatedLead,
+      eventName: META_EVENT_NAMES.prospectClosed,
+      eventSource: "dashboard",
+      metadata: {
+        trigger: "pipeline_stage_changed",
+        clinicalEvent: "purchase",
+        stage: nextStage,
+        at,
+      },
+    });
+  }
+
   return updatedLead;
 };
 
@@ -577,6 +610,20 @@ export const updatePipelineOutcome = async ({
     reasonCode: normalizedOutcome === "lost" ? normalizedReasonCode : null,
     reason: normalizedOutcome === "lost" ? normalizeText(reason) || null : null,
   });
+
+  if (normalizedOutcome === "won") {
+    await trackLeadMetaEvent({
+      lead: updatedLead,
+      eventName: META_EVENT_NAMES.prospectClosed,
+      eventSource: "dashboard",
+      metadata: {
+        trigger: "pipeline_outcome_changed",
+        clinicalEvent: "purchase",
+        outcome: normalizedOutcome,
+        at,
+      },
+    });
+  }
 
   return updatedLead;
 };
@@ -792,6 +839,32 @@ export const insertTrackingEvent = async ({
   return data;
 };
 
+export const hasTrackingEvent = async ({ leadId, eventName }) => {
+  if (!normalizeText(leadId) || !normalizeText(eventName)) {
+    return false;
+  }
+
+  const client = getSpeedAdminClient();
+  const { data, error } = await client
+    .from(TRACKING_TABLE)
+    .select("id")
+    .eq("lead_id", leadId)
+    .eq("event_name", eventName)
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message || "No se pudo revisar el evento de tracking.");
+  }
+
+  return Boolean(data);
+};
+
+const getLeadAttribution = (lead) =>
+  lead?.metadata?.attribution && typeof lead.metadata.attribution === "object"
+    ? lead.metadata.attribution
+    : null;
+
 export const buildMetaPayloadFromLead = (lead, eventName, eventId, requestContext = {}) => {
   const emailHash = hashValue(lead?.email);
   const phoneHash = hashValue(cleanPhoneForHash(lead?.phone));
@@ -814,6 +887,10 @@ export const buildMetaPayloadFromLead = (lead, eventName, eventId, requestContex
       procedure: lead?.procedure_interest || undefined,
       value: numberOrZero(lead?.pipeline_value) || undefined,
       currency: "CLP",
+      attribution_channel: getLeadAttribution(lead)?.channel || undefined,
+      attribution_source: getLeadAttribution(lead)?.source || undefined,
+      attribution_medium: getLeadAttribution(lead)?.medium || undefined,
+      attribution_campaign: getLeadAttribution(lead)?.campaign || undefined,
     },
   };
 };
@@ -859,4 +936,76 @@ export const dispatchMetaEvent = async ({ lead = null, eventName, requestContext
     response: responsePayload,
     eventId,
   };
+};
+
+export const trackLeadMetaEvent = async ({
+  lead,
+  eventName,
+  eventSource = "server",
+  metadata = {},
+  requestContext = {},
+}) => {
+  if (!lead?.id || !normalizeText(eventName)) {
+    return null;
+  }
+
+  try {
+    if (await hasTrackingEvent({ leadId: lead.id, eventName })) {
+      return {
+        skipped: true,
+        reason: "duplicate",
+      };
+    }
+
+    let meta = {
+      skipped: true,
+      success: false,
+      response: null,
+      eventId: null,
+    };
+
+    try {
+      meta = await dispatchMetaEvent({
+        lead,
+        eventName,
+        requestContext,
+      });
+    } catch (error) {
+      meta = {
+        skipped: false,
+        success: false,
+        response: {
+          error: error instanceof Error ? error.message : "Meta dispatch failed",
+        },
+        eventId: null,
+      };
+    }
+
+    return insertTrackingEvent({
+      leadId: lead.id,
+      eventName,
+      eventSource,
+      sourceUrl: requestContext.sourceUrl || lead.source_url,
+      clientIp: requestContext.clientIp || null,
+      clientUserAgent: requestContext.clientUserAgent || null,
+      metadata: {
+        ...metadata,
+        attribution: getLeadAttribution(lead),
+      },
+      metaEventId: meta.eventId,
+      metaResponse: meta.response,
+      metaSuccess: meta.skipped ? null : meta.success,
+    });
+  } catch (error) {
+    console.warn("Cirugia360 tracking event skipped", {
+      leadId: lead.id,
+      eventName,
+      error: error instanceof Error ? error.message : String(error),
+    });
+
+    return {
+      skipped: true,
+      reason: "tracking_error",
+    };
+  }
 };

@@ -97,7 +97,7 @@ META_TEST_EVENT_CODE=
 META_EVENT_NAME_LEAD=ProspectCaptured
 META_EVENT_NAME_CONTACT=ProspectReached
 META_EVENT_NAME_SCHEDULE=ProspectQualified
-META_EVENT_NAME_PURCHASE=CustomerConfirmed
+META_EVENT_NAME_PURCHASE=ProspectClosed
 ```
 
 Si `META_ACCESS_TOKEN` y `META_PIXEL_ID` no estan definidos, el tracking queda guardado en Supabase pero no se envia a Meta.

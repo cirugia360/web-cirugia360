@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { META_EVENT_NAMES, trackLeadMetaEvent } from "./_cirugia360-dashboard-data.js";
 import {
   claimDueSpeedLeads,
   claimQueuedSpeedLeads,
@@ -455,6 +456,15 @@ export const createContactLead = async (payload, config) => {
     leadKind: lead.lead_kind,
   });
 
+  await trackLeadMetaEvent({
+    lead,
+    eventName: META_EVENT_NAMES.prospectCaptured,
+    metadata: {
+      trigger: "contact_request",
+      clinicalEvent: "lead",
+    },
+  });
+
   const nextAttempt = await scheduleLeadForNextAttempt(lead, config, {
     reason: "Paciente solicito ser contactado.",
   });
@@ -608,6 +618,9 @@ export const createBookingLeadFromBooking = async ({
       paymentUrl,
       externalReferences: extractExternalReferenceCandidates(bookingResponse?.source),
       metadata: {
+        ...(bookingPayload?.metadata && typeof bookingPayload.metadata === "object"
+          ? bookingPayload.metadata
+          : {}),
         appointmentType: normalizeText(bookingPayload?.appointmentType) || null,
         procedureInterest: normalizeText(bookingPayload?.procedureInterest) || null,
         selectedSlot: bookingResponse?.selectedSlot || null,
@@ -621,6 +634,27 @@ export const createBookingLeadFromBooking = async ({
     source: "reservo_booking_created",
     leadKind: lead.lead_kind,
     bookingReference: bookingReference || null,
+  });
+
+  await trackLeadMetaEvent({
+    lead,
+    eventName: META_EVENT_NAMES.prospectCaptured,
+    metadata: {
+      trigger: "reservo_booking_created",
+      clinicalEvent: "lead",
+      bookingReference: bookingReference || null,
+    },
+  });
+
+  await trackLeadMetaEvent({
+    lead,
+    eventName: META_EVENT_NAMES.prospectQualified,
+    metadata: {
+      trigger: "reservo_booking_created",
+      clinicalEvent: "schedule",
+      bookingReference: bookingReference || null,
+      selectedSlot: bookingResponse?.selectedSlot || null,
+    },
   });
 
   const nextAttempt = await scheduleLeadForNextAttempt(lead, config, {

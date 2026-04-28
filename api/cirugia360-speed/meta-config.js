@@ -38,7 +38,7 @@ export default async function handler(request, response) {
         lead: normalizeText(process.env.META_EVENT_NAME_LEAD) || "ProspectCaptured",
         contact: normalizeText(process.env.META_EVENT_NAME_CONTACT) || "ProspectReached",
         schedule: normalizeText(process.env.META_EVENT_NAME_SCHEDULE) || "ProspectQualified",
-        purchase: normalizeText(process.env.META_EVENT_NAME_PURCHASE) || "CustomerConfirmed",
+        purchase: normalizeText(process.env.META_EVENT_NAME_PURCHASE) || "ProspectClosed",
       },
     },
   });

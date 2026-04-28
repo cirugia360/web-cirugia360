@@ -6,7 +6,7 @@ import {
   requireDashboardAuth,
   sendForbiddenLead,
 } from "../_cirugia360-dashboard-auth.js";
-import { toPublicLead } from "../_cirugia360-dashboard-data.js";
+import { META_EVENT_NAMES, toPublicLead, trackLeadMetaEvent } from "../_cirugia360-dashboard-data.js";
 import { getCirugia360SpeedConfigWithSettings } from "../_cirugia360-speed-config.js";
 import { getSpeedLeadById, insertSpeedLead, insertSpeedLeadEvent, updateSpeedLead } from "../_cirugia360-speed-db.js";
 import { buildLeadSummaryText } from "../_cirugia360-speed-twilio.js";
@@ -253,6 +253,17 @@ export default async function handler(request, response) {
       source: "dashboard_manual",
       leadKind: lead.lead_kind,
       createdBy: user.email || null,
+    });
+
+    await trackLeadMetaEvent({
+      lead,
+      eventName: META_EVENT_NAMES.prospectCaptured,
+      eventSource: "dashboard",
+      metadata: {
+        trigger: "dashboard_manual",
+        clinicalEvent: "lead",
+        createdBy: user.email || null,
+      },
     });
 
     return sendJson(response, 200, {

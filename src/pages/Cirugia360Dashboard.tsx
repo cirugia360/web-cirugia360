@@ -9,6 +9,7 @@ import {
   CreditCard,
   FileText,
   FlaskConical,
+  GitBranch,
   GripVertical,
   LayoutDashboard,
   LogOut,
@@ -73,6 +74,7 @@ import type {
 
 const navItems = [
   { id: "overview", label: "Resumen", icon: LayoutDashboard },
+  { id: "attribution", label: "Atribucion", icon: GitBranch },
   { id: "pipeline", label: "Pipeline", icon: Target },
   { id: "leads", label: "Leads", icon: Users },
   { id: "team", label: "Equipo", icon: Settings },
@@ -334,6 +336,111 @@ const buildCallMetrics = (leads: DashboardLead[]) => [
     value: leads.filter((lead) => lead.status === "customer_unreachable").length,
   },
 ];
+
+type LeadAttribution = {
+  source?: string | null;
+  medium?: string | null;
+  channel?: string | null;
+  campaign?: string | null;
+  landingPage?: string | null;
+  referrer?: string | null;
+};
+
+const attributionLabels: Record<string, string> = {
+  instagram_bio: "Instagram biografia",
+  instagram_organic: "Instagram organico",
+  google_organic: "Google organico",
+  google_ads: "Google Ads",
+  meta_ads: "Meta Ads",
+  referral: "Referido",
+  direct: "Directo",
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  Boolean(value) && typeof value === "object" && !Array.isArray(value);
+
+const getLeadAttribution = (lead: DashboardLead): LeadAttribution => {
+  const metadata = isRecord(lead.metadata) ? lead.metadata : {};
+  const attribution = isRecord(metadata.attribution) ? metadata.attribution : {};
+  const channel = typeof attribution.channel === "string" ? attribution.channel : null;
+  const source = typeof attribution.source === "string" ? attribution.source : null;
+  const medium = typeof attribution.medium === "string" ? attribution.medium : null;
+
+  return {
+    source,
+    medium,
+    channel: channel || source || "direct",
+    campaign: typeof attribution.campaign === "string" ? attribution.campaign : null,
+    landingPage: typeof attribution.landingPage === "string" ? attribution.landingPage : lead.sourceUrl || null,
+    referrer: typeof attribution.referrer === "string" ? attribution.referrer : null,
+  };
+};
+
+const getAttributionLabel = (attribution: LeadAttribution) => {
+  const channel = attribution.channel || "direct";
+
+  return attributionLabels[channel] || channel.replace(/[_-]+/g, " ");
+};
+
+const buildAttributionRows = (leads: DashboardLead[]) => {
+  const rows = new Map<
+    string,
+    {
+      id: string;
+      label: string;
+      source: string;
+      medium: string;
+      leads: number;
+      evaluations: number;
+      surgeries: number;
+      won: number;
+      value: number;
+    }
+  >();
+
+  leads.forEach((lead) => {
+    const attribution = getLeadAttribution(lead);
+    const id = attribution.channel || "direct";
+    const row =
+      rows.get(id) ||
+      {
+        id,
+        label: getAttributionLabel(attribution),
+        source: attribution.source || id,
+        medium: attribution.medium || "direct",
+        leads: 0,
+        evaluations: 0,
+        surgeries: 0,
+        won: 0,
+        value: 0,
+      };
+
+    row.leads += 1;
+
+    if (["eval_presencial", "eval_online", "presupuesto", "examenes", "cirugia"].includes(lead.pipelineStage)) {
+      row.evaluations += 1;
+    }
+
+    if (lead.pipelineStage === "cirugia") {
+      row.surgeries += 1;
+    }
+
+    if (lead.pipelineOutcome === "won") {
+      row.won += 1;
+      row.value += Number(lead.pipelineValue || 0);
+    }
+
+    rows.set(id, row);
+  });
+
+  return Array.from(rows.values()).sort((firstRow, secondRow) => {
+    if (secondRow.won !== firstRow.won) {
+      return secondRow.won - firstRow.won;
+    }
+
+    return secondRow.leads - firstRow.leads;
+  });
+};
 
 const withLeads = (snapshot: DashboardSnapshot, leads: DashboardLead[]): DashboardSnapshot => {
   const previousSpeedMetric = snapshot.speedMetrics.find((metric) => metric.id === "speed");
@@ -2207,6 +2314,143 @@ const CreateLeadModal = ({
   );
 };
 
+const AttributionView = ({
+  leads,
+  onSelect,
+}: {
+  leads: DashboardLead[];
+  onSelect: (lead: DashboardLead) => void;
+}) => {
+  const rows = buildAttributionRows(leads);
+  const totalLeads = leads.length;
+  const totalEvaluations = rows.reduce((sum, row) => sum + row.evaluations, 0);
+  const totalWon = rows.reduce((sum, row) => sum + row.won, 0);
+  const totalValue = rows.reduce((sum, row) => sum + row.value, 0);
+  const recentLeads = [...leads]
+    .sort((firstLead, secondLead) => Date.parse(secondLead.createdAt) - Date.parse(firstLead.createdAt))
+    .slice(0, 40);
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricTile metric={{ id: "attr-leads", label: "Leads atribuidos", value: totalLeads, tone: "blue" }} />
+        <MetricTile metric={{ id: "attr-evals", label: "Evaluaciones", value: totalEvaluations, tone: "green" }} />
+        <MetricTile metric={{ id: "attr-won", label: "Ganados", value: totalWon, tone: "green" }} />
+        <MetricTile
+          metric={{
+            id: "attr-value",
+            label: "Valor ganado",
+            value: totalValue,
+            format: "currency",
+            tone: "blue",
+          }}
+        />
+      </div>
+
+      <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
+          <div>
+            <h2 className="font-semibold">Fuentes y conversiones</h2>
+            <p className="mt-1 text-sm text-slate-500">Origen real desde UTMs, referrer y clics pagados.</p>
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-left text-sm">
+            <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+              <tr>
+                <th className="px-5 py-3">Fuente</th>
+                <th className="px-5 py-3">Medio</th>
+                <th className="px-5 py-3 text-right">Leads</th>
+                <th className="px-5 py-3 text-right">Evaluaciones</th>
+                <th className="px-5 py-3 text-right">Cirugias</th>
+                <th className="px-5 py-3 text-right">Ganados</th>
+                <th className="px-5 py-3 text-right">Lead a eval.</th>
+                <th className="px-5 py-3 text-right">Valor</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {rows.map((row) => (
+                <tr key={row.id} className="hover:bg-slate-50">
+                  <td className="px-5 py-3">
+                    <p className="font-semibold text-slate-900">{row.label}</p>
+                    <p className="mt-0.5 text-xs text-slate-500">{row.source}</p>
+                  </td>
+                  <td className="px-5 py-3 text-slate-600">{row.medium}</td>
+                  <td className="px-5 py-3 text-right font-semibold">{row.leads}</td>
+                  <td className="px-5 py-3 text-right">{row.evaluations}</td>
+                  <td className="px-5 py-3 text-right">{row.surgeries}</td>
+                  <td className="px-5 py-3 text-right">{row.won}</td>
+                  <td className="px-5 py-3 text-right">
+                    {row.leads ? `${Math.round((row.evaluations / row.leads) * 100)}%` : "0%"}
+                  </td>
+                  <td className="px-5 py-3 text-right font-semibold">{formatCurrency(row.value)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {rows.length === 0 ? (
+          <p className="border-t border-slate-100 px-5 py-8 text-center text-sm text-slate-500">
+            Todavia no hay leads en el periodo seleccionado.
+          </p>
+        ) : null}
+      </section>
+
+      <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-200 px-5 py-4">
+          <h2 className="font-semibold">Detalle de leads</h2>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-left text-sm">
+            <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+              <tr>
+                <th className="px-5 py-3">Lead</th>
+                <th className="px-5 py-3">Fuente</th>
+                <th className="px-5 py-3">Campana</th>
+                <th className="px-5 py-3">Landing</th>
+                <th className="px-5 py-3">Etapa</th>
+                <th className="px-5 py-3 text-right">Valor</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {recentLeads.map((lead) => {
+                const attribution = getLeadAttribution(lead);
+
+                return (
+                  <tr key={lead.id} className="hover:bg-slate-50">
+                    <td className="px-5 py-3">
+                      <button
+                        type="button"
+                        className="text-left font-semibold text-dashboard-primary hover:underline"
+                        onClick={() => onSelect(lead)}
+                      >
+                        {lead.fullName}
+                      </button>
+                      <p className="mt-0.5 text-xs text-slate-500">{formatDate(lead.createdAt)}</p>
+                    </td>
+                    <td className="px-5 py-3">
+                      <p className="font-medium text-slate-800">{getAttributionLabel(attribution)}</p>
+                      <p className="mt-0.5 text-xs text-slate-500">
+                        {attribution.source || "direct"} / {attribution.medium || "direct"}
+                      </p>
+                    </td>
+                    <td className="px-5 py-3 text-slate-600">{attribution.campaign || "Sin campana"}</td>
+                    <td className="max-w-[260px] truncate px-5 py-3 text-slate-600">
+                      {attribution.landingPage || lead.sourceUrl || "Sin dato"}
+                    </td>
+                    <td className="px-5 py-3 text-slate-600">{lead.pipelineStage}</td>
+                    <td className="px-5 py-3 text-right font-semibold">{formatCurrency(lead.pipelineValue || 0)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  );
+};
+
 const TeamSettings = ({
   settings,
   agentPerformance,
@@ -3963,6 +4207,10 @@ const Cirugia360Dashboard = () => {
               </div>
             </>
           ) : null}
+          {activeView === "attribution" && snapshot ? (
+            <AttributionView leads={leads} onSelect={openLeadDetail} />
+          ) : null}
+
           {activeView === "pipeline" && snapshot ? (
             <PipelineBoard
               leads={leads}
