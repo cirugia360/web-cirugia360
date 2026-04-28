@@ -8,7 +8,7 @@ import {
   useMemo,
   useState,
 } from "react";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import ContactBookingForm from "@/components/ContactBookingForm";
 
 declare global {
@@ -53,6 +53,12 @@ export const ContactModalProvider = ({ children }: { children: ReactNode }) => {
 
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
         <DialogContent className="w-[calc(100vw-2rem)] max-w-2xl overflow-hidden border-0 bg-transparent p-0 shadow-none sm:w-[calc(100vw-4rem)]">
+          <DialogTitle className="sr-only">Agendar evaluación o solicitar contacto</DialogTitle>
+          <DialogDescription className="sr-only">
+            Completa el formulario para solicitar que una asesora te contacte o para reservar y pagar una
+            evaluación con el Dr. Torres. Puedes cerrar esta ventana con la tecla Escape o usando el botón de
+            cierre.
+          </DialogDescription>
           <div className="max-h-[calc(100vh-2rem)] overflow-y-auto p-0 sm:max-h-[calc(100vh-4rem)]">
             <ContactBookingForm key={formRenderKey} />
           </div>
