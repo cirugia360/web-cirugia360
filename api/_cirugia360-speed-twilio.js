@@ -126,6 +126,12 @@ const normalizeTwilioValidationUrl = (rawUrl, action) => {
   return url.toString();
 };
 
+const buildConfiguredHostRequestUrl = (request, config) => {
+  const requestUrl = new URL(request.url || "/", config.appUrl);
+
+  return new URL(`${requestUrl.pathname}${requestUrl.search}`, config.appUrl).toString();
+};
+
 const getTwilioValidationUrls = (request, config) => {
   const action = getFirstQueryValue(request.query?.action);
   const candidates = new Set();
@@ -142,6 +148,12 @@ const getTwilioValidationUrls = (request, config) => {
     );
   } catch {
     // Ignore malformed fallback URLs.
+  }
+
+  try {
+    candidates.add(normalizeTwilioValidationUrl(buildConfiguredHostRequestUrl(request, config), action));
+  } catch {
+    // Ignore malformed configured-host URLs.
   }
 
   return [...candidates];

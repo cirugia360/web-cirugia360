@@ -12,6 +12,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Calendar } from "@/components/ui/calendar";
 import { toast } from "@/components/ui/sonner";
 import { procedureCatalog } from "@/data/procedureCatalog";
+import { siteStrings } from "@/i18n/strings";
 import {
   createCirugia360ContactLead,
   createReservoBooking,
@@ -38,6 +39,7 @@ type FormState = {
 };
 
 const OTHER_PROCEDURE_VALUE = "__other__";
+const contactBookingStrings = siteStrings.contactBooking;
 
 const procedureOptions = [
   ...procedureCatalog.map((procedure) => ({
@@ -68,9 +70,9 @@ const appointmentCard: {
   description: string;
   procedureName: string;
 } = {
-  label: "Evaluacion con el Dr. Torres",
-  description: "$100.000 - Consulta medica con el Dr. Torres",
-  procedureName: "Consulta Medica Dr. Sebastian Torres - Presencial o a Distancia",
+  label: contactBookingStrings.appointmentCard.label,
+  description: contactBookingStrings.appointmentCard.description,
+  procedureName: contactBookingStrings.appointmentCard.procedureName,
 };
 
 const flowCopy: Record<
@@ -81,16 +83,8 @@ const flowCopy: Record<
     description: string;
   }
 > = {
-  contact: {
-    label: "Ser contactado por una asesora",
-    eyebrow: "Contacto inmediato",
-    description: "Dejanos tus datos y una asesora intentara llamarte para resolver dudas.",
-  },
-  booking: {
-    label: "Agendar y pagar evaluacion",
-    eyebrow: "Reserva online",
-    description: "Elige una hora real de Reservo y completa el pago de la evaluacion.",
-  },
+  contact: contactBookingStrings.flow.contact,
+  booking: contactBookingStrings.flow.booking,
 };
 
 const fields: Array<{
@@ -99,12 +93,12 @@ const fields: Array<{
   placeholder: string;
   type?: "text" | "email" | "tel";
 }> = [
-  { key: "rut", label: "RUT", placeholder: "12.345.678-9" },
-  { key: "nombre", label: "Nombre", placeholder: "Tu nombre" },
-  { key: "apellido", label: "Apellido", placeholder: "Tu apellido" },
-  { key: "segundoApellido", label: "Segundo Apellido", placeholder: "Tu segundo apellido" },
-  { key: "correo", label: "Correo Electronico", placeholder: "correo@ejemplo.com", type: "email" },
-  { key: "telefono", label: "Telefono", placeholder: "+56 9 1234 5678", type: "tel" },
+  { key: "rut", ...contactBookingStrings.fields.rut },
+  { key: "nombre", ...contactBookingStrings.fields.nombre },
+  { key: "apellido", ...contactBookingStrings.fields.apellido },
+  { key: "segundoApellido", ...contactBookingStrings.fields.segundoApellido },
+  { key: "correo", ...contactBookingStrings.fields.correo, type: "email" },
+  { key: "telefono", ...contactBookingStrings.fields.telefono, type: "tel" },
 ];
 
 const contactFields = fields.filter(({ key }) =>
@@ -297,12 +291,12 @@ const ContactBookingForm = () => {
       setStep(4);
       toast.success(
         response.callStarted
-          ? "Solicitud recibida. Estamos llamando a la asesora."
-          : "Solicitud recibida. La asesora te contactara a la brevedad.",
+          ? contactBookingStrings.toast.callStarted
+          : contactBookingStrings.toast.contactQueued,
       );
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "No se pudo solicitar el contacto.");
+      toast.error(error instanceof Error ? error.message : contactBookingStrings.toast.contactError);
     },
   });
 
@@ -313,12 +307,12 @@ const ContactBookingForm = () => {
       setStep(4);
       toast.success(
         response.paymentUrl || response.paymentRedirect
-          ? "Te estamos redirigiendo al pago para completar tu reserva."
-          : "Tu evaluacion quedo reservada.",
+          ? contactBookingStrings.toast.redirectingPayment
+          : contactBookingStrings.toast.bookingConfirmed,
       );
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "No se pudo confirmar la reserva.");
+      toast.error(error instanceof Error ? error.message : contactBookingStrings.toast.bookingError);
       availabilityQuery.refetch();
     },
   });
@@ -385,8 +379,8 @@ const ContactBookingForm = () => {
   const procedureError =
     showDetailErrors && !hasProcedureInterest
       ? isOtherProcedure
-        ? "Escribe el procedimiento de interes."
-        : "Selecciona un procedimiento de interes."
+        ? contactBookingStrings.validation.procedureOther
+        : contactBookingStrings.validation.procedureRequired
       : "";
 
   const canContinueFromDetails = isContactFlow
@@ -434,17 +428,17 @@ const ContactBookingForm = () => {
 
     switch (key) {
       case "rut":
-        return isValidRut(form.rut) ? "" : "Ingresa un RUT valido.";
+        return isValidRut(form.rut) ? "" : contactBookingStrings.validation.rut;
       case "nombre":
-        return form.nombre.trim() ? "" : "El nombre es obligatorio.";
+        return form.nombre.trim() ? "" : contactBookingStrings.validation.nombre;
       case "apellido":
-        return form.apellido.trim() ? "" : "El apellido es obligatorio.";
+        return form.apellido.trim() ? "" : contactBookingStrings.validation.apellido;
       case "segundoApellido":
-        return form.segundoApellido.trim() ? "" : "El segundo apellido es obligatorio.";
+        return form.segundoApellido.trim() ? "" : contactBookingStrings.validation.segundoApellido;
       case "correo":
-        return isValidEmail(form.correo) ? "" : "Ingresa un correo valido.";
+        return isValidEmail(form.correo) ? "" : contactBookingStrings.validation.correo;
       case "telefono":
-        return isValidPhone(form.telefono) ? "" : "Ingresa un telefono en formato +56 9 1234 5678.";
+        return isValidPhone(form.telefono) ? "" : contactBookingStrings.validation.telefono;
       default:
         return "";
     }
@@ -462,7 +456,7 @@ const ContactBookingForm = () => {
       phone: form.telefono,
       email: form.correo,
       procedure: selectedProcedureInterest,
-      message: `Paciente eligio ser contactado por una asesora antes de agendar evaluacion. Procedimiento de interes: ${selectedProcedureInterest}.`,
+      message: `${contactBookingStrings.metadata.contactMessage} ${selectedProcedureInterest}.`,
       sourceUrl: window.location.href,
       metadata: {
         flow: "contact_option",
@@ -477,7 +471,7 @@ const ContactBookingForm = () => {
   const handlePrimaryAction = () => {
     if (step === 1) {
       if (!flowIntent) {
-        toast.error("Elige si prefieres ser contactado o agendar la evaluacion.");
+        toast.error(contactBookingStrings.validation.chooseFlow);
         return;
       }
 
@@ -548,22 +542,22 @@ const ContactBookingForm = () => {
     step === 2 && contactMutation.isPending ? (
       <span className="inline-flex items-center gap-2">
         <LoaderCircle size={14} className="animate-spin" />
-        Solicitando...
+        {contactBookingStrings.copy.requesting}
       </span>
     ) : step === 2 && isContactFlow ? (
-      "Solicitar contacto"
+      contactBookingStrings.copy.requestContact
     ) : step === 3 ? (
       bookingMutation.isPending ? (
         <span className="inline-flex items-center gap-2">
           <LoaderCircle size={14} className="animate-spin" />
-          Confirmando...
+          {contactBookingStrings.copy.confirming}
         </span>
       ) : (
-        "Confirmar y pagar"
+        contactBookingStrings.copy.confirmAndPay
       )
     ) : (
       <span className="inline-flex items-center gap-2">
-        Siguiente <ChevronRight size={14} />
+        {contactBookingStrings.copy.next} <ChevronRight size={14} />
       </span>
     );
 
@@ -593,9 +587,11 @@ const ContactBookingForm = () => {
 
       {step === 1 && (
         <div>
-          <h3 className="mb-2 font-serif text-xl font-medium text-foreground">Como quieres avanzar?</h3>
+          <h3 className="mb-2 font-serif text-xl font-medium text-foreground">
+            {contactBookingStrings.copy.stepOneTitle}
+          </h3>
           <p className="mb-6 text-sm text-muted-foreground">
-            Puedes pedir que una asesora te contacte o reservar directamente la evaluacion con el Dr. Torres.
+            {contactBookingStrings.copy.stepOneDescription}
           </p>
           <div className="grid gap-4 sm:grid-cols-2">
             <button
@@ -652,16 +648,18 @@ const ContactBookingForm = () => {
       {step === 2 && (
         <div>
           <h3 className="mb-2 font-serif text-xl font-medium text-foreground">
-            {isContactFlow ? "Datos de Contacto" : "Datos Personales"}
+            {isContactFlow
+              ? contactBookingStrings.copy.contactDetailsTitle
+              : contactBookingStrings.copy.bookingDetailsTitle}
           </h3>
           <p className="mb-6 text-sm text-muted-foreground">
             {isContactFlow
-              ? "Completa tus datos y activaremos el contacto con una asesora."
+              ? contactBookingStrings.copy.contactDetailsDescription
               : `Completa tus datos para reservar en ${activeCard?.label.toLowerCase()}.`}
           </p>
           <div className="mb-5 rounded-sm border border-border bg-background/70 p-4">
             <p className="text-xs font-sans uppercase tracking-[0.2em] text-muted-foreground">
-              Tipo de solicitud
+              {contactBookingStrings.copy.requestType}
             </p>
             <p className="mt-2 text-sm text-foreground">
               {isContactFlow ? flowCopy.contact.label : activeCard?.label}
@@ -670,14 +668,14 @@ const ContactBookingForm = () => {
           <div className="mb-5 space-y-4">
             <div>
               <label className="mb-1.5 block text-xs font-sans font-medium uppercase tracking-wider text-muted-foreground">
-                Procedimiento de interes
+                {contactBookingStrings.copy.procedureInterest}
               </label>
               <select
                 value={form.procedimiento}
                 onChange={(event) => setField("procedimiento", event.target.value)}
                 className="w-full rounded-sm border border-border bg-background px-4 py-3 text-sm font-sans text-foreground transition-colors focus:border-primary focus:outline-none"
               >
-                <option value="">Selecciona un procedimiento</option>
+                <option value="">{contactBookingStrings.copy.selectProcedure}</option>
                 {procedureOptions.map((procedure) => (
                   <option key={procedure.value} value={procedure.value}>
                     {procedure.label}
@@ -691,11 +689,11 @@ const ContactBookingForm = () => {
             {isOtherProcedure && (
               <div>
                 <label className="mb-1.5 block text-xs font-sans font-medium uppercase tracking-wider text-muted-foreground">
-                  Cual procedimiento?
+                  {contactBookingStrings.copy.otherProcedureQuestion}
                 </label>
                 <input
                   type="text"
-                  placeholder="Escribe el procedimiento o consulta"
+                  placeholder={contactBookingStrings.copy.otherProcedurePlaceholder}
                   value={form.otroProcedimiento}
                   onChange={(event) => setField("otroProcedimiento", event.target.value)}
                   className="w-full rounded-sm border border-border bg-background px-4 py-3 text-sm font-sans text-foreground transition-colors focus:border-primary focus:outline-none"
@@ -732,9 +730,12 @@ const ContactBookingForm = () => {
         <div>
           <div className="mb-6 flex flex-wrap items-start justify-between gap-4 rounded-sm border border-border bg-background/70 p-4">
             <div>
-              <h3 className="font-serif text-xl font-medium text-foreground">Seleccionar Horario</h3>
+              <h3 className="font-serif text-xl font-medium text-foreground">
+                {contactBookingStrings.copy.scheduleTitle}
+              </h3>
               <p className="mt-2 text-sm text-muted-foreground">
-                Estas viendo la disponibilidad real de {activeOption?.label || activeCard?.label}.
+                {contactBookingStrings.copy.scheduleAvailabilityPrefix}{" "}
+                {activeOption?.label || activeCard?.label}.
               </p>
             </div>
             <div className="space-y-2 text-sm text-muted-foreground">
@@ -749,36 +750,42 @@ const ContactBookingForm = () => {
           {availabilityQuery.isPending && (
             <div className="flex min-h-56 flex-col items-center justify-center rounded-sm border border-dashed border-border px-6 py-10 text-center">
               <LoaderCircle className="mb-4 animate-spin text-primary" size={28} />
-              <p className="font-serif text-lg text-foreground">Cargando horarios desde Reservo</p>
+              <p className="font-serif text-lg text-foreground">
+                {contactBookingStrings.copy.loadingTitle}
+              </p>
               <p className="mt-2 max-w-sm text-sm text-muted-foreground">
-                Estamos consultando la agenda seleccionada para mostrar solo horas disponibles.
+                {contactBookingStrings.copy.loadingDescription}
               </p>
             </div>
           )}
 
           {availabilityQuery.isError && (
             <div className="rounded-sm border border-destructive/40 bg-destructive/5 px-5 py-6">
-              <p className="font-medium text-foreground">No pudimos cargar la agenda.</p>
+              <p className="font-medium text-foreground">
+                {contactBookingStrings.copy.scheduleErrorTitle}
+              </p>
               <p className="mt-2 text-sm text-muted-foreground">
                 {availabilityQuery.error instanceof Error
                   ? availabilityQuery.error.message
-                  : "Intenta nuevamente en unos segundos."}
+                  : contactBookingStrings.copy.scheduleErrorFallback}
               </p>
               <button
                 type="button"
                 onClick={() => availabilityQuery.refetch()}
                 className="btn-outline-premium mt-4 px-5 py-2 text-xs"
               >
-                Reintentar
+                {contactBookingStrings.copy.retry}
               </button>
             </div>
           )}
 
           {!availabilityQuery.isPending && !availabilityQuery.isError && availableDates.length === 0 && (
             <div className="rounded-sm border border-border px-5 py-6">
-              <p className="font-medium text-foreground">No hay horas disponibles por ahora.</p>
+              <p className="font-medium text-foreground">
+                {contactBookingStrings.copy.noSlotsTitle}
+              </p>
               <p className="mt-2 text-sm text-muted-foreground">
-                Puedes volver a intentarlo mas tarde. La agenda se consulta en tiempo real.
+                {contactBookingStrings.copy.noSlotsDescription}
               </p>
             </div>
           )}
@@ -803,7 +810,7 @@ const ContactBookingForm = () => {
               </div>
               <div>
                 <p className="mb-3 text-xs font-sans uppercase tracking-[0.2em] text-muted-foreground">
-                  Horas disponibles
+                  {contactBookingStrings.copy.availableHours}
                 </p>
                 {selectedDate && (
                   <p className="mb-4 text-sm text-foreground">{formatLongDate(selectedDate)}</p>
@@ -826,7 +833,7 @@ const ContactBookingForm = () => {
                 </div>
                 {selectedDate && availableTimes.length === 0 && (
                   <p className="mt-4 text-sm text-muted-foreground">
-                    No encontramos horas para ese dia.
+                    {contactBookingStrings.copy.noDaySlots}
                   </p>
                 )}
               </div>
@@ -836,7 +843,7 @@ const ContactBookingForm = () => {
           {selectedDate && selectedTime && (
             <div className="mt-6 rounded-sm border border-border bg-background/70 p-4">
               <p className="text-xs font-sans uppercase tracking-[0.2em] text-muted-foreground">
-                Reserva seleccionada
+                {contactBookingStrings.copy.selectedBooking}
               </p>
               <p className="mt-2 text-sm text-foreground">{formatSummaryDate(selectedDate, selectedTime)}</p>
             </div>
@@ -849,25 +856,28 @@ const ContactBookingForm = () => {
           <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
             <CheckCircle className="text-primary" size={32} />
           </div>
-          <h3 className="mb-3 font-serif text-2xl font-medium text-foreground">Solicitud Recibida</h3>
+          <h3 className="mb-3 font-serif text-2xl font-medium text-foreground">
+            {contactBookingStrings.copy.contactSuccessTitle}
+          </h3>
           <p className="mx-auto mb-6 max-w-md text-sm text-muted-foreground">
-            Guardamos tus datos y el sistema Speed-to-Lead ya activo el flujo para que una asesora pueda
-            contactarte al telefono indicado.
+            {contactBookingStrings.copy.contactSuccessDescription}
           </p>
           <div className="rounded-sm border border-border bg-background/70 px-5 py-4 text-left">
             <p className="text-xs font-sans uppercase tracking-[0.2em] text-muted-foreground">
-              Resumen
+              {contactBookingStrings.copy.summary}
             </p>
             <p className="mt-3 text-sm font-medium text-foreground">{buildFullName()}</p>
             <p className="mt-2 text-sm text-muted-foreground">{selectedProcedureInterest}</p>
             <p className="mt-2 text-sm text-muted-foreground">{form.telefono}</p>
             <p className="mt-2 text-sm text-muted-foreground">{form.correo}</p>
             {contactLead.assignedAgent && (
-              <p className="mt-3 text-sm text-foreground">Asesora asignada: {contactLead.assignedAgent}</p>
+              <p className="mt-3 text-sm text-foreground">
+                {contactBookingStrings.copy.assignedAdvisor} {contactLead.assignedAgent}
+              </p>
             )}
             {contactLead.queued && (
               <p className="mt-3 text-sm text-muted-foreground">
-                Si la asesora estaba ocupada, la llamada quedo en cola para el siguiente intento.
+                {contactBookingStrings.copy.queuedCall}
               </p>
             )}
           </div>
@@ -882,14 +892,14 @@ const ContactBookingForm = () => {
           {confirmedBooking.paymentUrl || confirmedBooking.paymentRedirect ? (
             <>
               <h3 className="mb-3 font-serif text-2xl font-medium text-foreground">
-                Redirigiendo al Pago
+                {contactBookingStrings.copy.paymentRedirectTitle}
               </h3>
               <p className="mb-2 text-muted-foreground">{confirmedBooking.option.procedureName}</p>
               <p className="mb-2 text-sm text-muted-foreground">
                 {formatSummaryDate(confirmedBooking.selectedSlot.date, confirmedBooking.selectedSlot.time)}
               </p>
               <p className="mb-8 text-sm text-muted-foreground">
-                Tu hora fue apartada y te llevaremos al link de pago para completar la reserva.
+                {contactBookingStrings.copy.paymentRedirectDescription}
               </p>
               <button
                 type="button"
@@ -898,13 +908,13 @@ const ContactBookingForm = () => {
                 }}
                 className="btn-premium inline-flex px-8 py-3 text-xs"
               >
-                Ir al pago ahora
+                {contactBookingStrings.copy.goToPayment}
               </button>
             </>
           ) : (
             <>
               <h3 className="mb-3 font-serif text-2xl font-medium text-foreground">
-                Evaluacion Agendada
+                {contactBookingStrings.copy.bookingSuccessTitle}
               </h3>
               <p className="mb-2 text-muted-foreground">{confirmedBooking.option.procedureName}</p>
               <p className="mb-2 text-sm font-medium text-foreground">
@@ -920,7 +930,7 @@ const ContactBookingForm = () => {
               </p>
               <div className="rounded-sm border border-border bg-background/70 px-5 py-4 text-left">
                 <p className="text-xs font-sans uppercase tracking-[0.2em] text-muted-foreground">
-                  Resumen
+                  {contactBookingStrings.copy.summary}
                 </p>
                 <p className="mt-3 flex items-center gap-2 text-sm text-foreground">
                   <CalendarIcon size={14} />
@@ -947,7 +957,7 @@ const ContactBookingForm = () => {
                 : "hover:text-foreground"
             }`}
           >
-            <ChevronLeft size={16} /> Anterior
+            <ChevronLeft size={16} /> {contactBookingStrings.copy.back}
           </button>
           <button
             type="button"

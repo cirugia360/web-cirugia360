@@ -6,12 +6,19 @@ import Footer from "@/components/Footer";
 import ScrollReveal from "@/components/ScrollReveal";
 import Counter from "@/components/Counter";
 import { ContactModalButton } from "@/components/ContactModalProvider";
-import heroDoctor from "@/assets/hero-doctor.jpg";
 import marcacionCover from "@/assets/marcacion.jpeg";
 import rinoplastiaCover from "@/assets/rinoplastia.jpeg";
 import subcisionCover from "@/assets/subcision.jpeg";
 
 const technology = "/images/Bodytite.webp";
+const heroDoctorImages = {
+  avif:
+    "/images/home/hero-doctor-768.avif 768w, /images/home/hero-doctor-1280.avif 1280w, /images/home/hero-doctor-1920.avif 1920w",
+  webp:
+    "/images/home/hero-doctor-768.webp 768w, /images/home/hero-doctor-1280.webp 1280w, /images/home/hero-doctor-1920.webp 1920w",
+  fallback: "/images/home/hero-doctor-1280.webp",
+  sizes: "100vw",
+};
 
 const credentials = [
   { icon: GraduationCap, title: "Médico", desc: "Pontificia Universidad Católica de Chile" },
@@ -74,7 +81,20 @@ const Index = () => {
       {/* Hero */}
       <section className="relative min-h-screen flex items-center overflow-hidden">
         <div className="absolute inset-0">
-          <img src={heroDoctor} alt="Dr. Sebastián Torres" className="w-full h-full object-cover object-top" />
+          <picture className="block h-full w-full">
+            <source type="image/avif" srcSet={heroDoctorImages.avif} sizes={heroDoctorImages.sizes} />
+            <source type="image/webp" srcSet={heroDoctorImages.webp} sizes={heroDoctorImages.sizes} />
+            <img
+              src={heroDoctorImages.fallback}
+              alt="Dr. Sebastián Torres"
+              width={1920}
+              height={1080}
+              fetchPriority="high"
+              loading="eager"
+              decoding="async"
+              className="h-full w-full object-cover object-top"
+            />
+          </picture>
           <div className="absolute inset-0 bg-gradient-to-r from-foreground/80 via-foreground/50 to-transparent" />
         </div>
         <div className="relative container-premium section-padding pt-32">

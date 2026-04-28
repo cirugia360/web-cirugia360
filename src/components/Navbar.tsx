@@ -3,15 +3,9 @@ import { Link, useLocation } from "react-router-dom";
 import { Menu, X } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ContactModalButton } from "@/components/ContactModalProvider";
+import { siteStrings } from "@/i18n/strings";
 
-const navLinks = [
-  { label: "Inicio", href: "/" },
-  { label: "El Doctor", href: "/el-doctor" },
-  { label: "Procedimientos", href: "/procedimientos" },
-  { label: "Resultados", href: "/resultados" },
-  { label: "Tecnologia", href: "/tecnologia" },
-  { label: "Blog", href: "/blog" },
-];
+const navLinks = siteStrings.nav.links;
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -26,7 +20,7 @@ const Navbar = () => {
       <nav className="container-premium flex items-center justify-between px-6 py-4 md:px-12 lg:px-20">
         <Link to="/" className="flex items-center gap-2">
           <span className="font-serif text-2xl font-semibold tracking-tight text-foreground">
-            Cirugia<span className="text-primary">360</span>
+            {siteStrings.brand.prefix}<span className="text-primary">{siteStrings.brand.suffix}</span>
           </span>
         </Link>
 
@@ -50,7 +44,7 @@ const Navbar = () => {
 
         <div className="hidden items-center gap-4 lg:flex">
           <ContactModalButton className="btn-premium px-6 py-3 text-xs">
-            Agendar Evaluacion
+            {siteStrings.nav.cta}
           </ContactModalButton>
         </div>
 
@@ -86,7 +80,7 @@ const Navbar = () => {
                 className="btn-premium mt-4 px-6 py-3 text-center text-xs"
                 onClick={() => setIsOpen(false)}
               >
-                Agendar Evaluacion
+                {siteStrings.nav.cta}
               </ContactModalButton>
             </div>
           </motion.div>
