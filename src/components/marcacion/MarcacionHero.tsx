@@ -28,7 +28,7 @@ const MarcacionHero = () => (
         </p>
         <div className="mt-10">
           <ContactModalButton className="btn-premium">
-            AGENDA TU EVALUACIÓN GRATUITA
+            Agendar evaluación
           </ContactModalButton>
         </div>
         <div className="mt-8 flex flex-wrap gap-3 text-sm text-background/90">

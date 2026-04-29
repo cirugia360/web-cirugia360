@@ -1,13 +1,9 @@
 import ClosingValuationSection from "@/components/landing/ClosingValuationSection";
 import { ContactModalButton } from "@/components/ContactModalProvider";
-import { defaultWhatsappMessage, whatsappNumber } from "@/pages/marcacionData";
 
 type MarcacionClosingProps = {
   showMobileStickyCta: boolean;
 };
-
-const buildWhatsAppUrl = (message: string) =>
-  `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`;
 
 const MarcacionClosing = ({ showMobileStickyCta }: MarcacionClosingProps) => (
   <>
@@ -15,8 +11,6 @@ const MarcacionClosing = ({ showMobileStickyCta }: MarcacionClosingProps) => (
       sectionId="evaluacion"
       title="¿Listo para un contorno más definido y una silueta más atlética?"
       description="Agenda tu evaluación y descubre si Marcación Nivel Dios es la técnica adecuada para lograr la definición, retracción y proyección que buscas."
-      whatsappHref={buildWhatsAppUrl(defaultWhatsappMessage)}
-      buttonText="Agendar evaluación"
       highlightText="Cupos limitados · Evaluaciones personalizadas"
       footerText="Sin compromiso · Evaluación personalizada · Respuesta en menos de 24h"
     />
@@ -27,7 +21,7 @@ const MarcacionClosing = ({ showMobileStickyCta }: MarcacionClosingProps) => (
       }`}
     >
       <ContactModalButton className="btn-premium w-full px-6 py-3">
-        AGENDAR EVALUACIÓN
+        Agendar evaluación
       </ContactModalButton>
     </div>
   </>

@@ -58,9 +58,6 @@ export const heroImage = "/images/blefaroplastia.png";
 export const ogImagePath = "/images/blefaroplastia.png";
 export const canonicalUrl = "https://cirugia360.cl/procedimientos/blefaroplastia";
 export const clinicUrl = "https://cirugia360.cl";
-export const whatsappNumber = "56912345678";
-export const defaultWhatsappMessage =
-  "Hola, quiero agendar una evaluacion para Blefaroplastia en Cirugia 360.";
 
 export const heroBadges = [
   "15+ anos de experiencia",

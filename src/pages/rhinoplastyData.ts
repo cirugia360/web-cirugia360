@@ -59,11 +59,6 @@ export type FaqItem = {
 
 export const canonicalUrl = "https://cirugia360.cl/torres-rhinoplasty";
 
-export const whatsappNumber = "56912345678";
-
-export const defaultWhatsappMessage =
-  "Hola, quiero agendar una evaluacion para Torres Rhinoplasty en Cirugia 360.";
-
 export const heroBadges = [
   "+5.000 rinoplastias",
   "<1% tasa de revision",

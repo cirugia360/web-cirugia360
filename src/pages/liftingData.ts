@@ -59,9 +59,6 @@ export const heroImage = "/images/lifting.png";
 export const ogImagePath = "/images/lifting.png";
 export const canonicalUrl = "https://cirugia360.cl/procedimientos/lifting-facial";
 export const clinicUrl = "https://cirugia360.cl";
-export const whatsappNumber = "56912345678";
-export const defaultWhatsappMessage =
-  "Hola, quiero agendar una evaluacion para Lifting Facial en Cirugia 360.";
 
 export const heroBadges = [
   "15+ anos de experiencia",

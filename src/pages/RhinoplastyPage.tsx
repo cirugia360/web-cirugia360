@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowRight, Check, ChevronRight, MessageCircle } from "lucide-react";
+import { ArrowRight, Check, ChevronRight } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import ExperienceMetricsSection from "@/components/landing/ExperienceMetricsSection";
@@ -9,11 +9,9 @@ import ScrollReveal from "@/components/ScrollReveal";
 import { ContactModalButton } from "@/components/ContactModalProvider";
 import SectionHeading from "@/components/marcacion/SectionHeading";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { cn } from "@/lib/utils";
 import useRhinoplastySeo from "@/hooks/useRhinoplastySeo";
 import {
   challengeItems,
-  defaultWhatsappMessage,
   doctorAwards,
   doctorMemberships,
   faqItems,
@@ -25,11 +23,7 @@ import {
   solutionChecks,
   stats,
   technologyCards,
-  whatsappNumber,
 } from "@/pages/rhinoplastyData";
-
-const buildWhatsAppUrl = (message: string) =>
-  `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`;
 
 const RhinoplastyPage = () => {
   useRhinoplastySeo();
@@ -96,9 +90,9 @@ const RhinoplastyPage = () => {
                 <div className="mt-10">
                   <ContactModalButton
                     className="btn-premium"
-                    aria-label="Abrir evaluacion para Torres Rhinoplasty"
+                    aria-label="Agendar evaluación"
                   >
-                    AGENDA TU EVALUACION
+                    Agendar evaluación
                   </ContactModalButton>
                 </div>
                 <ul className="mt-8 flex flex-wrap gap-3 text-sm text-background/90" aria-label="Pruebas sociales destacadas">
@@ -244,8 +238,8 @@ const RhinoplastyPage = () => {
                       </div>
                     ))}
                   </div>
-                  <ContactModalButton className="btn-premium mt-10" aria-label="Abrir simulacion 3D de rinoplastia">
-                    AGENDA TU SIMULACION 3D
+                  <ContactModalButton className="btn-premium mt-10" aria-label="Agendar evaluación">
+                    Agendar evaluación
                   </ContactModalButton>
                 </div>
               </ScrollReveal>
@@ -375,8 +369,8 @@ const RhinoplastyPage = () => {
             </div>
             <ScrollReveal delay={0.18}>
               <div className="mt-12 text-center">
-                <ContactModalButton className="btn-premium" aria-label="Agendar el primer paso de tu rinoplastia">
-                  AGENDA TU PRIMER PASO
+                <ContactModalButton className="btn-premium" aria-label="Agendar evaluación">
+                  Agendar evaluación
                 </ContactModalButton>
               </div>
             </ScrollReveal>
@@ -396,14 +390,14 @@ const RhinoplastyPage = () => {
                 <ScrollReveal key={item.title} delay={index * 0.06}>
                   <ContactModalButton
                     className="card-premium flex h-full w-full flex-col items-start rounded-lg p-7 text-left transition-all duration-300 hover:border-primary/30"
-                    aria-label={`Abrir evaluacion por motivo: ${item.title}`}
+                    aria-label="Agendar evaluación"
                   >
                     <span className="mb-5 flex h-14 w-14 items-center justify-center rounded-sm bg-primary/10 text-primary">
                       <item.icon size={26} />
                     </span>
                     <span className="font-serif text-xl font-medium text-foreground">{item.title}</span>
                     <span className="mt-4 inline-flex items-center gap-2 text-xs font-sans font-medium uppercase tracking-[0.18em] text-primary">
-                      Agendar evaluacion <ChevronRight size={14} />
+                      Agendar evaluación <ChevronRight size={14} />
                     </span>
                   </ContactModalButton>
                 </ScrollReveal>
@@ -442,9 +436,9 @@ const RhinoplastyPage = () => {
                       <p className="text-sm leading-7 text-muted-foreground">{item.answer}</p>
                       <ContactModalButton
                         className="mt-4 inline-flex items-center gap-2 text-xs font-sans font-medium uppercase tracking-[0.18em] text-primary transition-colors hover:text-primary/80"
-                        aria-label={`Agendar evaluacion desde pregunta frecuente: ${item.question}`}
+                        aria-label="Agendar evaluación"
                       >
-                        Agenda tu evaluacion para resolver todas tus dudas.
+                        Agendar evaluación
                         <ArrowRight size={14} />
                       </ContactModalButton>
                     </AccordionContent>
@@ -473,19 +467,10 @@ const RhinoplastyPage = () => {
                 <div className="mt-10 flex flex-col items-center justify-center gap-5 sm:flex-row">
                   <ContactModalButton
                     className="inline-flex items-center justify-center rounded-sm border border-background/60 px-10 py-4 text-sm font-medium uppercase tracking-[0.18em] text-background transition-all duration-300 hover:bg-background hover:text-foreground"
-                    aria-label="Abrir evaluacion final de Torres Rhinoplasty"
+                    aria-label="Agendar evaluación"
                   >
                     Agendar evaluación
                   </ContactModalButton>
-                  <a
-                    href={buildWhatsAppUrl(defaultWhatsappMessage)}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-2 text-sm font-medium text-background/80 transition-colors hover:text-background"
-                  >
-                    <MessageCircle size={18} />
-                    O escríbenos por WhatsApp
-                  </a>
                 </div>
                 <p className="mt-6 text-sm text-background/55">
                   Sin compromiso · Evaluación personalizada · Respuesta en menos de 24h
@@ -496,21 +481,6 @@ const RhinoplastyPage = () => {
         </section>
       </main>
 
-      <a
-        href={buildWhatsAppUrl(defaultWhatsappMessage)}
-        target="_blank"
-        rel="noreferrer"
-        aria-label="Escribir por WhatsApp a Cirugia 360"
-        className={cn(
-          "animate-soft-pulse fixed right-4 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-[0_14px_34px_-16px_rgba(42,122,123,0.55)] transition-all duration-300 hover:bg-primary-dark md:h-auto md:w-auto md:gap-2 md:rounded-full md:px-5 md:py-4",
-          showMobileStickyCta ? "bottom-24" : "bottom-5",
-          "md:bottom-6",
-        )}
-      >
-        <MessageCircle size={22} />
-        <span className="hidden text-sm font-medium md:inline">WhatsApp</span>
-      </a>
-
       <Footer />
 
       <div
@@ -520,9 +490,9 @@ const RhinoplastyPage = () => {
       >
         <ContactModalButton
           className="btn-premium w-full px-6 py-3 text-xs"
-          aria-label="Abrir barra fija de evaluacion en mobile"
+          aria-label="Agendar evaluación"
         >
-          AGENDAR EVALUACION
+          Agendar evaluación
         </ContactModalButton>
       </div>
     </div>

@@ -1,13 +1,9 @@
 import ClosingValuationSection from "@/components/landing/ClosingValuationSection";
 import { ContactModalButton } from "@/components/ContactModalProvider";
-import { defaultWhatsappMessage, whatsappNumber } from "@/pages/liposuccionData";
 
 type LiposuccionClosingProps = {
   showMobileStickyCta: boolean;
 };
-
-const buildWhatsAppUrl = (message: string) =>
-  `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`;
 
 const LiposuccionClosing = ({ showMobileStickyCta }: LiposuccionClosingProps) => (
   <>
@@ -15,8 +11,6 @@ const LiposuccionClosing = ({ showMobileStickyCta }: LiposuccionClosingProps) =>
       sectionId="evaluacion"
       title="Listo para un contorno mas limpio, armonico y proporcionado?"
       description="Agenda tu evaluacion y descubre si la liposuccion es el procedimiento indicado para corregir grasa localizada y mejorar tu silueta segun tu anatomia."
-      whatsappHref={buildWhatsAppUrl(defaultWhatsappMessage)}
-      buttonText="Agendar evaluacion"
       highlightText="Cupos limitados | Evaluaciones personalizadas"
       footerText="Sin compromiso | Evaluacion personalizada | Respuesta en menos de 24h"
     />
@@ -27,7 +21,7 @@ const LiposuccionClosing = ({ showMobileStickyCta }: LiposuccionClosingProps) =>
       }`}
     >
       <ContactModalButton className="btn-premium w-full px-6 py-3">
-        AGENDAR EVALUACION
+        Agendar evaluación
       </ContactModalButton>
     </div>
   </>

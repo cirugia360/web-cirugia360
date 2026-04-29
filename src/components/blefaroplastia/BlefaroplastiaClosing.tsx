@@ -1,13 +1,9 @@
 import ClosingValuationSection from "@/components/landing/ClosingValuationSection";
 import { ContactModalButton } from "@/components/ContactModalProvider";
-import { defaultWhatsappMessage, whatsappNumber } from "@/pages/blefaroplastiaData";
 
 type BlefaroplastiaClosingProps = {
   showMobileStickyCta: boolean;
 };
-
-const buildWhatsAppUrl = (message: string) =>
-  `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`;
 
 const BlefaroplastiaClosing = ({ showMobileStickyCta }: BlefaroplastiaClosingProps) => (
   <>
@@ -15,8 +11,6 @@ const BlefaroplastiaClosing = ({ showMobileStickyCta }: BlefaroplastiaClosingPro
       sectionId="evaluacion"
       title="Listo para una mirada mas limpia, fresca y descansada?"
       description="Agenda tu evaluacion y descubre si la blefaroplastia es el procedimiento indicado para corregir parpados pesados, bolsas y mirada cansada segun tu anatomia."
-      whatsappHref={buildWhatsAppUrl(defaultWhatsappMessage)}
-      buttonText="Agendar evaluacion"
       highlightText="Cupos limitados | Evaluaciones personalizadas"
       footerText="Sin compromiso | Evaluacion personalizada | Respuesta en menos de 24h"
     />
@@ -27,7 +21,7 @@ const BlefaroplastiaClosing = ({ showMobileStickyCta }: BlefaroplastiaClosingPro
       }`}
     >
       <ContactModalButton className="btn-premium w-full px-6 py-3">
-        AGENDAR EVALUACION
+        Agendar evaluación
       </ContactModalButton>
     </div>
   </>

@@ -1,13 +1,9 @@
 import ClosingValuationSection from "@/components/landing/ClosingValuationSection";
 import { ContactModalButton } from "@/components/ContactModalProvider";
-import { defaultWhatsappMessage, whatsappNumber } from "@/pages/liftingData";
 
 type LiftingClosingProps = {
   showMobileStickyCta: boolean;
 };
-
-const buildWhatsAppUrl = (message: string) =>
-  `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`;
 
 const LiftingClosing = ({ showMobileStickyCta }: LiftingClosingProps) => (
   <>
@@ -15,8 +11,6 @@ const LiftingClosing = ({ showMobileStickyCta }: LiftingClosingProps) => (
       sectionId="evaluacion"
       title="Listo para verte mas fresco, definido y natural?"
       description="Agenda tu evaluacion y descubre si un lifting facial es el procedimiento indicado para rejuvenecer rostro y cuello segun tu anatomia."
-      whatsappHref={buildWhatsAppUrl(defaultWhatsappMessage)}
-      buttonText="Agendar evaluacion"
       highlightText="Cupos limitados | Evaluaciones personalizadas"
       footerText="Sin compromiso | Evaluacion personalizada | Respuesta en menos de 24h"
     />
@@ -27,7 +21,7 @@ const LiftingClosing = ({ showMobileStickyCta }: LiftingClosingProps) => (
       }`}
     >
       <ContactModalButton className="btn-premium w-full px-6 py-3">
-        AGENDAR EVALUACION
+        Agendar evaluación
       </ContactModalButton>
     </div>
   </>

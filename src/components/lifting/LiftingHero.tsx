@@ -28,7 +28,7 @@ const LiftingHero = () => (
         </p>
         <div className="mt-10">
           <ContactModalButton className="btn-premium">
-            AGENDA TU EVALUACION
+            Agendar evaluación
           </ContactModalButton>
         </div>
         <div className="mt-8 flex flex-wrap gap-3 text-sm text-background/90">

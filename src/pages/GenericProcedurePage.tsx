@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowRight, Check, MessageCircle } from "lucide-react";
+import { ArrowRight, Check } from "lucide-react";
 import Footer from "@/components/Footer";
 import Navbar from "@/components/Navbar";
 import ProcedureResultsPreviewSection from "@/components/landing/ProcedureResultsPreviewSection";
@@ -9,7 +9,6 @@ import ScrollReveal from "@/components/ScrollReveal";
 import SectionHeading from "@/components/marcacion/SectionHeading";
 import { ContactModalButton } from "@/components/ContactModalProvider";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { cn } from "@/lib/utils";
 import doctorPortrait from "@/assets/doctor-portrait.jpg";
 import { getProcedureById, type ProcedureId } from "@/data/procedureCatalog";
 import NotFound from "@/pages/NotFound";
@@ -17,8 +16,6 @@ import NotFound from "@/pages/NotFound";
 type GenericProcedurePageProps = {
   procedureId: ProcedureId;
 };
-
-const whatsappNumber = "56912345678";
 
 const doctorAwards = [
   "Mejor Cirujano Plastico Facial 2023 - AMWC World Congress, Monaco",
@@ -38,9 +35,6 @@ const doctorParagraphs = [
   "El Dr. Sebastian Torres Farr es medico de la Pontificia Universidad Catolica de Chile, con especializacion en Cirugia de Cabeza, Cuello y Maxilofacial en Italia y una trayectoria construida sobre precision quirurgica, criterio anatomico y seguimiento cercano.",
   "Su enfoque integra evaluacion honesta, planificacion personalizada y una ejecucion enfocada en resultados naturales, proporcionales y coherentes con la anatomia de cada paciente.",
 ];
-
-const buildWhatsAppUrl = (message: string) =>
-  `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`;
 
 const GenericProcedurePage = ({ procedureId }: GenericProcedurePageProps) => {
   const procedure = getProcedureById(procedureId);
@@ -69,8 +63,6 @@ const GenericProcedurePage = ({ procedureId }: GenericProcedurePageProps) => {
 
   const heroImage = procedure.cases[0]?.src ?? procedure.image;
   const procedureImage = procedure.cases[1]?.src ?? heroImage;
-  const defaultWhatsappMessage = `Hola, quiero agendar una evaluacion para ${procedure.title} en Cirugia 360.`;
-
   return (
     <div className="min-h-screen bg-background pb-24 text-foreground md:pb-0">
       <a
@@ -104,7 +96,7 @@ const GenericProcedurePage = ({ procedureId }: GenericProcedurePageProps) => {
               </p>
 
               <div className="mt-10 flex flex-col items-start gap-5">
-                <ContactModalButton className="btn-premium">Agendar evaluacion</ContactModalButton>
+                <ContactModalButton className="btn-premium">Agendar evaluación</ContactModalButton>
                 <div className="flex flex-wrap gap-3">
                   {landing.heroBadges.map((badge) => (
                     <span
@@ -184,7 +176,7 @@ const GenericProcedurePage = ({ procedureId }: GenericProcedurePageProps) => {
                   </div>
 
                   <ContactModalButton className="btn-premium mt-10">
-                    Agendar evaluacion
+                    Agendar evaluación
                   </ContactModalButton>
                 </div>
               </ScrollReveal>
@@ -260,7 +252,7 @@ const GenericProcedurePage = ({ procedureId }: GenericProcedurePageProps) => {
             <ScrollReveal delay={0.14}>
               <div className="mt-12 text-center">
                 <ContactModalButton className="btn-premium">
-                  Resolver mi caso en evaluacion
+                  Agendar evaluación
                 </ContactModalButton>
               </div>
             </ScrollReveal>
@@ -316,7 +308,7 @@ const GenericProcedurePage = ({ procedureId }: GenericProcedurePageProps) => {
                     <AccordionContent className="pb-6">
                       <p className="text-sm leading-7 text-muted-foreground">{item.answer}</p>
                       <ContactModalButton className="mt-4 inline-flex items-center gap-2 text-xs font-sans font-medium uppercase tracking-[0.18em] text-primary transition-colors hover:text-primary/80">
-                        Agendar evaluacion personalizada
+                        Agendar evaluación
                         <ArrowRight size={14} />
                       </ContactModalButton>
                     </AccordionContent>
@@ -330,24 +322,8 @@ const GenericProcedurePage = ({ procedureId }: GenericProcedurePageProps) => {
         <ClosingValuationSection
           title={landing.closingTitle}
           description={landing.closingDescription}
-          whatsappHref={buildWhatsAppUrl(defaultWhatsappMessage)}
         />
       </main>
-
-      <a
-        href={buildWhatsAppUrl(defaultWhatsappMessage)}
-        target="_blank"
-        rel="noreferrer"
-        aria-label={`Escribir por WhatsApp sobre ${procedure.title}`}
-        className={cn(
-          "animate-soft-pulse fixed right-4 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-[0_14px_34px_-16px_rgba(42,122,123,0.55)] transition-all duration-300 hover:bg-primary-dark md:h-auto md:w-auto md:gap-2 md:rounded-full md:px-5 md:py-4",
-          showMobileStickyCta ? "bottom-24" : "bottom-5",
-          "md:bottom-6",
-        )}
-      >
-        <MessageCircle size={22} />
-        <span className="hidden text-sm font-medium md:inline">WhatsApp</span>
-      </a>
 
       <Footer />
 
@@ -357,7 +333,7 @@ const GenericProcedurePage = ({ procedureId }: GenericProcedurePageProps) => {
         }`}
       >
         <ContactModalButton className="btn-premium w-full px-6 py-3 text-xs">
-          AGENDAR EVALUACION
+          Agendar evaluación
         </ContactModalButton>
       </div>
     </div>

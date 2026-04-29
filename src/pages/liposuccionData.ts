@@ -58,9 +58,6 @@ export const heroImage = "/images/liposuccion.png";
 export const ogImagePath = "/images/liposuccion.png";
 export const canonicalUrl = "https://cirugia360.cl/procedimientos/liposuccion";
 export const clinicUrl = "https://cirugia360.cl";
-export const whatsappNumber = "56912345678";
-export const defaultWhatsappMessage =
-  "Hola, quiero agendar una evaluacion para Liposuccion en Cirugia 360.";
 
 export const heroBadges = [
   "15+ anos de experiencia",

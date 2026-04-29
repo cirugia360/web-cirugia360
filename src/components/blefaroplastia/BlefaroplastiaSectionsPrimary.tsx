@@ -98,7 +98,7 @@ const BlefaroplastiaSectionsPrimary = () => (
                 ))}
               </div>
               <ContactModalButton className="btn-premium mt-10">
-                Agendar evaluacion
+                Agendar evaluación
               </ContactModalButton>
             </div>
           </ScrollReveal>
@@ -147,7 +147,7 @@ const BlefaroplastiaSectionsPrimary = () => (
                   ))}
                 </ul>
                 <ContactModalButton className="mt-8 inline-flex items-center gap-2 text-sm font-sans font-medium uppercase tracking-[0.18em] text-primary transition-colors hover:text-primary/80">
-                  Agendar evaluacion <ChevronRight size={16} />
+                  Agendar evaluación <ChevronRight size={16} />
                 </ContactModalButton>
               </article>
             </ScrollReveal>

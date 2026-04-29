@@ -284,11 +284,6 @@ export const trustLogos = ["Renuvion", "BodyTite", "UGRAFT"];
 
 export const canonicalUrl = "https://cirugia360.cl/marcacion-nivel-dios";
 
-export const whatsappNumber = "56912345678";
-
-export const defaultWhatsappMessage =
-  "Hola, quiero agendar una evaluación para Marcación Nivel Dios en Cirugía 360.";
-
 export const footerHighlights = [
   "Lipoescultura de alta definición",
   "Marcación abdominal",

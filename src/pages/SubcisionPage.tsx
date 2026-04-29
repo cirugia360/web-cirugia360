@@ -12,7 +12,6 @@ import {
   HeartPulse,
   Layers3,
   MapPinned,
-  MessageCircle,
   Scissors,
   Shirt,
   Sparkles,
@@ -35,7 +34,7 @@ import {
 import { useIsMobile } from "@/hooks/use-mobile";
 import useSubcisionSeo from "@/hooks/useSubcisionSeo";
 import SectionHeading from "@/components/marcacion/SectionHeading";
-import { faqItems, whatsappUrl } from "@/pages/subcisionData";
+import { faqItems } from "@/pages/subcisionData";
 
 type IconCard = {
   icon: LucideIcon;
@@ -236,7 +235,7 @@ const candidacyItems = [
   "Quieres combinar tratamiento de celulitis con firmeza de piel",
 ];
 
-const faqCtaText = "Agenda tu valoración para resolver todas tus dudas.";
+const faqCtaText = "Agendar evaluación";
 
 const AnimatedMetric = ({ label, target, formatter }: Metric) => {
   const ref = useRef<HTMLDivElement | null>(null);
@@ -365,7 +364,7 @@ const SubcisionPage = () => {
                 className="mt-10 flex flex-col items-start gap-5"
               >
                 <ContactModalButton className="btn-premium px-10 py-4">
-                  Agenda tu valoración
+                  Agendar evaluación
                 </ContactModalButton>
                 <div className="flex flex-wrap gap-3">
                   {heroProof.map((item) => (
@@ -564,7 +563,7 @@ const SubcisionPage = () => {
                   posterior.
                 </p>
                 <ContactModalButton className="btn-premium mt-8 px-10 py-4">
-                  Agenda tu valoración
+                  Agendar evaluación
                 </ContactModalButton>
               </div>
             </ScrollReveal>
@@ -729,7 +728,7 @@ const SubcisionPage = () => {
             <ScrollReveal delay={0.12}>
               <div className="mt-12 text-center">
                 <ContactModalButton className="btn-premium px-10 py-4">
-                  Agenda tu primer paso
+                  Agendar evaluación
                 </ContactModalButton>
               </div>
             </ScrollReveal>
@@ -746,14 +745,14 @@ const SubcisionPage = () => {
                 <ScrollReveal key={item} delay={index * 0.06}>
                   <ContactModalButton
                     className="card-premium flex h-full w-full flex-col items-start p-6 text-left"
-                    aria-label={`Agendar valoración si ${item}`}
+                    aria-label={`Agendar evaluación si ${item}`}
                   >
                     <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
                       <Sparkles className="text-primary" size={22} />
                     </div>
                     <h3 className="mt-5 font-serif text-xl font-medium text-foreground">{item}</h3>
                     <span className="mt-6 inline-flex items-center gap-2 text-xs font-medium uppercase tracking-[0.2em] text-primary">
-                      Agendar valoración <ArrowRight size={14} />
+                      Agendar evaluación <ArrowRight size={14} />
                     </span>
                   </ContactModalButton>
                 </ScrollReveal>
@@ -812,17 +811,8 @@ const SubcisionPage = () => {
               </p>
               <div className="mt-10 flex flex-col items-center justify-center gap-5 sm:flex-row">
                 <ContactModalButton className="inline-flex items-center justify-center rounded-sm border border-background/60 px-10 py-4 text-sm font-medium uppercase tracking-[0.18em] text-background transition-all duration-300 hover:bg-background hover:text-foreground">
-                  Agendar valoración
+                  Agendar evaluación
                 </ContactModalButton>
-                <a
-                  href={whatsappUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-2 text-sm font-medium text-background/80 transition-colors hover:text-background"
-                >
-                  <MessageCircle size={18} />
-                  O escríbenos por WhatsApp
-                </a>
               </div>
               <p className="mt-6 text-sm text-background/55">
                 Sin compromiso · Valoración personalizada · Respuesta en menos de 24h
@@ -831,17 +821,6 @@ const SubcisionPage = () => {
           </div>
         </section>
       </main>
-
-      <a
-        href={whatsappUrl}
-        target="_blank"
-        rel="noreferrer"
-        aria-label="Escribir por WhatsApp a Cirugía 360"
-        className="animate-soft-pulse fixed bottom-[5.5rem] right-4 z-40 inline-flex items-center gap-2 rounded-full bg-primary px-5 py-3 text-sm font-medium text-primary-foreground shadow-[var(--shadow-premium)] transition-transform duration-300 hover:-translate-y-1 md:bottom-6 md:right-6"
-      >
-        <MessageCircle size={20} />
-        <span className="hidden sm:inline">WhatsApp</span>
-      </a>
 
       <AnimatePresence>
         {showStickyCta ? (
@@ -853,7 +832,7 @@ const SubcisionPage = () => {
             className="fixed inset-x-0 bottom-0 z-50 border-t border-border/80 bg-background/96 px-4 py-3 shadow-[0_-10px_30px_-20px_rgba(26,26,46,0.45)] backdrop-blur md:hidden"
           >
             <ContactModalButton className="btn-premium flex w-full items-center justify-center gap-2 px-6 py-4">
-              Agendar valoración
+              Agendar evaluación
               <ArrowRight size={16} />
             </ContactModalButton>
           </motion.div>

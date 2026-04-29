@@ -6,8 +6,6 @@ export type FaqItem = {
 export const canonicalUrl = "https://cirugia360.cl/subcision-magic";
 export const clinicUrl = "https://www.cirugia360.cl";
 export const ogImagePath = "/images/subcision/subcision-magic-og.jpg";
-export const whatsappUrl =
-  "https://wa.me/56942204831?text=Hola%2C%20quiero%20agendar%20una%20valoraci%C3%B3n%20de%20Subcision%20Magic";
 
 export const faqItems: FaqItem[] = [
   {

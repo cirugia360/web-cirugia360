@@ -37,7 +37,7 @@ const MarcacionHeader = ({
         href="#evaluacion"
         className="hidden items-center justify-center rounded-full bg-[#2A7A7B] px-6 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-white transition hover:bg-[#225F60] lg:inline-flex"
       >
-        AGENDAR EVALUACIÓN
+        Agendar evaluación
       </a>
 
       <button
@@ -70,7 +70,7 @@ const MarcacionHeader = ({
             className="mt-2 inline-flex items-center justify-center rounded-full bg-[#2A7A7B] px-6 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-white"
             onClick={onCloseMenu}
           >
-            AGENDAR EVALUACIÓN
+            Agendar evaluación
           </a>
         </div>
       </div>
