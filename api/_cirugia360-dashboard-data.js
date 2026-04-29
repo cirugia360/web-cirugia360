@@ -10,6 +10,7 @@ const TRACKING_TABLE = "c360_speed_tracking_events";
 const AGENT_ACTIVITY_TABLE = "c360_speed_agent_activity";
 export const META_EVENT_NAMES = {
   prospectCaptured: normalizeText(process.env.META_EVENT_NAME_LEAD) || "ProspectCaptured",
+  prospectReached: normalizeText(process.env.META_EVENT_NAME_CONTACT) || "ProspectReached",
   prospectQualified: normalizeText(process.env.META_EVENT_NAME_SCHEDULE) || "ProspectQualified",
   prospectClosed: normalizeText(process.env.META_EVENT_NAME_PURCHASE) || "ProspectClosed",
 };
@@ -865,13 +866,30 @@ const getLeadAttribution = (lead) =>
     ? lead.metadata.attribution
     : null;
 
+export const buildLeadMetaEventId = (leadId, eventName) => {
+  const normalizedLeadId = normalizeText(leadId);
+  const normalizedEventName = normalizeText(eventName);
+
+  return normalizedLeadId && normalizedEventName ? `${normalizedLeadId}:${normalizedEventName}` : null;
+};
+
+export const buildLeadMetaEventIds = (leadOrId, eventNames = Object.values(META_EVENT_NAMES)) => {
+  const leadId = typeof leadOrId === "string" ? leadOrId : leadOrId?.id;
+
+  return Object.fromEntries(
+    eventNames
+      .map((eventName) => [eventName, buildLeadMetaEventId(leadId, eventName)])
+      .filter(([, eventId]) => eventId),
+  );
+};
+
 const getLeadMetaEventId = (lead, eventName) => {
   const metaEventIds =
     lead?.metadata?.metaEventIds && typeof lead.metadata.metaEventIds === "object"
       ? lead.metadata.metaEventIds
       : null;
 
-  return normalizeText(metaEventIds?.[eventName]) || null;
+  return normalizeText(metaEventIds?.[eventName]) || buildLeadMetaEventId(lead?.id, eventName);
 };
 
 export const buildMetaPayloadFromLead = (lead, eventName, eventId, requestContext = {}) => {
@@ -927,7 +945,9 @@ export const dispatchMetaEvent = async ({
   }
 
   const eventId =
-    normalizeText(providedEventId) || `${eventName}:${lead?.id || "anonymous"}:${randomUUID()}`;
+    normalizeText(providedEventId) ||
+    buildLeadMetaEventId(lead?.id, eventName) ||
+    `${eventName}:anonymous:${randomUUID()}`;
   const eventPayload = buildMetaPayloadFromLead(lead, eventName, eventId, requestContext);
   const body = {
     data: [eventPayload],

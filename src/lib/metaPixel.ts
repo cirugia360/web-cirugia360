@@ -88,13 +88,11 @@ const toSha256Hex = async (value: string) => {
   }
 };
 
-export const createMetaEventId = (eventName: string, scope = "browser") => {
-  const randomValue =
-    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
-      ? crypto.randomUUID()
-      : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+export const createLeadMetaEventId = (leadId: string | null | undefined, eventName: string) => {
+  const normalizedLeadId = (leadId || "").trim();
+  const normalizedEventName = eventName.trim();
 
-  return `${eventName}:${scope}:${randomValue}`;
+  return normalizedLeadId && normalizedEventName ? `${normalizedLeadId}:${normalizedEventName}` : null;
 };
 
 export const trackMetaEvent = (

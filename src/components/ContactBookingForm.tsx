@@ -15,7 +15,7 @@ import { procedureCatalog } from "@/data/procedureCatalog";
 import { siteStrings } from "@/i18n/strings";
 import { getAttributionSnapshot } from "@/lib/attribution";
 import {
-  createMetaEventId,
+  createLeadMetaEventId,
   META_PIXEL_EVENT_NAMES,
   trackMetaCustomEvent,
   updateMetaAdvancedMatching,
@@ -284,7 +284,6 @@ const ContactBookingForm = () => {
   const [contactLead, setContactLead] = useState<Cirugia360ContactResponse | null>(null);
   const [isBookingMetaTrackingComplete, setIsBookingMetaTrackingComplete] = useState(false);
   const trackedMetaStandardEvents = useRef(new Set<string>());
-  const metaEventIds = useRef(new Map<string, string>());
   const appointmentType: AppointmentType = "presencial";
   const contactMetaEvents = [
     META_PIXEL_EVENT_NAMES.prospectCaptured,
@@ -486,30 +485,13 @@ const ContactBookingForm = () => {
       phone: form.telefono,
     });
 
-  const getMetaEventId = (flow: FlowIntent, eventName: string) => {
-    const key = `${flow}:${eventName}`;
-    const existingEventId = metaEventIds.current.get(key);
-
-    if (existingEventId) {
-      return existingEventId;
-    }
-
-    const nextEventId = createMetaEventId(eventName, flow);
-    metaEventIds.current.set(key, nextEventId);
-
-    return nextEventId;
-  };
-
-  const buildMetaEventIds = (flow: FlowIntent, events: string[]) =>
-    Object.fromEntries(events.map((eventName) => [eventName, getMetaEventId(flow, eventName)]));
-
   const trackMetaEventOnce = (
     key: string,
     eventName: string,
     data: Record<string, unknown>,
-    eventId: string,
+    eventId: string | null,
   ) => {
-    if (trackedMetaStandardEvents.current.has(key)) {
+    if (!eventId || trackedMetaStandardEvents.current.has(key)) {
       return true;
     }
 
@@ -523,16 +505,20 @@ const ContactBookingForm = () => {
   };
 
   const trackStandardMetaEvents = async ({
-    flow,
+    leadId,
     events,
     data,
     stage,
   }: {
-    flow: FlowIntent;
+    leadId: string | null | undefined;
     events: string[];
     data: Record<string, unknown>;
-    stage: "validated_submit" | "confirmed";
+    stage: "confirmed";
   }) => {
+    if (!leadId) {
+      return;
+    }
+
     await syncMetaAdvancedMatching().catch(() => false);
 
     const eventData = {
@@ -541,34 +527,11 @@ const ContactBookingForm = () => {
     };
 
     events.forEach((eventName) => {
-      trackMetaEventOnce(`${flow}:${eventName}`, eventName, eventData, getMetaEventId(flow, eventName));
+      const eventId = createLeadMetaEventId(leadId, eventName);
+
+      trackMetaEventOnce(`${leadId}:${eventName}`, eventName, eventData, eventId);
     });
   };
-
-  const trackContactSubmitMetaEvents = () =>
-    trackStandardMetaEvents({
-      flow: "contact",
-      events: contactMetaEvents,
-      data: {
-        ...buildMetaEventData("contact"),
-        lead_status: "pending_backend",
-      },
-      stage: "validated_submit",
-    });
-
-  const trackBookingSubmitMetaEvents = () =>
-    trackStandardMetaEvents({
-      flow: "booking",
-      events: bookingMetaEvents,
-      data: {
-        ...buildMetaEventData("booking"),
-        appointment_date: selectedDate,
-        appointment_time: selectedTime,
-        appointment_type: appointmentType,
-        lead_status: "pending_backend",
-      },
-      stage: "validated_submit",
-    });
 
   const trackContactLeadMetaEvents = async (response: Cirugia360ContactResponse) => {
     const eventData = {
@@ -580,7 +543,7 @@ const ContactBookingForm = () => {
     };
 
     await trackStandardMetaEvents({
-      flow: "contact",
+      leadId: response.leadId,
       events: contactMetaEvents,
       data: eventData,
       stage: "confirmed",
@@ -588,9 +551,10 @@ const ContactBookingForm = () => {
   };
 
   const trackBookingLeadMetaEvents = async (response: ReservoBookingResponse) => {
+    const leadId = response.bookingFollowUp?.leadId || null;
     const eventData = {
       ...buildMetaEventData("booking"),
-      lead_id: response.bookingFollowUp?.leadId || null,
+      lead_id: leadId,
       appointment_date: response.selectedSlot.date,
       appointment_time: response.selectedSlot.time,
       appointment_type: appointmentType,
@@ -598,7 +562,7 @@ const ContactBookingForm = () => {
     };
 
     await trackStandardMetaEvents({
-      flow: "booking",
+      leadId,
       events: bookingMetaEvents,
       data: eventData,
       stage: "confirmed",
@@ -622,7 +586,6 @@ const ContactBookingForm = () => {
         procedureOption: form.procedimiento,
         pageTitle: document.title,
         attribution,
-        metaEventIds: buildMetaEventIds("contact", contactMetaEvents),
       },
     });
   };
@@ -647,7 +610,6 @@ const ContactBookingForm = () => {
       setShowDetailErrors(false);
 
       if (isContactFlow) {
-        void trackContactSubmitMetaEvents();
         submitContactRequest();
         return;
       }
@@ -662,8 +624,6 @@ const ContactBookingForm = () => {
     }
 
     const attribution = getAttributionSnapshot();
-
-    void trackBookingSubmitMetaEvents();
 
     bookingMutation.mutate({
       appointmentType,
@@ -688,7 +648,6 @@ const ContactBookingForm = () => {
         procedureOption: form.procedimiento,
         pageTitle: document.title,
         attribution,
-        metaEventIds: buildMetaEventIds("booking", bookingMetaEvents),
       },
     });
   };

@@ -1,5 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { META_EVENT_NAMES, trackLeadMetaEvent } from "./_cirugia360-dashboard-data.js";
+import {
+  META_EVENT_NAMES,
+  buildLeadMetaEventIds,
+  trackLeadMetaEvent,
+} from "./_cirugia360-dashboard-data.js";
 import {
   claimDueSpeedLeads,
   claimQueuedSpeedLeads,
@@ -437,7 +441,7 @@ const buildBaseLeadRow = ({
 
 export const createContactLead = async (payload, config) => {
   const normalizedPhone = normalizePhoneInput(payload.phone, config.defaultCountryDialCode);
-  const lead = await insertSpeedLead(
+  let lead = await insertSpeedLead(
     buildBaseLeadRow({
       fullName: payload.fullName,
       phone: normalizedPhone,
@@ -450,6 +454,12 @@ export const createContactLead = async (payload, config) => {
       metadata: payload.metadata || {},
     }),
   );
+  lead = await updateSpeedLead(lead.id, {
+    metadata: {
+      ...(lead.metadata && typeof lead.metadata === "object" ? lead.metadata : {}),
+      metaEventIds: buildLeadMetaEventIds(lead),
+    },
+  });
 
   await insertSpeedLeadEvent(lead.id, "lead.created", {
     source: "contact_request",
@@ -598,7 +608,7 @@ export const createBookingLeadFromBooking = async ({
     .filter(Boolean)
     .join(" ") || "Paciente";
   const bookingReference = extractBookingReference(bookingResponse?.source);
-  const lead = await insertSpeedLead(
+  let lead = await insertSpeedLead(
     buildBaseLeadRow({
       fullName,
       phone: normalizePhoneInput(bookingPayload?.personal?.phone, config.defaultCountryDialCode),
@@ -629,6 +639,12 @@ export const createBookingLeadFromBooking = async ({
       },
     }),
   );
+  lead = await updateSpeedLead(lead.id, {
+    metadata: {
+      ...(lead.metadata && typeof lead.metadata === "object" ? lead.metadata : {}),
+      metaEventIds: buildLeadMetaEventIds(lead),
+    },
+  });
 
   await insertSpeedLeadEvent(lead.id, "lead.created", {
     source: "reservo_booking_created",

@@ -6,7 +6,12 @@ import {
   requireDashboardAuth,
   sendForbiddenLead,
 } from "../_cirugia360-dashboard-auth.js";
-import { META_EVENT_NAMES, toPublicLead, trackLeadMetaEvent } from "../_cirugia360-dashboard-data.js";
+import {
+  META_EVENT_NAMES,
+  buildLeadMetaEventIds,
+  toPublicLead,
+  trackLeadMetaEvent,
+} from "../_cirugia360-dashboard-data.js";
 import { getCirugia360SpeedConfigWithSettings } from "../_cirugia360-speed-config.js";
 import { getSpeedLeadById, insertSpeedLead, insertSpeedLeadEvent, updateSpeedLead } from "../_cirugia360-speed-db.js";
 import { buildLeadSummaryText } from "../_cirugia360-speed-twilio.js";
@@ -247,7 +252,13 @@ export default async function handler(request, response) {
       },
     };
 
-    const lead = await insertSpeedLead(row);
+    let lead = await insertSpeedLead(row);
+    lead = await updateSpeedLead(lead.id, {
+      metadata: {
+        ...(lead.metadata && typeof lead.metadata === "object" ? lead.metadata : {}),
+        metaEventIds: buildLeadMetaEventIds(lead),
+      },
+    });
 
     await insertSpeedLeadEvent(lead.id, "lead.created", {
       source: "dashboard_manual",
