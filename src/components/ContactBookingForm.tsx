@@ -14,6 +14,7 @@ import { toast } from "@/components/ui/sonner";
 import { procedureCatalog } from "@/data/procedureCatalog";
 import { siteStrings } from "@/i18n/strings";
 import { getAttributionSnapshot } from "@/lib/attribution";
+import { trackMetaEvent, updateMetaAdvancedMatching } from "@/lib/metaPixel";
 import {
   createCirugia360ContactLead,
   createReservoBooking,
@@ -276,6 +277,7 @@ const ContactBookingForm = () => {
   const [selectedTime, setSelectedTime] = useState("");
   const [confirmedBooking, setConfirmedBooking] = useState<ReservoBookingResponse | null>(null);
   const [contactLead, setContactLead] = useState<Cirugia360ContactResponse | null>(null);
+  const [isBookingMetaTrackingComplete, setIsBookingMetaTrackingComplete] = useState(false);
   const appointmentType: AppointmentType = "presencial";
 
   const availabilityQuery = useQuery({
@@ -290,6 +292,7 @@ const ContactBookingForm = () => {
     onSuccess: (response) => {
       setContactLead(response);
       setStep(4);
+      void trackContactLeadMetaEvents(response);
       toast.success(
         response.callStarted
           ? contactBookingStrings.toast.callStarted
@@ -305,7 +308,11 @@ const ContactBookingForm = () => {
     mutationFn: createReservoBooking,
     onSuccess: (response) => {
       setConfirmedBooking(response);
+      setIsBookingMetaTrackingComplete(false);
       setStep(4);
+      void trackBookingLeadMetaEvents(response)
+        .catch(() => undefined)
+        .finally(() => setIsBookingMetaTrackingComplete(true));
       toast.success(
         response.paymentUrl || response.paymentRedirect
           ? contactBookingStrings.toast.redirectingPayment
@@ -322,7 +329,7 @@ const ContactBookingForm = () => {
     const paymentRedirect = confirmedBooking?.paymentRedirect;
     const paymentUrl = confirmedBooking?.paymentUrl;
 
-    if (step !== 4 || (!paymentRedirect && !paymentUrl)) {
+    if (step !== 4 || !isBookingMetaTrackingComplete || (!paymentRedirect && !paymentUrl)) {
       return;
     }
 
@@ -331,7 +338,7 @@ const ContactBookingForm = () => {
     }, 150);
 
     return () => window.clearTimeout(timeoutId);
-  }, [confirmedBooking, step]);
+  }, [confirmedBooking, isBookingMetaTrackingComplete, step]);
 
   useEffect(() => {
     const nextAvailability = availabilityQuery.data?.availability || {};
@@ -451,6 +458,48 @@ const ContactBookingForm = () => {
       .filter(Boolean)
       .join(" ");
 
+  const buildMetaEventData = (eventContext: "contact" | "booking") => ({
+    content_name: selectedProcedureInterest,
+    content_category: "contact_booking_modal",
+    procedure_interest: selectedProcedureInterest,
+    flow: eventContext,
+  });
+
+  const syncMetaAdvancedMatching = () =>
+    updateMetaAdvancedMatching({
+      email: form.correo,
+      phone: form.telefono,
+    });
+
+  const trackContactLeadMetaEvents = async (response: Cirugia360ContactResponse) => {
+    await syncMetaAdvancedMatching();
+
+    const eventData = {
+      ...buildMetaEventData("contact"),
+      lead_id: response.leadId,
+      call_started: response.callStarted,
+      queued: response.queued,
+    };
+
+    trackMetaEvent("Lead", eventData);
+    trackMetaEvent("Contact", eventData);
+  };
+
+  const trackBookingLeadMetaEvents = async (response: ReservoBookingResponse) => {
+    await syncMetaAdvancedMatching();
+
+    const eventData = {
+      ...buildMetaEventData("booking"),
+      lead_id: response.bookingFollowUp?.leadId || null,
+      appointment_date: response.selectedSlot.date,
+      appointment_time: response.selectedSlot.time,
+      appointment_type: appointmentType,
+    };
+
+    trackMetaEvent("Lead", eventData);
+    trackMetaEvent("Schedule", eventData);
+  };
+
   const submitContactRequest = () => {
     const attribution = getAttributionSnapshot();
 
@@ -490,6 +539,8 @@ const ContactBookingForm = () => {
       }
 
       setShowDetailErrors(false);
+      void syncMetaAdvancedMatching();
+
       if (isContactFlow) {
         submitContactRequest();
         return;

@@ -2,10 +2,12 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ContactModalProvider } from "@/components/ContactModalProvider";
+import { procedureCatalog } from "@/data/procedureCatalog";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useEffect, useLayoutEffect } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { BrowserRouter, Routes, Route, useLocation, useNavigationType } from "react-router-dom";
 import { captureAttribution } from "@/lib/attribution";
+import { trackMetaEvent, trackMetaPageView } from "@/lib/metaPixel";
 import Index from "./pages/Index";
 import DoctorPage from "./pages/DoctorPage";
 import ProceduresPage from "./pages/ProceduresPage";
@@ -25,6 +27,14 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 const scrollPositions = new Map<string, { x: number; y: number }>();
+
+const normalizeRoutePath = (value: string) => value.replace(/\/+$/, "") || "/";
+
+const getProcedureForPath = (pathname: string) => {
+  const normalizedPath = normalizeRoutePath(pathname);
+
+  return procedureCatalog.find((procedure) => normalizeRoutePath(procedure.href) === normalizedPath) || null;
+};
 
 const ScrollRestoration = () => {
   const location = useLocation();
@@ -72,10 +82,25 @@ const ScrollRestoration = () => {
 
 const AttributionCapture = () => {
   const location = useLocation();
+  const lastViewContentPath = useRef("");
 
   useEffect(() => {
     captureAttribution();
-  }, [location.pathname, location.search]);
+    trackMetaPageView();
+
+    const procedure = getProcedureForPath(location.pathname);
+    const viewContentPath = normalizeRoutePath(location.pathname);
+
+    if (procedure && viewContentPath !== lastViewContentPath.current) {
+      lastViewContentPath.current = viewContentPath;
+      trackMetaEvent("ViewContent", {
+        content_name: procedure.title,
+        content_category: "procedure",
+        content_ids: [procedure.id],
+        content_type: "product",
+      });
+    }
+  }, [location.pathname, location.search, location.hash]);
 
   return null;
 };

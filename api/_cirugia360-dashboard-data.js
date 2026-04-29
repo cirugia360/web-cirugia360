@@ -868,11 +868,14 @@ const getLeadAttribution = (lead) =>
 export const buildMetaPayloadFromLead = (lead, eventName, eventId, requestContext = {}) => {
   const emailHash = hashValue(lead?.email);
   const phoneHash = hashValue(cleanPhoneForHash(lead?.phone));
+  const attribution = getLeadAttribution(lead);
   const userData = {
     client_ip_address: requestContext.clientIp || undefined,
     client_user_agent: requestContext.clientUserAgent || undefined,
     em: emailHash ? [emailHash] : undefined,
     ph: phoneHash ? [phoneHash] : undefined,
+    fbp: attribution?.fbp || undefined,
+    fbc: attribution?.fbc || undefined,
   };
 
   return {
@@ -887,10 +890,10 @@ export const buildMetaPayloadFromLead = (lead, eventName, eventId, requestContex
       procedure: lead?.procedure_interest || undefined,
       value: numberOrZero(lead?.pipeline_value) || undefined,
       currency: "CLP",
-      attribution_channel: getLeadAttribution(lead)?.channel || undefined,
-      attribution_source: getLeadAttribution(lead)?.source || undefined,
-      attribution_medium: getLeadAttribution(lead)?.medium || undefined,
-      attribution_campaign: getLeadAttribution(lead)?.campaign || undefined,
+      attribution_channel: attribution?.channel || undefined,
+      attribution_source: attribution?.source || undefined,
+      attribution_medium: attribution?.medium || undefined,
+      attribution_campaign: attribution?.campaign || undefined,
     },
   };
 };

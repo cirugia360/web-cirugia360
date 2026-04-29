@@ -1,0 +1,133 @@
+type MetaPixelCommand =
+  | "init"
+  | "set"
+  | "track"
+  | "trackCustom"
+  | "trackSingle"
+  | "trackSingleCustom";
+
+type MetaPixelFn = {
+  (...args: [MetaPixelCommand, ...unknown[]]): void;
+};
+
+type AdvancedMatchingInput = {
+  email?: string | null;
+  phone?: string | null;
+};
+
+type MetaEventOptions = {
+  eventID?: string | null;
+};
+
+declare global {
+  interface Window {
+    fbq?: MetaPixelFn;
+    _fbq?: MetaPixelFn;
+  }
+}
+
+const META_PIXEL_ID = (import.meta.env.VITE_META_PIXEL_ID || "").trim();
+
+let lastPageViewUrl = "";
+let lastAdvancedMatchingSignature = "";
+
+const getFbq = () => {
+  if (typeof window === "undefined" || !META_PIXEL_ID || typeof window.fbq !== "function") {
+    return null;
+  }
+
+  return window.fbq;
+};
+
+const normalizeEmail = (value?: string | null) => (value || "").trim().toLowerCase();
+
+const normalizePhone = (value?: string | null) => {
+  const digits = (value || "").replace(/\D/g, "");
+
+  if (!digits) {
+    return "";
+  }
+
+  return digits.startsWith("56") ? digits : `56${digits}`;
+};
+
+const toSha256Hex = async (value: string) => {
+  if (!value || typeof crypto === "undefined" || !crypto.subtle) {
+    return "";
+  }
+
+  try {
+    const hashBuffer = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+
+    return Array.from(new Uint8Array(hashBuffer))
+      .map((byte) => byte.toString(16).padStart(2, "0"))
+      .join("");
+  } catch {
+    return "";
+  }
+};
+
+export const trackMetaEvent = (
+  eventName: string,
+  data: Record<string, unknown> = {},
+  options: MetaEventOptions = {},
+) => {
+  const fbq = getFbq();
+
+  if (!fbq) {
+    return false;
+  }
+
+  if (options.eventID) {
+    fbq("track", eventName, data, { eventID: options.eventID });
+  } else {
+    fbq("track", eventName, data);
+  }
+
+  return true;
+};
+
+export const trackMetaPageView = () => {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  const currentUrl = window.location.href;
+
+  if (currentUrl === lastPageViewUrl) {
+    return false;
+  }
+
+  lastPageViewUrl = currentUrl;
+  return trackMetaEvent("PageView");
+};
+
+export const updateMetaAdvancedMatching = async ({ email, phone }: AdvancedMatchingInput) => {
+  const fbq = getFbq();
+
+  if (!fbq) {
+    return false;
+  }
+
+  const [emailHash, phoneHash] = await Promise.all([
+    toSha256Hex(normalizeEmail(email)),
+    toSha256Hex(normalizePhone(phone)),
+  ]);
+  const matchingData = Object.fromEntries(
+    Object.entries({
+      em: emailHash || undefined,
+      ph: phoneHash || undefined,
+    }).filter(([, value]) => value),
+  );
+  const signature = JSON.stringify(matchingData);
+
+  if (!Object.keys(matchingData).length || signature === lastAdvancedMatchingSignature) {
+    return false;
+  }
+
+  lastAdvancedMatchingSignature = signature;
+  fbq("set", "autoConfig", true, META_PIXEL_ID);
+  fbq("init", META_PIXEL_ID, matchingData, { autoConfig: true });
+
+  return true;
+};

@@ -8,6 +8,8 @@ export type AttributionSnapshot = {
   content: string | null;
   term: string | null;
   fbclid: string | null;
+  fbp: string | null;
+  fbc: string | null;
   gclid: string | null;
   referrer: string | null;
   landingPage: string;
@@ -20,6 +22,27 @@ export type AttributionSnapshot = {
 const getParam = (params: URLSearchParams, key: string) => {
   const value = params.get(key)?.trim();
   return value || null;
+};
+
+const getCookie = (name: string) => {
+  if (typeof document === "undefined") {
+    return null;
+  }
+
+  const cookie = document.cookie
+    .split(";")
+    .map((value) => value.trim())
+    .find((value) => value.startsWith(`${name}=`));
+
+  if (!cookie) {
+    return null;
+  }
+
+  try {
+    return decodeURIComponent(cookie.slice(name.length + 1)) || null;
+  } catch {
+    return null;
+  }
 };
 
 const safeParse = (value: string | null): AttributionSnapshot | null => {
@@ -154,6 +177,8 @@ export const captureAttribution = () => {
     content: getParam(params, "utm_content") || previous?.content || null,
     term: getParam(params, "utm_term") || previous?.term || null,
     fbclid: getParam(params, "fbclid") || previous?.fbclid || null,
+    fbp: getCookie("_fbp") || previous?.fbp || null,
+    fbc: getCookie("_fbc") || previous?.fbc || null,
     gclid: getParam(params, "gclid") || previous?.gclid || null,
     referrer,
     landingPage: previous?.landingPage || `${url.pathname}${url.search}`,
