@@ -86,6 +86,12 @@ const inferChannel = ({
   const normalizedSource = (source || "").toLowerCase();
   const normalizedMedium = (medium || "").toLowerCase();
   const referrerHost = normalizeHost(referrer);
+  const isInstagramTraffic =
+    normalizedSource.includes("instagram") || referrerHost.includes("instagram");
+
+  if (isInstagramTraffic && ["bio", "organic"].includes(normalizedMedium)) {
+    return normalizedMedium === "bio" ? "instagram_bio" : "instagram_organic";
+  }
 
   if (gclid || normalizedMedium === "cpc" || normalizedMedium === "paid_search") {
     return "google_ads";
@@ -95,8 +101,8 @@ const inferChannel = ({
     return "meta_ads";
   }
 
-  if (normalizedSource.includes("instagram") || referrerHost.includes("instagram")) {
-    return normalizedMedium === "bio" || normalizedMedium === "organic" ? "instagram_bio" : "instagram_organic";
+  if (isInstagramTraffic) {
+    return "instagram_organic";
   }
 
   if (normalizedSource.includes("google") || referrerHost.includes("google")) {
@@ -161,12 +167,14 @@ export const captureAttribution = () => {
   const referrer = document.referrer || previous?.referrer || null;
   const sourceParam = getParam(params, "utm_source");
   const mediumParam = getParam(params, "utm_medium");
+  const currentFbclid = getParam(params, "fbclid");
+  const currentGclid = getParam(params, "gclid");
   const channel = inferChannel({
     source: sourceParam,
     medium: mediumParam,
     referrer,
-    fbclid: getParam(params, "fbclid") || previous?.fbclid || null,
-    gclid: getParam(params, "gclid") || previous?.gclid || null,
+    fbclid: currentFbclid,
+    gclid: currentGclid,
   });
   const now = new Date().toISOString();
   const next: AttributionSnapshot = {
@@ -176,10 +184,10 @@ export const captureAttribution = () => {
     campaign: getParam(params, "utm_campaign") || previous?.campaign || null,
     content: getParam(params, "utm_content") || previous?.content || null,
     term: getParam(params, "utm_term") || previous?.term || null,
-    fbclid: getParam(params, "fbclid") || previous?.fbclid || null,
+    fbclid: currentFbclid || previous?.fbclid || null,
     fbp: getCookie("_fbp") || previous?.fbp || null,
     fbc: getCookie("_fbc") || previous?.fbc || null,
-    gclid: getParam(params, "gclid") || previous?.gclid || null,
+    gclid: currentGclid || previous?.gclid || null,
     referrer,
     landingPage: previous?.landingPage || `${url.pathname}${url.search}`,
     firstTouchUrl: previous?.firstTouchUrl || url.href,
