@@ -34,6 +34,7 @@ import {
   extractPaymentReference,
   isPositivePaymentStatus,
   scheduleLeadForNextAttempt,
+  tryNextAgent,
 } from "./_cirugia360-speed-workflow.js";
 
 beforeEach(() => {
@@ -261,6 +262,79 @@ describe("cirugia360 speed-to-lead inactive-agent pause", () => {
 
     const eventNames = dbMocks.insertSpeedLeadEvent.mock.calls.map(([, eventType]) => eventType);
     expect(eventNames).toContain("sales_call.paused_inactive_agent");
+  });
+});
+
+describe("cirugia360 speed-to-lead single-agent retry", () => {
+  const lead = {
+    id: "lead-single-agent",
+    status: "dialing_agent",
+    payment_status: "not_required",
+    assigned_agent_name: "Maria",
+    assigned_agent_phone: "+56911111111",
+    assigned_agent_email: "maria@clinic.cl",
+    agent_attempts: 1,
+    metadata: {
+      routing: {
+        attemptedAgentIds: ["agent-1"],
+        currentAssignedAgentId: "agent-1",
+        nextStartAgentId: null,
+      },
+    },
+  };
+
+  const config = {
+    defaultCountryDialCode: "56",
+    retryDelaySeconds: 180,
+    agentCallCooldownSeconds: 180,
+    salesAgents: [
+      { id: "agent-1", name: "Maria", phone: "+56911111111", email: "maria@clinic.cl", active: true },
+    ],
+    twilioConfigured: false,
+    twilioPhoneNumber: "+56229146709",
+    appUrl: "https://example.com",
+    queuePaused: false,
+  };
+
+  it("keeps the assigned asesora when she is the only created agent and misses the call", async () => {
+    const result = await tryNextAgent(lead, config, "La asesora no contesto la llamada.");
+
+    expect(result).toBe("scheduled");
+    expect(dbMocks.updateSpeedLead).toHaveBeenCalledWith(
+      "lead-single-agent",
+      expect.objectContaining({
+        assigned_agent_name: "Maria",
+        assigned_agent_phone: "+56911111111",
+        assigned_agent_email: "maria@clinic.cl",
+        status: "scheduled",
+        sales_call_status: "scheduled",
+        twilio_sales_call_sid: null,
+        last_error: "La asesora no contesto la llamada.",
+      }),
+    );
+  });
+
+  it("does not clear the assigned asesora when the only agent is inactive during scheduling", async () => {
+    const result = await scheduleLeadForNextAttempt(
+      lead,
+      {
+        ...config,
+        salesAgents: [{ ...config.salesAgents[0], active: false }],
+      },
+      { reason: "La asesora esta pausada." },
+    );
+
+    expect(result.kind).toBe("scheduled");
+    expect(dbMocks.updateSpeedLead).toHaveBeenCalledWith(
+      "lead-single-agent",
+      expect.objectContaining({
+        assigned_agent_name: "Maria",
+        assigned_agent_phone: "+56911111111",
+        assigned_agent_email: "maria@clinic.cl",
+        status: "scheduled",
+        sales_call_status: "scheduled",
+      }),
+    );
   });
 });
 

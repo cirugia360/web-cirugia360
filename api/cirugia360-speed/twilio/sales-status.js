@@ -71,10 +71,14 @@ export const shouldAutoDeactivateAgentForSalesStatus = (lead, callStatus) => {
   const salesCallReachedAgent = didSalesCallReachAgent(lead);
 
   if (normalizedStatus === "completed") {
-    return ["prompting", "accepted"].includes(normalizeText(lead?.sales_call_status));
+    return salesCallReachedAgent;
   }
 
-  if (["busy", "failed", "no-answer", "canceled"].includes(normalizedStatus)) {
+  if (normalizedStatus === "no-answer") {
+    return true;
+  }
+
+  if (["busy", "failed", "canceled"].includes(normalizedStatus)) {
     return salesCallReachedAgent;
   }
 

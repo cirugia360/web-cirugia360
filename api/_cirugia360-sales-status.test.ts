@@ -6,14 +6,14 @@ import {
 } from "./cirugia360-speed/twilio/sales-status.js";
 
 describe("cirugia360 sales status auto-deactivation", () => {
-  it("does not deactivate the agent when Twilio fails before the call is answered", () => {
+  it("deactivates the agent when Twilio reports no-answer before the call is answered", () => {
     const lead = {
       sales_call_status: "ringing",
     };
 
     expect(didSalesCallReachAgent(lead)).toBe(false);
     expect(shouldAutoDeactivateAgentForSalesStatus(lead, "failed")).toBe(false);
-    expect(shouldAutoDeactivateAgentForSalesStatus(lead, "no-answer")).toBe(false);
+    expect(shouldAutoDeactivateAgentForSalesStatus(lead, "no-answer")).toBe(true);
     expect(shouldAutoDeactivateAgentForSalesStatus(lead, "busy")).toBe(false);
     expect(shouldAutoDeactivateAgentForSalesStatus(lead, "canceled")).toBe(false);
   });
@@ -22,7 +22,7 @@ describe("cirugia360 sales status auto-deactivation", () => {
     expect(
       shouldAutoDeactivateAgentForSalesStatus(
         {
-          sales_call_status: "prompting",
+          sales_call_status: "answered",
         },
         "completed",
       ),

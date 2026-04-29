@@ -89,6 +89,9 @@ const getAssignedAgent = (config, lead) => {
   );
 };
 
+const shouldPreserveSingleAssignedAgent = (config, assignedAgent) =>
+  Boolean(assignedAgent) && (config.salesAgents || []).length === 1;
+
 const markLeadAsNoAgentAvailable = async (lead, reason) => {
   const updatedLead = await updateSpeedLead(lead.id, {
     status: "no_agent_available",
@@ -174,16 +177,20 @@ const buildLeadDispatchPlan = async (lead, config, referenceTime = new Date(), o
 
 const scheduleLeadWithPlan = async (lead, plan, config, reason = null) => {
   const routingState = getRoutingState(lead.metadata);
+  const assignedAgent = getAssignedAgent(config, lead);
+  const scheduledAgent =
+    plan.agent ||
+    (shouldPreserveSingleAssignedAgent(config, assignedAgent) ? assignedAgent : null);
   const updatedRoutingState = {
     attemptedAgentIds: plan.resetCycle ? [] : routingState.attemptedAgentIds,
-    currentAssignedAgentId: plan.agent?.id || null,
+    currentAssignedAgentId: scheduledAgent?.id || null,
     nextStartAgentId: null,
   };
   const scheduledAtIso = toIsoString(plan.scheduledAt);
   const updatedLead = await updateSpeedLead(lead.id, {
-    assigned_agent_name: plan.agent?.name || null,
-    assigned_agent_phone: plan.agent?.phone || null,
-    assigned_agent_email: plan.agent?.email || null,
+    assigned_agent_name: scheduledAgent?.name || null,
+    assigned_agent_phone: scheduledAgent?.phone || null,
+    assigned_agent_email: scheduledAgent?.email || null,
     dispatch_scheduled_at: scheduledAtIso,
     status: plan.immediate ? "received" : "scheduled",
     sales_call_status: plan.immediate ? "queued" : "scheduled",
@@ -195,8 +202,12 @@ const scheduleLeadWithPlan = async (lead, plan, config, reason = null) => {
   if (!plan.immediate) {
     await insertSpeedLeadEvent(lead.id, "sales_call.scheduled", {
       scheduledAt: scheduledAtIso,
-      agent: plan.agent?.name || null,
-      reason: normalizeText(reason) || (plan.agent ? "La asesora prioritaria estaba ocupada." : "No habia asesoras activas."),
+      agent: scheduledAgent?.name || null,
+      reason:
+        normalizeText(reason) ||
+        (scheduledAgent
+          ? "La asesora asignada no esta disponible."
+          : "No habia asesoras activas."),
     });
   }
 
@@ -228,12 +239,24 @@ export const scheduleLeadForNextAttempt = async (lead, config, options = {}) => 
   };
 };
 
-const scheduleLeadRetryDelay = async (lead, config, reason = null, preferredAgent = null) => {
+const scheduleLeadRetryDelay = async (
+  lead,
+  config,
+  reason = null,
+  preferredAgent = null,
+  options = {},
+) => {
   const routingState = getRoutingState(lead.metadata);
   const activeAgents = getActiveSalesAgents(config);
-  const preferredAgentActive = isAgentActive(preferredAgent) ? preferredAgent : null;
+  const preferredAgentActive =
+    preferredAgent && (options.preservePreferredAgent || isAgentActive(preferredAgent))
+      ? preferredAgent
+      : null;
   const currentAssignedAgent = getAssignedAgent(config, lead);
-  const assignedAgentActive = isAgentActive(currentAssignedAgent) ? currentAssignedAgent : null;
+  const assignedAgentActive =
+    currentAssignedAgent && (options.preserveAssignedAgent || isAgentActive(currentAssignedAgent))
+      ? currentAssignedAgent
+      : null;
   const nextAgent =
     preferredAgentActive ||
     assignedAgentActive ||
@@ -341,9 +364,22 @@ export const dispatchLeadToAssignedAgent = async (lead, config, options = {}) =>
 
 export const tryNextAgent = async (lead, config, reason = null) => {
   const currentAgent = getAssignedAgent(config, lead);
+  const activeAlternativeAgents = getActiveSalesAgents(config).filter(
+    (agent) => agent.id !== currentAgent?.id,
+  );
+  const hasOnlyAssignedAgent = Boolean(currentAgent) && (config.salesAgents || []).length === 1;
+  const retryReason = normalizeText(reason) || "Reintentando con la siguiente asesora.";
+
+  if (hasOnlyAssignedAgent && activeAlternativeAgents.length === 0) {
+    await scheduleLeadRetryDelay(lead, config, retryReason, currentAgent, {
+      preservePreferredAgent: true,
+    });
+    return "scheduled";
+  }
+
   const nextAttempt = await scheduleLeadForNextAttempt(lead, config, {
     excludeAgentIds: currentAgent ? [currentAgent.id] : [],
-    reason: normalizeText(reason) || "Reintentando con la siguiente asesora.",
+    reason: retryReason,
   });
 
   if (nextAttempt.kind === "exhausted") {
