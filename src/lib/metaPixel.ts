@@ -30,6 +30,13 @@ const META_PIXEL_ID = (import.meta.env.VITE_META_PIXEL_ID || "").trim();
 const META_PIXEL_DEBUG =
   import.meta.env.DEV || (import.meta.env.VITE_META_PIXEL_DEBUG || "").toLowerCase() === "true";
 
+export const META_PIXEL_EVENT_NAMES = {
+  prospectCaptured: import.meta.env.VITE_META_EVENT_NAME_LEAD || "ProspectCaptured",
+  prospectReached: import.meta.env.VITE_META_EVENT_NAME_CONTACT || "ProspectReached",
+  prospectQualified: import.meta.env.VITE_META_EVENT_NAME_SCHEDULE || "ProspectQualified",
+  prospectClosed: import.meta.env.VITE_META_EVENT_NAME_PURCHASE || "ProspectClosed",
+};
+
 let lastPageViewUrl = "";
 let lastAdvancedMatchingSignature = "";
 
@@ -79,6 +86,15 @@ const toSha256Hex = async (value: string) => {
   } catch {
     return "";
   }
+};
+
+export const createMetaEventId = (eventName: string, scope = "browser") => {
+  const randomValue =
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+  return `${eventName}:${scope}:${randomValue}`;
 };
 
 export const trackMetaEvent = (

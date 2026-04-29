@@ -865,6 +865,15 @@ const getLeadAttribution = (lead) =>
     ? lead.metadata.attribution
     : null;
 
+const getLeadMetaEventId = (lead, eventName) => {
+  const metaEventIds =
+    lead?.metadata?.metaEventIds && typeof lead.metadata.metaEventIds === "object"
+      ? lead.metadata.metaEventIds
+      : null;
+
+  return normalizeText(metaEventIds?.[eventName]) || null;
+};
+
 export const buildMetaPayloadFromLead = (lead, eventName, eventId, requestContext = {}) => {
   const emailHash = hashValue(lead?.email);
   const phoneHash = hashValue(cleanPhoneForHash(lead?.phone));
@@ -898,7 +907,12 @@ export const buildMetaPayloadFromLead = (lead, eventName, eventId, requestContex
   };
 };
 
-export const dispatchMetaEvent = async ({ lead = null, eventName, requestContext = {} }) => {
+export const dispatchMetaEvent = async ({
+  lead = null,
+  eventName,
+  requestContext = {},
+  eventId: providedEventId = null,
+}) => {
   const accessToken = normalizeText(process.env.META_ACCESS_TOKEN);
   const pixelId = normalizeText(process.env.META_PIXEL_ID);
   const apiVersion = normalizeText(process.env.META_API_VERSION) || "v23.0";
@@ -912,7 +926,8 @@ export const dispatchMetaEvent = async ({ lead = null, eventName, requestContext
     };
   }
 
-  const eventId = `${eventName}:${lead?.id || "anonymous"}:${randomUUID()}`;
+  const eventId =
+    normalizeText(providedEventId) || `${eventName}:${lead?.id || "anonymous"}:${randomUUID()}`;
   const eventPayload = buildMetaPayloadFromLead(lead, eventName, eventId, requestContext);
   const body = {
     data: [eventPayload],
@@ -972,6 +987,7 @@ export const trackLeadMetaEvent = async ({
         lead,
         eventName,
         requestContext,
+        eventId: getLeadMetaEventId(lead, eventName),
       });
     } catch (error) {
       meta = {
