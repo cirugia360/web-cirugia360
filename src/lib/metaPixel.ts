@@ -27,12 +27,26 @@ declare global {
 }
 
 const META_PIXEL_ID = (import.meta.env.VITE_META_PIXEL_ID || "").trim();
+const META_PIXEL_DEBUG =
+  import.meta.env.DEV || (import.meta.env.VITE_META_PIXEL_DEBUG || "").toLowerCase() === "true";
 
 let lastPageViewUrl = "";
 let lastAdvancedMatchingSignature = "";
 
+const logMetaPixel = (message: string, payload: Record<string, unknown> = {}) => {
+  if (!META_PIXEL_DEBUG || typeof console === "undefined") {
+    return;
+  }
+
+  console.info(`[Meta Pixel] ${message}`, payload);
+};
+
 const getFbq = () => {
   if (typeof window === "undefined" || !META_PIXEL_ID || typeof window.fbq !== "function") {
+    logMetaPixel("fbq unavailable", {
+      pixelIdConfigured: Boolean(META_PIXEL_ID),
+      fbqLoaded: typeof window !== "undefined" && typeof window.fbq === "function",
+    });
     return null;
   }
 
@@ -78,13 +92,51 @@ export const trackMetaEvent = (
     return false;
   }
 
-  if (options.eventID) {
-    fbq("track", eventName, data, { eventID: options.eventID });
-  } else {
-    fbq("track", eventName, data);
+  try {
+    if (options.eventID) {
+      fbq("track", eventName, data, { eventID: options.eventID });
+    } else {
+      fbq("track", eventName, data);
+    }
+
+    logMetaPixel("event tracked", { eventName, data, options });
+    return true;
+  } catch (error) {
+    logMetaPixel("event failed", {
+      eventName,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return false;
+  }
+};
+
+export const trackMetaCustomEvent = (
+  eventName: string,
+  data: Record<string, unknown> = {},
+  options: MetaEventOptions = {},
+) => {
+  const fbq = getFbq();
+
+  if (!fbq) {
+    return false;
   }
 
-  return true;
+  try {
+    if (options.eventID) {
+      fbq("trackCustom", eventName, data, { eventID: options.eventID });
+    } else {
+      fbq("trackCustom", eventName, data);
+    }
+
+    logMetaPixel("custom event tracked", { eventName, data, options });
+    return true;
+  } catch (error) {
+    logMetaPixel("custom event failed", {
+      eventName,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return false;
+  }
 };
 
 export const trackMetaPageView = () => {
@@ -126,8 +178,18 @@ export const updateMetaAdvancedMatching = async ({ email, phone }: AdvancedMatch
   }
 
   lastAdvancedMatchingSignature = signature;
-  fbq("set", "autoConfig", true, META_PIXEL_ID);
-  fbq("init", META_PIXEL_ID, matchingData, { autoConfig: true });
+  try {
+    fbq("set", "autoConfig", true, META_PIXEL_ID);
+    fbq("init", META_PIXEL_ID, matchingData, { autoConfig: true });
+    logMetaPixel("advanced matching updated", {
+      fields: Object.keys(matchingData),
+    });
+  } catch (error) {
+    logMetaPixel("advanced matching failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return false;
+  }
 
   return true;
 };
