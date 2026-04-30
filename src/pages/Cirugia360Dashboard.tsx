@@ -1461,6 +1461,108 @@ const LeadsTable = ({
   );
 };
 
+const formatCallDuration = (value: number | null | undefined) => {
+  const totalSeconds = Math.max(0, Math.round(Number(value || 0)));
+
+  if (!totalSeconds) {
+    return null;
+  }
+
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+};
+
+const getTranscriptionStatusLabel = (status: string | null | undefined) => {
+  switch ((status || "").toLowerCase()) {
+    case "completed":
+    case "stopped":
+      return "Transcripcion lista";
+    case "failed":
+    case "error":
+      return "Transcripcion con error";
+    case "in-progress":
+    case "started":
+    case "transcription-started":
+      return "Transcribiendo";
+    default:
+      return status ? status.replace(/[_-]/g, " ") : "";
+  }
+};
+
+const RecordingTranscriptionSection = ({ lead }: { lead: DashboardLead }) => {
+  const transcriptionSegments = (lead.transcriptionSegments || []).filter((segment) => segment.text.trim());
+  const hasFallbackText = Boolean(lead.transcriptionText?.trim());
+  const durationLabel = formatCallDuration(lead.recordingDuration);
+  const transcriptionStatusLabel = getTranscriptionStatusLabel(lead.transcriptionStatus);
+  const shouldShow =
+    Boolean(lead.recordingUrl) ||
+    Boolean(lead.recordingStatus) ||
+    Boolean(transcriptionStatusLabel) ||
+    transcriptionSegments.length > 0 ||
+    hasFallbackText;
+
+  if (!shouldShow) {
+    return null;
+  }
+
+  return (
+    <section className="rounded-lg border border-slate-200 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <h3 className="text-sm font-semibold">Grabacion y transcripcion</h3>
+        {transcriptionStatusLabel ? (
+          <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-600">
+            {transcriptionStatusLabel}
+          </span>
+        ) : null}
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
+        {lead.recordingUrl ? (
+          <a className="inline-flex items-center gap-1.5 font-medium text-teal-700" href={lead.recordingUrl} target="_blank" rel="noreferrer">
+            <Phone className="h-3.5 w-3.5" />
+            Abrir grabacion
+          </a>
+        ) : null}
+        {durationLabel ? <span className="text-xs text-slate-500">{durationLabel}</span> : null}
+        {lead.recordingStatus && !lead.recordingUrl ? (
+          <span className="text-xs font-medium text-slate-500">Grabacion {lead.recordingStatus}</span>
+        ) : null}
+      </div>
+
+      {transcriptionSegments.length > 0 ? (
+        <div className="mt-4 max-h-80 space-y-3 overflow-y-auto border-t border-slate-100 pt-3">
+          {transcriptionSegments.map((segment) => {
+            const isAgent = segment.speaker === "agent";
+
+            return (
+              <div
+                key={segment.id}
+                className={`border-l-2 pl-3 ${isAgent ? "border-teal-500" : "border-sky-500"}`}
+              >
+                <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  <span>{segment.label || (isAgent ? "Agente" : "Cliente")}</span>
+                  {segment.timestamp ? <span>{formatDate(segment.timestamp)}</span> : null}
+                </div>
+                <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-slate-700">{segment.text}</p>
+              </div>
+            );
+          })}
+        </div>
+      ) : hasFallbackText ? (
+        <p className="mt-3 whitespace-pre-wrap border-t border-slate-100 pt-3 text-sm leading-6 text-slate-700">
+          {lead.transcriptionText}
+        </p>
+      ) : (
+        <p className="mt-3 border-t border-slate-100 pt-3 text-sm text-slate-500">
+          La transcripcion aparecera cuando Twilio envie el texto.
+        </p>
+      )}
+    </section>
+  );
+};
+
 const LeadDetail = ({
   lead,
   stages,
@@ -2022,19 +2124,7 @@ const LeadDetail = ({
           </div>
         </section>
 
-        {lead.recordingUrl || lead.transcriptionText ? (
-          <section className="rounded-lg border border-slate-200 p-4">
-            <h3 className="mb-3 text-sm font-semibold">Grabacion y transcripcion</h3>
-            {lead.recordingUrl ? (
-              <a className="text-sm font-medium text-teal-700" href={lead.recordingUrl} target="_blank" rel="noreferrer">
-                Abrir grabacion
-              </a>
-            ) : null}
-            {lead.transcriptionText ? (
-              <p className="mt-3 whitespace-pre-wrap text-sm text-slate-700">{lead.transcriptionText}</p>
-            ) : null}
-          </section>
-        ) : null}
+        <RecordingTranscriptionSection lead={lead} />
 
         <section className="rounded-lg border border-slate-200 p-4">
           <h3 className="mb-3 text-sm font-semibold">Notas</h3>

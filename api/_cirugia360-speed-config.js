@@ -14,6 +14,9 @@ const DEFAULT_AGENT_CALL_COOLDOWN_SECONDS = 180;
 const DEFAULT_AGENT_CALL_TIMEOUT_SECONDS = 20;
 const DEFAULT_AGENT_PENDING_CALL_STALE_SECONDS = 45;
 const DEFAULT_AGENT_ACTIVE_CONVERSATION_STALE_SECONDS = 3 * 60 * 60;
+const DEFAULT_TRANSCRIPTION_LANGUAGE_CODE = "es-MX";
+const DEFAULT_TRANSCRIPTION_ENGINE = "google";
+const DEFAULT_TRANSCRIPTION_SPEECH_MODEL = "telephony";
 
 const requireEnv = (name) => {
   const value = normalizeText(process.env[name]);
@@ -156,6 +159,17 @@ export const getCirugia360SpeedConfig = (request, options = {}) => {
       parseOptionalPositiveIntegerEnv("CIRUGIA360_STL_AGENT_ACTIVE_CONVERSATION_STALE_SECONDS") ||
       DEFAULT_AGENT_ACTIVE_CONVERSATION_STALE_SECONDS,
     queuePaused: parseOptionalBooleanEnv("CIRUGIA360_STL_QUEUE_PAUSED") ?? false,
+    transcriptionEnabled:
+      parseOptionalBooleanEnv("CIRUGIA360_STL_TRANSCRIPTION_ENABLED") ?? true,
+    transcriptionLanguageCode:
+      normalizeText(process.env.CIRUGIA360_STL_TRANSCRIPTION_LANGUAGE_CODE) ||
+      DEFAULT_TRANSCRIPTION_LANGUAGE_CODE,
+    transcriptionEngine:
+      normalizeText(process.env.CIRUGIA360_STL_TRANSCRIPTION_ENGINE) ||
+      DEFAULT_TRANSCRIPTION_ENGINE,
+    transcriptionSpeechModel:
+      normalizeText(process.env.CIRUGIA360_STL_TRANSCRIPTION_SPEECH_MODEL) ||
+      DEFAULT_TRANSCRIPTION_SPEECH_MODEL,
     cronSecret:
       normalizeText(process.env.CRON_SECRET) || normalizeText(process.env.CIRUGIA360_STL_CRON_SECRET),
     validateTwilioSignature:

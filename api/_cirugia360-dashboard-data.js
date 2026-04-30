@@ -74,6 +74,11 @@ const numberOrZero = (value) => {
   return Number.isFinite(numericValue) ? numericValue : 0;
 };
 
+const numberOrNull = (value) => {
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? numericValue : null;
+};
+
 const cleanPhoneForHash = (value) => normalizeText(value).replace(/[^\d]/g, "");
 
 const hashValue = (value) => {
@@ -86,7 +91,66 @@ export const normalizePipelineStage = (value) => {
   return KNOWN_STAGE_IDS.has(normalizedValue) ? normalizedValue : "nuevo";
 };
 
-export const toPublicLead = (lead, notes = []) => ({
+const normalizeTranscriptionSegmentList = (rawSegments = []) =>
+  rawSegments
+    .filter((segment) => segment && typeof segment === "object" && !Array.isArray(segment))
+    .map((segment) => ({
+      id: normalizeText(segment.id),
+      speaker: normalizeText(segment.speaker) || "unknown",
+      label: normalizeText(segment.label) || "Sin identificar",
+      track: normalizeText(segment.track) || null,
+      text: normalizeText(segment.text),
+      timestamp: normalizeText(segment.timestamp) || null,
+      sequenceId: numberOrNull(segment.sequenceId),
+      confidence: numberOrNull(segment.confidence),
+    }))
+    .filter((segment) => segment.id && segment.text);
+
+const sortTranscriptionSegments = (segments) =>
+  [...segments].sort((firstSegment, secondSegment) => {
+    const firstSequence = firstSegment.sequenceId ?? Number.MAX_SAFE_INTEGER;
+    const secondSequence = secondSegment.sequenceId ?? Number.MAX_SAFE_INTEGER;
+
+    if (firstSequence !== secondSequence) {
+      return firstSequence - secondSequence;
+    }
+
+    const firstTime = Date.parse(firstSegment.timestamp || "");
+    const secondTime = Date.parse(secondSegment.timestamp || "");
+
+    if (Number.isFinite(firstTime) && Number.isFinite(secondTime) && firstTime !== secondTime) {
+      return firstTime - secondTime;
+    }
+
+    return firstSegment.id.localeCompare(secondSegment.id);
+  });
+
+const mergeTranscriptionSegments = (...segmentLists) => {
+  const segmentsById = new Map();
+
+  for (const segment of segmentLists.flat()) {
+    if (segment?.id) {
+      segmentsById.set(segment.id, segment);
+    }
+  }
+
+  return sortTranscriptionSegments(Array.from(segmentsById.values()));
+};
+
+const normalizeLeadTranscriptionSegments = (lead, eventSegments = []) => {
+  const rawLeadSegments = Array.isArray(lead.transcription_segments)
+    ? lead.transcription_segments
+    : Array.isArray(lead.metadata?.transcriptionSegments)
+      ? lead.metadata.transcriptionSegments
+      : [];
+
+  return mergeTranscriptionSegments(
+    normalizeTranscriptionSegmentList(rawLeadSegments),
+    eventSegments,
+  );
+};
+
+export const toPublicLead = (lead, notes = [], transcriptionSegments = []) => ({
   id: lead.id,
   createdAt: lead.created_at,
   updatedAt: lead.updated_at,
@@ -124,6 +188,7 @@ export const toPublicLead = (lead, notes = []) => ({
   recordingStatus: lead.recording_status,
   recordingDuration: lead.recording_duration,
   transcriptionText: lead.transcription_text,
+  transcriptionSegments: normalizeLeadTranscriptionSegments(lead, transcriptionSegments),
   transcriptionStatus: lead.transcription_status,
   metadata: lead.metadata || {},
   notes,
@@ -176,6 +241,40 @@ const getLeadNotes = async (leadIds) => {
   }
 
   return notesByLead;
+};
+
+const getLeadTranscriptionSegments = async (leadIds) => {
+  if (!leadIds.length) {
+    return new Map();
+  }
+
+  const client = getSpeedAdminClient();
+  const { data, error } = await client
+    .from(EVENTS_TABLE)
+    .select("lead_id, payload")
+    .in("lead_id", leadIds)
+    .eq("event_type", "transcription.status")
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    throw new Error(error.message || "No se pudieron cargar las transcripciones.");
+  }
+
+  const segmentsByLead = new Map();
+
+  for (const event of data || []) {
+    const segment = event?.payload?.segment;
+    const [normalizedSegment] = normalizeTranscriptionSegmentList(segment ? [segment] : []);
+
+    if (!normalizedSegment) {
+      continue;
+    }
+
+    const currentSegments = segmentsByLead.get(event.lead_id) || [];
+    segmentsByLead.set(event.lead_id, mergeTranscriptionSegments(currentSegments, [normalizedSegment]));
+  }
+
+  return segmentsByLead;
 };
 
 const buildSpeedMetrics = (leads) => {
@@ -478,9 +577,16 @@ export const buildDashboardSnapshot = async (options = {}) => {
 
   const leadIds = (leads || []).map((lead) => lead.id);
   const notesByLead = await getLeadNotes(leadIds);
+  const transcriptionSegmentsByLead = await getLeadTranscriptionSegments(leadIds);
   const activityAveragesByEmail = await getAgentActivityAverages();
   const settings = await loadSpeedRuntimeSettings().catch(() => null);
-  const publicLeads = (leads || []).map((lead) => toPublicLead(lead, notesByLead.get(lead.id) || []));
+  const publicLeads = (leads || []).map((lead) =>
+    toPublicLead(
+      lead,
+      notesByLead.get(lead.id) || [],
+      transcriptionSegmentsByLead.get(lead.id) || [],
+    ),
+  );
   const agentPerformance = buildAgentPerformance(leads || []).map((agent) => ({
     ...agent,
     activityAverageSeconds: activityAveragesByEmail.get(normalizeEmail(agent.email)) || 0,

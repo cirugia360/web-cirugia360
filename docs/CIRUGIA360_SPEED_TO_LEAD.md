@@ -81,10 +81,21 @@ CIRUGIA360_STL_BUSINESS_TIME_ZONE=America/Santiago
 CIRUGIA360_STL_RETRY_DELAY_SECONDS=180
 CIRUGIA360_STL_AGENT_CALL_COOLDOWN_SECONDS=180
 CIRUGIA360_STL_QUEUE_PAUSED=false
+CIRUGIA360_STL_TRANSCRIPTION_ENABLED=true
+CIRUGIA360_STL_TRANSCRIPTION_LANGUAGE_CODE=es-MX
+CIRUGIA360_STL_TRANSCRIPTION_ENGINE=google
+CIRUGIA360_STL_TRANSCRIPTION_SPEECH_MODEL=telephony
 CIRUGIA360_STL_AGENTS_JSON=[{"id":"agent-1","name":"Asesora 1","phone":"+56912345678"}]
 ```
 
 Las asesoras se pueden guardar desde el dashboard. Si existen settings guardados, tienen prioridad sobre `CIRUGIA360_STL_AGENTS_JSON`.
+
+## Grabacion y transcripcion
+
+Cuando la asesora presiona `1`, Twilio inicia la grabacion y tambien una transcripcion en tiempo real con `both_tracks`.
+La app etiqueta `inbound_track` como `Agente` y `outbound_track` como `Cliente`, guarda los segmentos en el lead/eventos y los muestra dentro del cuadro de `Grabacion y transcripcion` del dashboard.
+
+Aplica `supabase/schema.sql` para crear `transcription_segments`. Si la columna aun no existe, el webhook usa `metadata.transcriptionSegments` como respaldo.
 
 ## Meta opcional
 

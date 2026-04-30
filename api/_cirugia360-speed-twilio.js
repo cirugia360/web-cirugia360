@@ -63,9 +63,30 @@ export const dialLeadFromActiveCall = (response, config, lead, conversationId = 
   const recordingStatusUrl = `${config.appUrl}/api/cirugia360-speed/twilio/recording-status?leadId=${encodeURIComponent(
     lead.id,
   )}&conversationId=${encodeURIComponent(conversationId)}`;
+  const transcriptionStatusUrl = `${config.appUrl}/api/cirugia360-speed/twilio/transcription-status?leadId=${encodeURIComponent(
+    lead.id,
+  )}&conversationId=${encodeURIComponent(conversationId)}`;
   const customerCompleteUrl = `${config.appUrl}/api/cirugia360-speed/twilio/voice/customer-complete?leadId=${encodeURIComponent(
     lead.id,
   )}&conversationId=${encodeURIComponent(conversationId)}`;
+
+  if (config.transcriptionEnabled !== false) {
+    const start = response.start();
+    start.transcription({
+      name: `c360-${conversationId}`,
+      statusCallbackUrl: transcriptionStatusUrl,
+      statusCallbackMethod: "POST",
+      track: "both_tracks",
+      inboundTrackLabel: "agent",
+      outboundTrackLabel: "customer",
+      partialResults: false,
+      transcriptionEngine: config.transcriptionEngine,
+      languageCode: config.transcriptionLanguageCode,
+      speechModel: config.transcriptionSpeechModel,
+      enableAutomaticPunctuation: true,
+    });
+  }
+
   const dial = response.dial({
     callerId: config.twilioPhoneNumber,
     answerOnBridge: true,

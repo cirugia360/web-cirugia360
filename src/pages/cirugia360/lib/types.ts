@@ -20,6 +20,17 @@ export type LeadNote = {
   body: string;
 };
 
+export type TranscriptionSegment = {
+  id: string;
+  speaker: "agent" | "customer" | "unknown" | string;
+  label: string;
+  track: string | null;
+  text: string;
+  timestamp: string | null;
+  sequenceId: number | null;
+  confidence: number | null;
+};
+
 export type DashboardLead = {
   id: string;
   createdAt: string;
@@ -49,7 +60,11 @@ export type DashboardLead = {
   evaluationScheduledAt?: string | null;
   surgeryBookedAt?: string | null;
   recordingUrl: string | null;
+  recordingStatus?: string | null;
+  recordingDuration?: number | null;
   transcriptionText: string | null;
+  transcriptionStatus?: string | null;
+  transcriptionSegments?: TranscriptionSegment[];
   metadata?: Record<string, unknown>;
   notes: LeadNote[];
 };

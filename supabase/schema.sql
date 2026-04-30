@@ -103,6 +103,7 @@ create table if not exists public.c360_speed_leads (
   recording_status text,
   transcription_sid text,
   transcription_text text,
+  transcription_segments jsonb not null default '[]'::jsonb,
   transcription_status text,
   metadata jsonb not null default '{}'::jsonb
 );
@@ -121,6 +122,7 @@ alter table public.c360_speed_leads add column if not exists recording_duration 
 alter table public.c360_speed_leads add column if not exists recording_status text;
 alter table public.c360_speed_leads add column if not exists transcription_sid text;
 alter table public.c360_speed_leads add column if not exists transcription_text text;
+alter table public.c360_speed_leads add column if not exists transcription_segments jsonb not null default '[]'::jsonb;
 alter table public.c360_speed_leads add column if not exists transcription_status text;
 alter table public.c360_speed_leads add column if not exists assigned_agent_email text;
 
