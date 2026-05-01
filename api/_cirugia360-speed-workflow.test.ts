@@ -338,6 +338,94 @@ describe("cirugia360 speed-to-lead single-agent retry", () => {
   });
 });
 
+describe("cirugia360 speed-to-lead retry routing", () => {
+  const lead = {
+    id: "lead-retry-routing",
+    status: "dialing_agent",
+    payment_status: "not_required",
+    assigned_agent_name: "Maria",
+    assigned_agent_phone: "+56911111111",
+    assigned_agent_email: "maria@clinic.cl",
+    agent_attempts: 1,
+    metadata: {
+      routing: {
+        attemptedAgentIds: ["agent-1"],
+        currentAssignedAgentId: "agent-1",
+        nextStartAgentId: null,
+      },
+    },
+  };
+
+  const baseConfig = {
+    defaultCountryDialCode: "56",
+    retryDelaySeconds: 180,
+    agentCallCooldownSeconds: 180,
+    twilioConfigured: false,
+    twilioPhoneNumber: "+56229146709",
+    appUrl: "https://example.com",
+    queuePaused: false,
+  };
+
+  it("keeps the current asesora when no active alternative exists", async () => {
+    const result = await tryNextAgent(
+      lead,
+      {
+        ...baseConfig,
+        salesAgents: [
+          { id: "agent-1", name: "Maria", phone: "+56911111111", email: "maria@clinic.cl", active: true },
+          { id: "agent-2", name: "Ana", phone: "+56922222222", email: "ana@clinic.cl", active: false },
+        ],
+      },
+      "La asesora no contesto la llamada.",
+    );
+
+    expect(result).toBe("scheduled");
+    expect(dbMocks.updateSpeedLead).toHaveBeenCalledWith(
+      "lead-retry-routing",
+      expect.objectContaining({
+        assigned_agent_name: "Maria",
+        assigned_agent_phone: "+56911111111",
+        assigned_agent_email: "maria@clinic.cl",
+        status: "scheduled",
+        sales_call_status: "scheduled",
+      }),
+    );
+  });
+
+  it("moves the lead to the next active asesora when one exists", async () => {
+    dbMocks.hasActiveLeadForAgent.mockResolvedValueOnce(true);
+
+    const result = await tryNextAgent(
+      lead,
+      {
+        ...baseConfig,
+        salesAgents: [
+          { id: "agent-1", name: "Maria", phone: "+56911111111", email: "maria@clinic.cl", active: true },
+          { id: "agent-2", name: "Ana", phone: "+56922222222", email: "ana@clinic.cl", active: true },
+        ],
+      },
+      "La asesora no contesto la llamada.",
+    );
+
+    expect(result).toBe("scheduled");
+    expect(dbMocks.hasActiveLeadForAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentPhone: "+56922222222",
+      }),
+    );
+    expect(dbMocks.updateSpeedLead).toHaveBeenCalledWith(
+      "lead-retry-routing",
+      expect.objectContaining({
+        assigned_agent_name: "Ana",
+        assigned_agent_phone: "+56922222222",
+        assigned_agent_email: "ana@clinic.cl",
+        status: "scheduled",
+        sales_call_status: "scheduled",
+      }),
+    );
+  });
+});
+
 describe("cirugia360 strict agent priority", () => {
   const lead = {
     id: "lead-priority",

@@ -89,9 +89,6 @@ const getAssignedAgent = (config, lead) => {
   );
 };
 
-const shouldPreserveSingleAssignedAgent = (config, assignedAgent) =>
-  Boolean(assignedAgent) && (config.salesAgents || []).length === 1;
-
 const markLeadAsNoAgentAvailable = async (lead, reason) => {
   const updatedLead = await updateSpeedLead(lead.id, {
     status: "no_agent_available",
@@ -178,9 +175,7 @@ const buildLeadDispatchPlan = async (lead, config, referenceTime = new Date(), o
 const scheduleLeadWithPlan = async (lead, plan, config, reason = null) => {
   const routingState = getRoutingState(lead.metadata);
   const assignedAgent = getAssignedAgent(config, lead);
-  const scheduledAgent =
-    plan.agent ||
-    (shouldPreserveSingleAssignedAgent(config, assignedAgent) ? assignedAgent : null);
+  const scheduledAgent = plan.agent || assignedAgent || null;
   const updatedRoutingState = {
     attemptedAgentIds: plan.resetCycle ? [] : routingState.attemptedAgentIds,
     currentAssignedAgentId: scheduledAgent?.id || null,
@@ -367,10 +362,9 @@ export const tryNextAgent = async (lead, config, reason = null) => {
   const activeAlternativeAgents = getActiveSalesAgents(config).filter(
     (agent) => agent.id !== currentAgent?.id,
   );
-  const hasOnlyAssignedAgent = Boolean(currentAgent) && (config.salesAgents || []).length === 1;
   const retryReason = normalizeText(reason) || "Reintentando con la siguiente asesora.";
 
-  if (hasOnlyAssignedAgent && activeAlternativeAgents.length === 0) {
+  if (currentAgent && activeAlternativeAgents.length === 0) {
     await scheduleLeadRetryDelay(lead, config, retryReason, currentAgent, {
       preservePreferredAgent: true,
     });
