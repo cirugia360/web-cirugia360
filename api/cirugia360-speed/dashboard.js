@@ -655,8 +655,16 @@ const handleLeadCall = async (request, response, user) => {
     leadId: result.lead.id,
     callStarted: result.callStarted,
     queued: result.queued,
+    updatedAt: result.lead.updated_at,
+    status: result.lead.status,
+    salesCallStatus: result.lead.sales_call_status,
+    customerCallStatus: result.lead.customer_call_status,
+    customerConnectedAt: result.lead.customer_connected_at,
+    completedAt: result.lead.completed_at,
+    lastError: result.lead.last_error,
     dispatchScheduledAt: result.dispatchScheduledAt,
     assignedAgent: result.lead.assigned_agent_name,
+    assignedAgentEmail: result.lead.assigned_agent_email,
     warning: result.warning,
   });
 };

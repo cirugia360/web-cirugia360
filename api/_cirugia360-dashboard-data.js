@@ -32,8 +32,10 @@ const ACTIVE_AGENT_STATUSES = new Set([
   "connecting_customer",
   "customer_connected",
 ]);
+const CONNECTING_CUSTOMER_STATUSES = new Set(["connecting_customer"]);
 const PENDING_AGENT_STATUSES = new Set(["dialing_agent", "waiting_agent_confirmation"]);
 const PENDING_CALL_STALE_MS = 2 * 60 * 1000;
+const CONNECTING_CUSTOMER_STALE_MS = 2 * 60 * 1000;
 const ACTIVE_CONVERSATION_STALE_MS = 3 * 60 * 60 * 1000;
 
 const isFreshActiveAgentLead = (lead, now = Date.now()) => {
@@ -45,6 +47,8 @@ const isFreshActiveAgentLead = (lead, now = Date.now()) => {
 
   const maxAgeMs = PENDING_AGENT_STATUSES.has(lead.status)
     ? PENDING_CALL_STALE_MS
+    : CONNECTING_CUSTOMER_STATUSES.has(lead.status)
+      ? CONNECTING_CUSTOMER_STALE_MS
     : ACTIVE_CONVERSATION_STALE_MS;
 
   return now - updatedAt <= maxAgeMs;

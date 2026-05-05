@@ -15,14 +15,17 @@ const ACTIVE_AGENT_STATUSES = [
   "connecting_customer",
   "customer_connected",
 ];
+const CONNECTING_CUSTOMER_STATUSES = new Set(["connecting_customer"]);
 const PENDING_AGENT_STATUSES = new Set(["dialing_agent", "waiting_agent_confirmation"]);
 const DEFAULT_PENDING_CALL_STALE_SECONDS = 45;
+const DEFAULT_CONNECTING_CUSTOMER_STALE_SECONDS = 2 * 60;
 const DEFAULT_ACTIVE_CONVERSATION_STALE_SECONDS = 3 * 60 * 60;
 
 const isFreshActiveLead = (
   lead,
   referenceTimeIso,
   pendingCallStaleSeconds = DEFAULT_PENDING_CALL_STALE_SECONDS,
+  connectingCustomerStaleSeconds = DEFAULT_CONNECTING_CUSTOMER_STALE_SECONDS,
   activeConversationStaleSeconds = DEFAULT_ACTIVE_CONVERSATION_STALE_SECONDS,
 ) => {
   const updatedAt = Date.parse(lead?.updated_at || lead?.created_at || "");
@@ -34,6 +37,8 @@ const isFreshActiveLead = (
   const referenceTime = Date.parse(referenceTimeIso);
   const maxAgeSeconds = PENDING_AGENT_STATUSES.has(lead.status)
     ? pendingCallStaleSeconds
+    : CONNECTING_CUSTOMER_STATUSES.has(lead.status)
+      ? connectingCustomerStaleSeconds
     : activeConversationStaleSeconds;
 
   return Number.isFinite(referenceTime) && referenceTime - updatedAt <= maxAgeSeconds * 1000;
@@ -186,6 +191,7 @@ export const hasActiveLeadForAgent = async ({
   cooldownSeconds = 0,
   referenceTimeIso = new Date().toISOString(),
   pendingCallStaleSeconds = DEFAULT_PENDING_CALL_STALE_SECONDS,
+  connectingCustomerStaleSeconds = DEFAULT_CONNECTING_CUSTOMER_STALE_SECONDS,
   activeConversationStaleSeconds = DEFAULT_ACTIVE_CONVERSATION_STALE_SECONDS,
 }) => {
   const client = getSpeedAdminClient();
@@ -210,6 +216,7 @@ export const hasActiveLeadForAgent = async ({
         lead,
         referenceTimeIso,
         pendingCallStaleSeconds,
+        connectingCustomerStaleSeconds,
         activeConversationStaleSeconds,
       ),
     )
@@ -324,4 +331,51 @@ export const getLeadByCustomerCallSid = async (callSid) => {
 
   throwIfError(error, "No se pudo buscar el lead por customer call sid.");
   return data || null;
+};
+
+export const recoverStaleCustomerConnectingLeads = async ({
+  limit = 20,
+  staleBeforeIso = new Date(
+    Date.now() - DEFAULT_CONNECTING_CUSTOMER_STALE_SECONDS * 1000,
+  ).toISOString(),
+} = {}) => {
+  const client = getSpeedAdminClient();
+  const { data: staleLeads, error: selectError } = await client
+    .from(LEADS_TABLE)
+    .select("*")
+    .eq("status", "connecting_customer")
+    .lt("updated_at", staleBeforeIso)
+    .or("payment_status.is.null,payment_status.neq.confirmed")
+    .order("created_at", { ascending: false })
+    .limit(Math.max(Number(limit) || 20, 1));
+
+  throwIfError(selectError, "No se pudo buscar conexiones al paciente vencidas.");
+
+  const recoveredLeads = [];
+
+  for (const lead of staleLeads || []) {
+    const nowIso = new Date().toISOString();
+    const { data, error } = await client
+      .from(LEADS_TABLE)
+      .update({
+        status: "customer_unreachable",
+        customer_call_status: normalizeText(lead.customer_call_status) || "stale",
+        completed_at: lead.completed_at || nowIso,
+        dispatch_scheduled_at: null,
+        last_error: "La conexion con la paciente quedo sin cierre y se marco como vencida.",
+        updated_at: nowIso,
+      })
+      .eq("id", lead.id)
+      .eq("status", "connecting_customer")
+      .select("*")
+      .maybeSingle();
+
+    throwIfError(error, "No se pudo recuperar una conexion al paciente vencida.");
+
+    if (data) {
+      recoveredLeads.push(data);
+    }
+  }
+
+  return recoveredLeads;
 };

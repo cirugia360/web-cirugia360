@@ -104,7 +104,11 @@ export const STATUS_LABELS: Record<string, { label: string; className: string }>
 };
 
 const FALLBACK_STATUS_CLASSNAME = "border-slate-200 bg-slate-50 text-slate-700";
-const PENDING_AGENT_STATUSES = new Set(["dialing_agent", "waiting_agent_confirmation"]);
+const STALE_TRANSIENT_STATUSES = new Set([
+  "dialing_agent",
+  "waiting_agent_confirmation",
+  "connecting_customer",
+]);
 const PENDING_CALL_STALE_MS = 2 * 60 * 1000;
 
 const humanizeStatus = (status: string) =>
@@ -119,7 +123,7 @@ export const getLeadStatus = (
 ) => {
   const updatedAt = Date.parse(lead.updatedAt || lead.createdAt || "");
   const isStaleAgentCall =
-    PENDING_AGENT_STATUSES.has(lead.status) &&
+    STALE_TRANSIENT_STATUSES.has(lead.status) &&
     Number.isFinite(updatedAt) &&
     Date.now() - updatedAt > PENDING_CALL_STALE_MS;
   const statusKey =

@@ -148,4 +148,63 @@ describe("Pipeline optimistic updates", () => {
       expect(within(nuevoColumn as HTMLElement).getByText("Paciente Optimista")).toBeInTheDocument();
     });
   });
+
+  it("uses the backend call status returned by lead-call instead of forcing dispatching", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+
+        if (url.includes("/api/cirugia360-speed/dashboard?resource=sales-agents")) {
+          return Promise.resolve(new Response(JSON.stringify({ success: true, data: settings }), { status: 200 }));
+        }
+
+        if (url.includes("/api/cirugia360-speed/dashboard?resource=lead-call") && init?.method === "POST") {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                success: true,
+                leadId: "lead-1",
+                updatedAt: "2026-04-24T10:05:00.000Z",
+                callStarted: false,
+                queued: false,
+                status: "no_agent_available",
+                salesCallStatus: "exhausted",
+                customerCallStatus: null,
+                customerConnectedAt: null,
+                completedAt: null,
+                lastError: "No encontramos una asesora disponible para este lead.",
+                dispatchScheduledAt: null,
+                assignedAgent: null,
+                assignedAgentEmail: null,
+                warning: "No encontramos una asesora disponible para este lead.",
+              }),
+              { status: 200 },
+            ),
+          );
+        }
+
+        if (url.includes("/api/cirugia360-speed/dashboard")) {
+          return Promise.resolve(new Response(JSON.stringify({ success: true, data: dashboardSnapshot }), { status: 200 }));
+        }
+
+        return Promise.resolve(new Response(JSON.stringify({ success: true, data: {} }), { status: 200 }));
+      }),
+    );
+
+    render(<Cirugia360Dashboard />);
+
+    const leadsButtons = await screen.findAllByRole("button", { name: "Leads" });
+    fireEvent.click(leadsButtons[0]);
+
+    const leadRow = (await screen.findByText("Paciente Optimista")).closest("tr");
+
+    expect(leadRow).not.toBeNull();
+
+    fireEvent.click(within(leadRow as HTMLElement).getByRole("button", { name: "Llamar" }));
+
+    await waitFor(() => {
+      expect(within(leadRow as HTMLElement).getByText("Sin asesora")).toBeInTheDocument();
+    });
+  });
 });
