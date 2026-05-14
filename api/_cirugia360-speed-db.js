@@ -16,6 +16,7 @@ const ACTIVE_AGENT_STATUSES = [
   "customer_connected",
 ];
 const PENDING_AGENT_STATUSES = new Set(["dialing_agent", "waiting_agent_confirmation"]);
+const STALE_QUEUE_STATUSES = ["dispatching", ...PENDING_AGENT_STATUSES];
 const DEFAULT_PENDING_CALL_STALE_SECONDS = 45;
 const DEFAULT_ACTIVE_CONVERSATION_STALE_SECONDS = 3 * 60 * 60;
 
@@ -145,7 +146,7 @@ export const claimStaleAgentCallLeads = async ({
   const { data: staleLeads, error: selectError } = await client
     .from(LEADS_TABLE)
     .select("*")
-    .in("status", Array.from(PENDING_AGENT_STATUSES))
+    .in("status", STALE_QUEUE_STATUSES)
     .lt("updated_at", staleBeforeIso)
     .or("payment_status.is.null,payment_status.neq.confirmed")
     .order("created_at", { ascending: false })
@@ -166,7 +167,7 @@ export const claimStaleAgentCallLeads = async ({
         updated_at: new Date().toISOString(),
       })
       .eq("id", lead.id)
-      .in("status", Array.from(PENDING_AGENT_STATUSES))
+      .in("status", STALE_QUEUE_STATUSES)
       .select("*")
       .maybeSingle();
 
