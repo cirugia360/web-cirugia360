@@ -13,6 +13,7 @@ import {
   hasActiveLeadForAgent,
   insertSpeedLead,
   insertSpeedLeadEvent,
+  recoverStaleCustomerConnectingLeads,
   updateSpeedLead,
 } from "./_cirugia360-speed-db.js";
 import {
@@ -782,6 +783,7 @@ export const triggerLeadPhoneCall = async (leadId, config, options = {}) => {
     status: "received",
     sales_call_status: "queued",
     customer_call_status: null,
+    customer_connected_at: null,
     twilio_sales_call_sid: null,
     twilio_customer_call_sid: null,
     completed_at: null,
@@ -910,6 +912,7 @@ export const dispatchDueLeads = async (config, limit = 20, options = {}) => {
     skippedPaid: 0,
     pausedInactiveAgent: 0,
     staleRecovered: 0,
+    staleCustomerRecovered: 0,
     failed: 0,
     paused: config.queuePaused,
     leadIds: [],
@@ -928,6 +931,9 @@ export const dispatchDueLeads = async (config, limit = 20, options = {}) => {
       Date.now() - (config.agentPendingCallStaleSeconds || 120) * 1000,
     ).toISOString(),
   });
+  const recoveredCustomerLeads = await recoverStaleCustomerConnectingLeads({
+    limit,
+  });
   const claimedLeadIds = new Set();
   const leadsToProcess = [];
 
@@ -939,7 +945,16 @@ export const dispatchDueLeads = async (config, limit = 20, options = {}) => {
   }
 
   result.staleRecovered = staleLeads.length;
+  result.staleCustomerRecovered = recoveredCustomerLeads.length;
   result.claimed = leadsToProcess.length;
+
+  for (const recoveredLead of recoveredCustomerLeads) {
+    await insertSpeedLeadEvent(recoveredLead.id, "customer_call.stale_recovered", {
+      status: recoveredLead.status,
+      customerCallStatus: recoveredLead.customer_call_status || null,
+      reason: recoveredLead.last_error || null,
+    });
+  }
 
   for (const claimedLead of leadsToProcess) {
     result.leadIds.push(claimedLead.id);

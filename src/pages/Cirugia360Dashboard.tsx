@@ -3448,16 +3448,37 @@ const Cirugia360Dashboard = () => {
         method: "POST",
         body: JSON.stringify({ leadId }),
       });
+      const nextStatus = result.status || (result.queued ? "scheduled" : result.callStarted ? "dispatching" : "received");
+      const nextSalesCallStatus =
+        result.salesCallStatus !== undefined
+          ? result.salesCallStatus
+          : result.queued
+            ? "scheduled"
+            : result.callStarted
+              ? "dispatching"
+              : null;
       patchLead(leadId, {
-        status: result.queued ? "scheduled" : "dispatching",
-        salesCallStatus: result.queued ? "scheduled" : "dispatching",
+        updatedAt: result.updatedAt || new Date().toISOString(),
+        status: nextStatus,
+        salesCallStatus: nextSalesCallStatus,
+        customerCallStatus: result.customerCallStatus ?? null,
+        customerConnectedAt: result.customerConnectedAt ?? null,
+        completedAt: result.completedAt ?? null,
         dispatchScheduledAt: result.dispatchScheduledAt || null,
-        ...(result.assignedAgent ? { assignedAgentName: result.assignedAgent } : {}),
+        lastError: result.lastError ?? result.warning ?? null,
+        ...(result.assignedAgent !== undefined ? { assignedAgentName: result.assignedAgent } : {}),
+        ...(result.assignedAgentEmail !== undefined
+          ? { assignedAgentEmail: result.assignedAgentEmail }
+          : {}),
       });
       if (!options.skipToast) {
         showActionToast(
-          result.warning ? "warning" : "success",
-          result.queued ? "Llamada reprogramada." : "Llamada solicitada.",
+          result.callStarted ? "success" : "warning",
+          result.callStarted
+            ? "Llamada solicitada."
+            : result.queued
+              ? "Llamada reprogramada."
+              : "No se inició la llamada.",
           result.warning,
         );
       }

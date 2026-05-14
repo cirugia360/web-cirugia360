@@ -188,9 +188,17 @@ export type DashboardPeriod = "today" | "7d" | "30d" | "month" | "custom";
 
 export type LeadCallResult = {
   leadId: string;
+  updatedAt?: string;
   callStarted?: boolean;
   queued?: boolean;
+  status?: string;
+  salesCallStatus?: string | null;
+  customerCallStatus?: string | null;
+  customerConnectedAt?: string | null;
+  completedAt?: string | null;
+  lastError?: string | null;
   dispatchScheduledAt?: string | null;
   assignedAgent?: string | null;
+  assignedAgentEmail?: string | null;
   warning?: string;
 };

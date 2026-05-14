@@ -60,4 +60,17 @@ describe("LeadStatusBadge", () => {
 
     expect(screen.getByText("Intento vencido")).toBeInTheDocument();
   });
+
+  it("shows stale customer connections as expired attempts", () => {
+    render(
+      <LeadStatusBadge
+        lead={{
+          ...makeLead("connecting_customer"),
+          updatedAt: new Date(Date.now() - 3 * 60 * 1000).toISOString(),
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Intento vencido")).toBeInTheDocument();
+  });
 });

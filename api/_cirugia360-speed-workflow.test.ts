@@ -10,6 +10,7 @@ const dbMocks = vi.hoisted(() => ({
   hasActiveLeadForAgent: vi.fn(),
   insertSpeedLead: vi.fn(),
   insertSpeedLeadEvent: vi.fn(),
+  recoverStaleCustomerConnectingLeads: vi.fn(),
   updateSpeedLead: vi.fn(),
 }));
 
@@ -61,6 +62,7 @@ beforeEach(() => {
   });
   dbMocks.claimStaleAgentCallLeads.mockResolvedValue([]);
   dbMocks.hasActiveLeadForAgent.mockResolvedValue(true);
+  dbMocks.recoverStaleCustomerConnectingLeads.mockResolvedValue([]);
   dbMocks.updateSpeedLead.mockImplementation(async (leadId, updates) => ({
     ...(insertedLead || {}),
     ...updates,
@@ -262,6 +264,43 @@ describe("cirugia360 speed-to-lead inactive-agent pause", () => {
 
     const eventNames = dbMocks.insertSpeedLeadEvent.mock.calls.map(([, eventType]) => eventType);
     expect(eventNames).toContain("sales_call.paused_inactive_agent");
+  });
+});
+
+describe("cirugia360 speed-to-lead stale customer recovery", () => {
+  it("recovers stale connecting_customer leads before dispatching the queue", async () => {
+    const config = {
+      defaultCountryDialCode: "56",
+      retryDelaySeconds: 180,
+      agentCallCooldownSeconds: 180,
+      salesAgents: [{ id: "agent-1", name: "Maria", phone: "+56911111111", email: "maria@clinic.cl", active: true }],
+      twilioConfigured: false,
+      twilioPhoneNumber: "+56229146709",
+      appUrl: "https://example.com",
+      queuePaused: false,
+    };
+
+    dbMocks.claimDueSpeedLeads.mockResolvedValueOnce([]);
+    dbMocks.recoverStaleCustomerConnectingLeads.mockResolvedValueOnce([
+      {
+        id: "lead-stale-customer",
+        status: "customer_unreachable",
+        customer_call_status: "stale",
+        last_error: "La conexion con la paciente quedo sin cierre y se marco como vencida.",
+      },
+    ]);
+
+    const result = await dispatchDueLeads(config, 10);
+
+    expect(result.staleCustomerRecovered).toBe(1);
+    expect(dbMocks.insertSpeedLeadEvent).toHaveBeenCalledWith(
+      "lead-stale-customer",
+      "customer_call.stale_recovered",
+      expect.objectContaining({
+        status: "customer_unreachable",
+        customerCallStatus: "stale",
+      }),
+    );
   });
 });
 
