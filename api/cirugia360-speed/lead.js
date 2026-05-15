@@ -88,6 +88,7 @@ export default async function handler(request, response) {
       });
       const updates = {};
       const events = [];
+      let nextMetadata = isPlainObject(lead.metadata) ? { ...lead.metadata } : {};
 
       if (Object.prototype.hasOwnProperty.call(rawPayload, "assignedAgentId")) {
         if (!requireDashboardAdmin(user, response)) {
@@ -102,6 +103,19 @@ export default async function handler(request, response) {
         updates.assigned_agent_name = assignedAgent?.name || null;
         updates.assigned_agent_phone = assignedAgent?.phone || null;
         updates.assigned_agent_email = assignedAgent?.email || null;
+        const routing = isPlainObject(nextMetadata.routing) ? nextMetadata.routing : {};
+        nextMetadata = {
+          ...nextMetadata,
+          routing: {
+            ...routing,
+            attemptedAgentIds: Array.isArray(routing.attemptedAgentIds)
+              ? routing.attemptedAgentIds
+              : [],
+            currentAssignedAgentId: assignedAgent?.id || null,
+            nextStartAgentId: null,
+          },
+        };
+        updates.metadata = nextMetadata;
         events.push([
           "lead.assigned_agent_changed",
           {
@@ -116,7 +130,6 @@ export default async function handler(request, response) {
         Object.prototype.hasOwnProperty.call(rawPayload, "callbackTime") ||
         Object.prototype.hasOwnProperty.call(rawPayload, "callbackContext")
       ) {
-        const metadata = isPlainObject(lead.metadata) ? lead.metadata : {};
         const callbackContext = normalizeText(payload.callbackContext) || null;
 
         if (payload.callbackTime) {
@@ -125,14 +138,15 @@ export default async function handler(request, response) {
           updates.sales_call_status = "scheduled";
           updates.twilio_sales_call_sid = null;
           updates.last_error = null;
-          updates.metadata = {
-            ...metadata,
+          nextMetadata = {
+            ...nextMetadata,
             dashboardCallback: {
               scheduledAt: payload.callbackTime,
               context: callbackContext,
               scheduledBy: user.email || null,
             },
           };
+          updates.metadata = nextMetadata;
           events.push([
             "lead.callback_scheduled",
             {
@@ -142,7 +156,7 @@ export default async function handler(request, response) {
             },
           ]);
         } else {
-          const nextMetadata = { ...metadata };
+          nextMetadata = { ...nextMetadata };
           delete nextMetadata.dashboardCallback;
           delete nextMetadata.callbackContext;
 

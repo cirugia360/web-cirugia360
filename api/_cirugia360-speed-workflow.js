@@ -84,8 +84,8 @@ const getAssignedAgent = (config, lead) => {
   const routingState = getRoutingState(lead.metadata);
 
   return (
-    getAgentById(config, routingState.currentAssignedAgentId) ||
     getAgentByPhone(config, lead.assigned_agent_phone) ||
+    getAgentById(config, routingState.currentAssignedAgentId) ||
     null
   );
 };
@@ -133,36 +133,46 @@ const pauseLeadForInactiveAgent = async (lead, config, assignedAgent) => {
 const buildRetryDate = (config, referenceTime = new Date()) =>
   new Date(referenceTime.getTime() + config.retryDelaySeconds * 1000);
 
+const buildDispatchPlanForAgent = async (lead, config, agent, referenceTime) => {
+  const busy = await hasActiveLeadForAgent({
+    agentPhone: agent.phone,
+    excludeLeadId: lead.id,
+    cooldownSeconds: config.agentCallCooldownSeconds,
+    pendingCallStaleSeconds: config.agentPendingCallStaleSeconds,
+    activeConversationStaleSeconds: config.agentActiveConversationStaleSeconds,
+    referenceTimeIso: referenceTime.toISOString(),
+  });
+
+  return {
+    agent,
+    immediate: !busy,
+    scheduledAt: busy ? buildRetryDate(config, referenceTime) : referenceTime,
+    resetCycle: false,
+  };
+};
+
 const buildLeadDispatchPlan = async (lead, config, referenceTime = new Date(), options = {}) => {
   const excludeAgentIds = new Set(options.excludeAgentIds || []);
-  const activeAgents = getActiveSalesAgents(config);
-  const priorityAgent = activeAgents.find((agent) => !excludeAgentIds.has(agent.id)) || null;
+  const preferredAgent = options.preferAssignedAgent ? getAssignedAgent(config, lead) : null;
 
-  if (priorityAgent) {
-    const busy = await hasActiveLeadForAgent({
-      agentPhone: priorityAgent.phone,
-      excludeLeadId: lead.id,
-      cooldownSeconds: config.agentCallCooldownSeconds,
-      pendingCallStaleSeconds: config.agentPendingCallStaleSeconds,
-      activeConversationStaleSeconds: config.agentActiveConversationStaleSeconds,
-      referenceTimeIso: referenceTime.toISOString(),
-    });
-
-    if (!busy) {
+  if (preferredAgent && !excludeAgentIds.has(preferredAgent.id)) {
+    if (!isAgentActive(preferredAgent)) {
       return {
-        agent: priorityAgent,
-        immediate: true,
-        scheduledAt: referenceTime,
+        agent: preferredAgent,
+        immediate: false,
+        scheduledAt: buildRetryDate(config, referenceTime),
         resetCycle: false,
       };
     }
 
-    return {
-      agent: priorityAgent,
-      immediate: false,
-      scheduledAt: buildRetryDate(config, referenceTime),
-      resetCycle: false,
-    };
+    return buildDispatchPlanForAgent(lead, config, preferredAgent, referenceTime);
+  }
+
+  const activeAgents = getActiveSalesAgents(config);
+  const priorityAgent = activeAgents.find((agent) => !excludeAgentIds.has(agent.id)) || null;
+
+  if (priorityAgent) {
+    return buildDispatchPlanForAgent(lead, config, priorityAgent, referenceTime);
   }
 
   return {
@@ -214,6 +224,7 @@ export const scheduleLeadForNextAttempt = async (lead, config, options = {}) => 
   const referenceTime = options.referenceTime instanceof Date ? options.referenceTime : new Date();
   const plan = await buildLeadDispatchPlan(lead, config, referenceTime, {
     excludeAgentIds: options.excludeAgentIds || [],
+    preferAssignedAgent: options.preferAssignedAgent === true,
   });
 
   if (!plan) {
@@ -789,8 +800,24 @@ export const triggerLeadPhoneCall = async (leadId, config, options = {}) => {
     completed_at: null,
     last_error: null,
   });
+  const assignedAgent = getAssignedAgent(config, preparedLead);
+
+  if (assignedAgent && !isAgentActive(assignedAgent)) {
+    const pausedLead = await pauseLeadForInactiveAgent(preparedLead, config, assignedAgent);
+
+    return {
+      found: true,
+      lead: pausedLead,
+      callStarted: false,
+      queued: true,
+      dispatchScheduledAt: pausedLead.dispatch_scheduled_at,
+      warning: pausedLead.last_error,
+    };
+  }
+
   const nextAttempt = await scheduleLeadForNextAttempt(preparedLead, config, {
     reason: normalizeText(options.reason) || "Llamada solicitada desde dashboard.",
+    preferAssignedAgent: Boolean(assignedAgent),
   });
 
   if (nextAttempt.kind === "scheduled") {

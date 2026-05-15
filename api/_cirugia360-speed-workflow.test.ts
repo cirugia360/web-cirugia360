@@ -14,6 +14,10 @@ const dbMocks = vi.hoisted(() => ({
   updateSpeedLead: vi.fn(),
 }));
 
+const twilioMocks = vi.hoisted(() => ({
+  callsCreate: vi.fn(),
+}));
+
 vi.mock("./_cirugia360-speed-db.js", () => dbMocks);
 
 vi.mock("./_cirugia360-speed-twilio.js", () => ({
@@ -21,7 +25,7 @@ vi.mock("./_cirugia360-speed-twilio.js", () => ({
     [lead.full_name, lead.procedure_interest, lead.message].filter(Boolean).join(" | "),
   createTwilioClient: vi.fn(() => ({
     calls: {
-      create: vi.fn(),
+      create: twilioMocks.callsCreate,
     },
   })),
 }));
@@ -35,6 +39,7 @@ import {
   extractPaymentReference,
   isPositivePaymentStatus,
   scheduleLeadForNextAttempt,
+  triggerLeadPhoneCall,
   tryNextAgent,
 } from "./_cirugia360-speed-workflow.js";
 
@@ -63,6 +68,7 @@ beforeEach(() => {
   dbMocks.claimStaleAgentCallLeads.mockResolvedValue([]);
   dbMocks.hasActiveLeadForAgent.mockResolvedValue(true);
   dbMocks.recoverStaleCustomerConnectingLeads.mockResolvedValue([]);
+  twilioMocks.callsCreate.mockResolvedValue({ sid: "CA_TEST", status: "queued" });
   dbMocks.updateSpeedLead.mockImplementation(async (leadId, updates) => ({
     ...(insertedLead || {}),
     ...updates,
@@ -541,6 +547,80 @@ describe("cirugia360 strict agent priority", () => {
     expect(dbMocks.hasActiveLeadForAgent).toHaveBeenCalledWith(
       expect.objectContaining({
         agentPhone: "+56922222222",
+      }),
+    );
+  });
+});
+
+describe("cirugia360 manual dashboard calls", () => {
+  it("starts Twilio with the assigned agent even when priority metadata is stale", async () => {
+    let currentLead = {
+      id: "lead-manual-call",
+      status: "received",
+      payment_status: "not_required",
+      assigned_agent_name: "Prioridad 2",
+      assigned_agent_phone: "+56922222222",
+      assigned_agent_email: "dos@clinic.cl",
+      agent_attempts: 0,
+      dispatch_scheduled_at: null,
+      first_attempt_at: null,
+      metadata: {
+        routing: {
+          attemptedAgentIds: [],
+          currentAssignedAgentId: "agent-1",
+          nextStartAgentId: null,
+        },
+      },
+    };
+    const config = {
+      defaultCountryDialCode: "56",
+      retryDelaySeconds: 180,
+      agentCallCooldownSeconds: 180,
+      agentCallTimeoutSeconds: 20,
+      agentPendingCallStaleSeconds: 45,
+      agentActiveConversationStaleSeconds: 10800,
+      salesAgents: [
+        { id: "agent-1", name: "Prioridad 1", phone: "+56911111111", email: "uno@clinic.cl", active: true },
+        { id: "agent-2", name: "Prioridad 2", phone: "+56922222222", email: "dos@clinic.cl", active: true },
+      ],
+      twilioConfigured: true,
+      twilioPhoneNumber: "+56229146709",
+      twilioAccountSid: "AC_TEST",
+      twilioAuthToken: "token",
+      appUrl: "https://example.com",
+      queuePaused: false,
+    };
+
+    dbMocks.getSpeedLeadById.mockResolvedValueOnce(currentLead);
+    dbMocks.updateSpeedLead.mockImplementation(async (leadId, updates) => {
+      currentLead = {
+        ...currentLead,
+        ...updates,
+        id: leadId,
+      };
+      return currentLead;
+    });
+    dbMocks.hasActiveLeadForAgent.mockImplementation(async ({ agentPhone }) => agentPhone === "+56911111111");
+
+    const result = await triggerLeadPhoneCall("lead-manual-call", config, {
+      reason: "Llamada manual solicitada desde dashboard.",
+    });
+
+    expect(result).toMatchObject({
+      found: true,
+      callStarted: true,
+      queued: false,
+    });
+    expect(twilioMocks.callsCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: "+56922222222",
+        from: "+56229146709",
+        url: "https://example.com/api/cirugia360-speed/twilio/voice/sales-intro?leadId=lead-manual-call",
+      }),
+    );
+    expect(dbMocks.hasActiveLeadForAgent).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentPhone: "+56911111111",
       }),
     );
   });
