@@ -6,7 +6,6 @@ import {
   ChevronRight,
   LoaderCircle,
   MapPin,
-  PhoneCall,
 } from "lucide-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Calendar } from "@/components/ui/calendar";
@@ -266,7 +265,7 @@ const continueToPayment = (
 
 const ContactBookingForm = () => {
   const [step, setStep] = useState<Step>(1);
-  const [flowIntent, setFlowIntent] = useState<FlowIntent | null>(null);
+  const [flowIntent, setFlowIntent] = useState<FlowIntent | null>("booking");
   const [showDetailErrors, setShowDetailErrors] = useState(false);
   const [form, setForm] = useState<FormState>(() => ({
     procedimiento: getInitialProcedureInterest(),
@@ -727,29 +726,7 @@ const ContactBookingForm = () => {
           <p className="mb-6 text-sm text-muted-foreground">
             {contactBookingStrings.copy.stepOneDescription}
           </p>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <button
-              type="button"
-              onClick={() => setFlowIntent("contact")}
-              className={`rounded-sm border-2 p-5 text-left transition-all ${
-                flowIntent === "contact"
-                  ? "border-primary bg-primary/5"
-                  : "border-border bg-background hover:border-primary/40"
-              }`}
-            >
-              <span className="mb-4 flex h-11 w-11 items-center justify-center rounded-full bg-primary/10 text-primary">
-                <PhoneCall size={20} />
-              </span>
-              <span className="block text-xs font-sans uppercase tracking-[0.2em] text-muted-foreground">
-                {flowCopy.contact.eyebrow}
-              </span>
-              <span className="mt-2 block font-serif text-lg font-medium text-foreground">
-                {flowCopy.contact.label}
-              </span>
-              <span className="mt-2 block text-sm text-muted-foreground">
-                {flowCopy.contact.description}
-              </span>
-            </button>
+          <div className="grid gap-4">
             <button
               type="button"
               onClick={() => setFlowIntent("booking")}

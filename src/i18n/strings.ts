@@ -91,7 +91,7 @@ export const siteStrings = {
       segundoApellido: "El segundo apellido es obligatorio.",
       correo: "Ingresa un correo válido.",
       telefono: "Ingresa un teléfono en formato +56 9 1234 5678.",
-      chooseFlow: "Elige si prefieres ser contactado o agendar la evaluación.",
+      chooseFlow: "Elige agendar la evaluación.",
     },
     toast: {
       callStarted: "Solicitud recibida. Estamos llamando a la asesora.",
@@ -102,9 +102,9 @@ export const siteStrings = {
       bookingError: "No se pudo confirmar la reserva.",
     },
     copy: {
-      stepOneTitle: "¿Cómo quieres avanzar?",
+      stepOneTitle: "Agenda tu evaluación",
       stepOneDescription:
-        "Puedes pedir que una asesora te contacte o reservar directamente la evaluación con el Dr. Torres.",
+        "Reserva una hora real en Reservo y completa el pago de la evaluación con el Dr. Torres.",
       contactDetailsTitle: "Datos de Contacto",
       bookingDetailsTitle: "Datos Personales",
       contactDetailsDescription: "Completa tus datos y activaremos el contacto con una asesora.",
