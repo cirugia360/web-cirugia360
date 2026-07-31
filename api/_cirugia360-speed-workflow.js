@@ -433,6 +433,7 @@ const buildBaseLeadRow = ({
   const normalizedFullName = normalizeText(fullName);
   const normalizedProcedure = normalizeText(procedure) || null;
   const normalizedMessage = normalizeText(message) || null;
+  const shouldHoldForPayment = paymentStatus === "pending" && Boolean(paymentDueAt);
 
   return {
     id: randomUUID(),
@@ -440,8 +441,8 @@ const buildBaseLeadRow = ({
     updated_at: new Date().toISOString(),
     lead_kind: leadKind,
     trigger_source: triggerSource,
-    status: paymentStatus === "pending" ? "scheduled" : "received",
-    sales_call_status: paymentStatus === "pending" ? "scheduled" : null,
+    status: shouldHoldForPayment ? "scheduled" : "received",
+    sales_call_status: shouldHoldForPayment ? "scheduled" : null,
     customer_call_status: null,
     full_name: normalizedFullName,
     phone,
@@ -466,7 +467,7 @@ const buildBaseLeadRow = ({
     assigned_agent_phone: null,
     assigned_agent_email: null,
     agent_attempts: 0,
-    dispatch_scheduled_at: paymentStatus === "pending" ? paymentDueAt : null,
+    dispatch_scheduled_at: shouldHoldForPayment ? paymentDueAt : null,
     first_attempt_at: null,
     customer_connected_at: null,
     completed_at: null,
@@ -665,7 +666,7 @@ export const createBookingLeadFromBooking = async ({
       sourceUrl,
       leadKind: "booking_request",
       triggerSource: "reservo_booking_created",
-      paymentStatus: "not_required",
+      paymentStatus: paymentUrl ? "pending" : "not_required",
       bookingReference,
       paymentUrl,
       externalReferences: extractExternalReferenceCandidates(bookingResponse?.source),

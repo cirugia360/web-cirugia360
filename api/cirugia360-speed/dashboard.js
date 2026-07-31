@@ -14,13 +14,14 @@ import {
   dispatchMetaEvent,
   insertTrackingEvent,
   restoreLeadNote,
+  toPublicLead,
   updateLeadNote,
 } from "../_cirugia360-dashboard-data.js";
 import {
   getCirugia360SpeedConfig,
   getCirugia360SpeedConfigWithSettings,
 } from "../_cirugia360-speed-config.js";
-import { getSpeedAdminClient, getSpeedLeadById } from "../_cirugia360-speed-db.js";
+import { getSpeedAdminClient, getSpeedLeadById, insertSpeedLeadEvent, updateSpeedLead } from "../_cirugia360-speed-db.js";
 import {
   buildSettingsFromConfig,
   logAgentActivityChanges,
@@ -669,6 +670,71 @@ const handleLeadCall = async (request, response, user) => {
   });
 };
 
+const handleLeadPayment = async (request, response, user) => {
+  const body = await readJsonBody(request);
+  const leadId = normalizeText(body.leadId);
+  const action = normalizeText(body.action || "confirm").toLowerCase();
+
+  if (!leadId) {
+    return sendJson(response, 400, {
+      success: false,
+      error: "Selecciona un lead para actualizar el pago.",
+    });
+  }
+
+  const lead = await getSpeedLeadById(leadId);
+
+  if (!lead) {
+    return sendJson(response, 404, {
+      success: false,
+      error: "No encontramos ese lead.",
+    });
+  }
+
+  if (!canAccessLead(user, lead)) {
+    return sendForbiddenLead(response);
+  }
+
+  const nowIso = new Date().toISOString();
+  const nextPaymentStatus = action === "pending" ? "pending" : "confirmed";
+  const updates =
+    nextPaymentStatus === "confirmed"
+      ? {
+          payment_status: "confirmed",
+          payment_confirmed_at: nowIso,
+          last_error: null,
+          metadata: {
+            ...(lead.metadata && typeof lead.metadata === "object" ? lead.metadata : {}),
+            paymentManuallyConfirmedAt: nowIso,
+            paymentManuallyConfirmedBy: user.email || null,
+          },
+        }
+      : {
+          payment_status: "pending",
+          payment_confirmed_at: null,
+          metadata: {
+            ...(lead.metadata && typeof lead.metadata === "object" ? lead.metadata : {}),
+            paymentMarkedPendingAt: nowIso,
+            paymentMarkedPendingBy: user.email || null,
+          },
+        };
+  const updatedLead = await updateSpeedLead(lead.id, updates);
+
+  await insertSpeedLeadEvent(lead.id, `payment.${nextPaymentStatus}`, {
+    at: nowIso,
+    changedBy: user.email || null,
+    previousPaymentStatus: lead.payment_status || null,
+    bookingReference: lead.booking_reference || null,
+    paymentReference: lead.payment_reference || null,
+    source: "dashboard_manual",
+  });
+
+  return sendJson(response, 200, {
+    success: true,
+    data: toPublicLead(updatedLead, []),
+  });
+};
+
 const handleTrack = async (request, response) => {
   const body = await readJsonBody(request);
   const leadId = normalizeText(body.leadId);
@@ -758,6 +824,14 @@ export default async function handler(request, response) {
       }
 
       return handleLeadCall(request, response, user);
+    }
+
+    if (resource === "lead-payment") {
+      if (request.method !== "POST") {
+        return methodNotAllowed(response, ["POST"]);
+      }
+
+      return handleLeadPayment(request, response, user);
     }
 
     if (resource === "track") {

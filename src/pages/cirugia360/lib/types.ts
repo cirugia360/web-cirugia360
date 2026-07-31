@@ -44,6 +44,13 @@ export type DashboardLead = {
   procedureInterest: string | null;
   message: string | null;
   sourceUrl: string | null;
+  paymentStatus?: string | null;
+  paymentDueAt?: string | null;
+  paymentConfirmedAt?: string | null;
+  paymentReference?: string | null;
+  bookingReference?: string | null;
+  paymentUrl?: string | null;
+  externalReferenceCandidates?: string[];
   assignedAgentName: string | null;
   assignedAgentEmail: string | null;
   agentAttempts: number;
@@ -180,7 +187,7 @@ export type RefreshOptions = {
   force?: boolean;
 };
 
-export type LeadSortKey = "createdAt" | "fullName" | "procedureInterest" | "assignedAgentName" | "status";
+export type LeadSortKey = "createdAt" | "fullName" | "procedureInterest" | "assignedAgentName" | "status" | "paymentStatus";
 
 export type SortDirection = "asc" | "desc";
 

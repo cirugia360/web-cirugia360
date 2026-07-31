@@ -287,6 +287,8 @@ const buildSpeedMetrics = (leads: DashboardLead[]): DashboardMetric[] => {
   const queued = leads.filter((lead) => ["scheduled", "dispatching"].includes(lead.status)).length;
   const lost = leads.filter((lead) => lead.pipelineOutcome === "lost").length;
   const won = leads.filter((lead) => lead.pipelineOutcome === "won").length;
+  const paidEvaluations = leads.filter(isPaidEvaluationLead).length;
+  const pendingPayments = leads.filter(isPendingEvaluationPayment).length;
   const totalPipelineValue = leads.reduce((sum, lead) => sum + Number(lead.pipelineValue || 0), 0);
 
   return [
@@ -296,6 +298,8 @@ const buildSpeedMetrics = (leads: DashboardLead[]): DashboardMetric[] => {
     { id: "completed", label: "Completados", value: completed, tone: "slate" },
     { id: "won", label: "Ganados", value: won, tone: "green" },
     { id: "lost", label: "Perdidos", value: lost, tone: "red" },
+    { id: "paidEvaluations", label: "Evals pagadas", value: paidEvaluations, tone: "green" },
+    { id: "pendingPayments", label: "Pagos pendientes", value: pendingPayments, tone: "amber" },
     {
       id: "pipelineValue",
       label: "Pipeline",
@@ -382,6 +386,57 @@ const getAttributionLabel = (attribution: LeadAttribution) => {
   return attributionLabels[channel] || channel.replace(/[_-]+/g, " ");
 };
 
+const normalizePaymentStatus = (lead: DashboardLead) => String(lead.paymentStatus || "not_required").toLowerCase();
+
+const isPaidEvaluationLead = (lead: DashboardLead) => normalizePaymentStatus(lead) === "confirmed";
+
+const hasEvaluationPaymentArtifact = (lead: DashboardLead) => Boolean(lead.paymentUrl || lead.bookingReference);
+
+const isPendingEvaluationPayment = (lead: DashboardLead) => {
+  const status = normalizePaymentStatus(lead);
+
+  return ["pending", "processing", "open"].includes(status) || (status === "not_required" && hasEvaluationPaymentArtifact(lead));
+};
+
+const hasEvaluationPaymentTracking = (lead: DashboardLead) =>
+  Boolean(hasEvaluationPaymentArtifact(lead) || isPaidEvaluationLead(lead) || isPendingEvaluationPayment(lead));
+
+const getPaymentStatusLabel = (lead: DashboardLead) => {
+  const status = normalizePaymentStatus(lead);
+
+  if (status === "confirmed") {
+    return "Pagada";
+  }
+
+  if (["pending", "processing", "open"].includes(status)) {
+    return "Pendiente";
+  }
+
+  if (status === "failed" || status === "rejected") {
+    return "Rechazada";
+  }
+
+  return hasEvaluationPaymentTracking(lead) ? "Pendiente" : "Sin pago";
+};
+
+const getPaymentBadgeClassName = (lead: DashboardLead) => {
+  if (isPaidEvaluationLead(lead)) {
+    return "border-emerald-200 bg-emerald-50 text-emerald-800";
+  }
+
+  if (isPendingEvaluationPayment(lead)) {
+    return "border-amber-200 bg-amber-50 text-amber-800";
+  }
+
+  return "border-slate-200 bg-slate-50 text-slate-600";
+};
+
+const PaymentBadge = ({ lead }: { lead: DashboardLead }) => (
+  <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${getPaymentBadgeClassName(lead)}`}>
+    {getPaymentStatusLabel(lead)}
+  </span>
+);
+
 const buildAttributionRows = (leads: DashboardLead[]) => {
   const rows = new Map<
     string,
@@ -394,6 +449,8 @@ const buildAttributionRows = (leads: DashboardLead[]) => {
       evaluations: number;
       surgeries: number;
       won: number;
+      paidEvaluations: number;
+      pendingPayments: number;
       value: number;
     }
   >();
@@ -412,6 +469,8 @@ const buildAttributionRows = (leads: DashboardLead[]) => {
         evaluations: 0,
         surgeries: 0,
         won: 0,
+        paidEvaluations: 0,
+        pendingPayments: 0,
         value: 0,
       };
 
@@ -430,10 +489,22 @@ const buildAttributionRows = (leads: DashboardLead[]) => {
       row.value += Number(lead.pipelineValue || 0);
     }
 
+    if (isPaidEvaluationLead(lead)) {
+      row.paidEvaluations += 1;
+    }
+
+    if (isPendingEvaluationPayment(lead)) {
+      row.pendingPayments += 1;
+    }
+
     rows.set(id, row);
   });
 
   return Array.from(rows.values()).sort((firstRow, secondRow) => {
+    if (secondRow.paidEvaluations !== firstRow.paidEvaluations) {
+      return secondRow.paidEvaluations - firstRow.paidEvaluations;
+    }
+
     if (secondRow.won !== firstRow.won) {
       return secondRow.won - firstRow.won;
     }
@@ -577,12 +648,73 @@ const leadMatchesSearch = (lead: DashboardLead, search: string) => {
     lead.assignedAgentName,
     lead.assignedAgentEmail,
     lead.pipelineOutcomeReason,
+    getPaymentStatusLabel(lead),
+    lead.bookingReference,
+    getAttributionLabel(getLeadAttribution(lead)),
   ]
     .filter(Boolean)
     .join(" ")
     .toLowerCase();
 
   return haystack.includes(normalizedSearch);
+};
+
+const escapeCsvCell = (value: unknown) => {
+  const text = value === null || value === undefined ? "" : String(value);
+
+  return `"${text.replace(/"/g, '""')}"`;
+};
+
+const exportLeadsCsv = (leads: DashboardLead[], filename: string) => {
+  const headers = [
+    "Creado",
+    "Paciente",
+    "Telefono",
+    "Email",
+    "Procedimiento",
+    "Asesora",
+    "Estado lead",
+    "Estado pago",
+    "Pago confirmado",
+    "Fuente",
+    "Medio",
+    "Campana",
+    "Landing",
+    "Referencia reserva",
+    "Valor comercial",
+  ];
+  const rows = leads.map((lead) => {
+    const attribution = getLeadAttribution(lead);
+
+    return [
+      formatDate(lead.createdAt),
+      lead.fullName,
+      lead.phone,
+      lead.email || "",
+      lead.procedureInterest || "",
+      lead.assignedAgentName || "",
+      getLeadStatus(lead).label,
+      getPaymentStatusLabel(lead),
+      lead.paymentConfirmedAt ? formatDate(lead.paymentConfirmedAt) : "",
+      attribution.source || "direct",
+      attribution.medium || "direct",
+      attribution.campaign || "",
+      attribution.landingPage || lead.sourceUrl || "",
+      lead.bookingReference || "",
+      lead.pipelineValue || 0,
+    ];
+  });
+  const csv = [headers, ...rows].map((row) => row.map(escapeCsvCell).join(",")).join("\n");
+  const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = url;
+  link.download = `${filename}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 };
 
 const PipelineBoard = ({
@@ -823,7 +955,10 @@ const PipelineBoard = ({
               <strong className="text-lg font-bold tracking-[-0.01em] text-dashboard-ink">
                 {formatCompactMoney(lead.pipelineValue)}
               </strong>
-              <LeadStatusBadge lead={lead} />
+              <div className="flex flex-col items-end gap-1">
+                <LeadStatusBadge lead={lead} />
+                {hasEvaluationPaymentTracking(lead) ? <PaymentBadge lead={lead} /> : null}
+              </div>
             </div>
 
             <div className="mt-3 grid gap-1.5 text-[11px] text-dashboard-subtle">
@@ -1173,6 +1308,10 @@ const getSortValue = (lead: DashboardLead, sortKey: LeadSortKey) => {
     return getLeadStatus(lead).label;
   }
 
+  if (sortKey === "paymentStatus") {
+    return getPaymentStatusLabel(lead);
+  }
+
   if (sortKey === "createdAt") {
     return Date.parse(lead.createdAt) || 0;
   }
@@ -1197,6 +1336,7 @@ const LeadsTable = ({
 }) => {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [paymentFilter, setPaymentFilter] = useState("all");
   const [agentFilter, setAgentFilter] = useState("all");
   const [ownershipView, setOwnershipView] = useState<"all" | "mine">("all");
   const [sortKey, setSortKey] = useState<LeadSortKey>("createdAt");
@@ -1228,6 +1368,7 @@ const LeadsTable = ({
           (currentUserEmail && lead.assignedAgentEmail?.toLowerCase() === currentUserEmail.toLowerCase()),
       )
       .filter((lead) => statusFilter === "all" || getLeadStatus(lead).label === statusFilter)
+      .filter((lead) => paymentFilter === "all" || getPaymentStatusLabel(lead) === paymentFilter)
       .filter((lead) => agentFilter === "all" || (lead.assignedAgentName || "Sin asignar") === agentFilter)
       .sort((firstLead, secondLead) => {
         const firstValue = getSortValue(firstLead, sortKey);
@@ -1242,7 +1383,7 @@ const LeadsTable = ({
       });
 
     return sortedLeads;
-  }, [agentFilter, currentUserEmail, leads, ownershipView, search, sortDirection, sortKey, statusFilter]);
+  }, [agentFilter, currentUserEmail, leads, ownershipView, paymentFilter, search, sortDirection, sortKey, statusFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filteredLeads.length / LEADS_PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
@@ -1253,7 +1394,7 @@ const LeadsTable = ({
 
   useEffect(() => {
     setPage(1);
-  }, [agentFilter, ownershipView, search, statusFilter]);
+  }, [agentFilter, ownershipView, paymentFilter, search, statusFilter]);
 
   const changeSort = (nextSortKey: LeadSortKey) => {
     if (sortKey === nextSortKey) {
@@ -1292,7 +1433,7 @@ const LeadsTable = ({
             placeholder="Buscar paciente, telefono, procedimiento o asesora"
           />
         </label>
-        <div className="grid gap-2 sm:grid-cols-2 lg:w-[420px]">
+        <div className="grid gap-2 sm:grid-cols-3 lg:w-[620px]">
           <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
             Estado
             <select
@@ -1302,6 +1443,21 @@ const LeadsTable = ({
             >
               <option value="all">Todos</option>
               {statusOptions.map((status) => (
+                <option key={status} value={status}>
+                  {status}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Pago
+            <select
+              className="mt-1 h-10 w-full rounded-lg border border-dashboard-line bg-white px-3 text-sm font-normal normal-case text-slate-900 outline-none focus:border-dashboard-primary"
+              value={paymentFilter}
+              onChange={(event) => setPaymentFilter(event.target.value)}
+            >
+              <option value="all">Todos</option>
+              {["Pagada", "Pendiente", "Sin pago"].map((status) => (
                 <option key={status} value={status}>
                   {status}
                 </option>
@@ -1361,7 +1517,7 @@ const LeadsTable = ({
       </div>
 
       <div className="overflow-x-auto">
-        <table className="min-w-[860px] w-full border-collapse text-left text-sm">
+        <table className="min-w-[980px] w-full border-collapse text-left text-sm">
           <caption className="sr-only">Listado de leads comerciales</caption>
           <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide">
             <tr>
@@ -1376,6 +1532,9 @@ const LeadsTable = ({
               </th>
               <th scope="col" className="px-4 py-3">
                 <SortButton label="Estado" value="status" />
+              </th>
+              <th scope="col" className="px-4 py-3">
+                <SortButton label="Pago" value="paymentStatus" />
               </th>
               <th scope="col" className="px-4 py-3">
                 <SortButton label="Creado" value="createdAt" />
@@ -1401,6 +1560,9 @@ const LeadsTable = ({
                   <td className="max-w-[180px] truncate px-4 py-3">{lead.assignedAgentName || "Sin asignar"}</td>
                   <td className="px-4 py-3">
                     <LeadStatusBadge lead={lead} />
+                  </td>
+                  <td className="px-4 py-3">
+                    <PaymentBadge lead={lead} />
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-slate-600">{formatDate(lead.createdAt)}</td>
                   <td className="px-4 py-3 text-right">
@@ -1576,6 +1738,7 @@ const LeadDetail = ({
   onDeleteNote,
   onAgent,
   onCallback,
+  onPayment,
   onCall,
 }: {
   lead: DashboardLead;
@@ -1590,6 +1753,7 @@ const LeadDetail = ({
   onDeleteNote: (leadId: string, noteId: number, options?: ActionOptions) => Promise<boolean>;
   onAgent: (leadId: string, assignedAgentId: string, options?: ActionOptions) => Promise<boolean>;
   onCallback: (leadId: string, callbackTime: string | null, callbackContext: string, options?: ActionOptions) => Promise<boolean>;
+  onPayment: (leadId: string, action?: "confirm" | "pending", options?: ActionOptions) => Promise<boolean>;
   onCall: (leadId: string, options?: ActionOptions) => Promise<boolean>;
 }) => {
   const [note, setNote] = useState("");
@@ -1604,6 +1768,8 @@ const LeadDetail = ({
     | "edit-note"
     | "callback"
     | "clear-callback"
+    | "payment-confirm"
+    | "payment-pending"
     | "outcome-active"
     | "outcome-won"
     | "outcome-lost"
@@ -1621,6 +1787,8 @@ const LeadDetail = ({
     assignableAgents.find(
       (agent) => agent.email === lead.assignedAgentEmail || agent.name === lead.assignedAgentName,
     )?.id || "";
+  const leadAttribution = getLeadAttribution(lead);
+  const canConfirmPayment = !isPaidEvaluationLead(lead) && hasEvaluationPaymentTracking(lead);
   const sortedNotes = useMemo(
     () =>
       [...lead.notes].sort(
@@ -1850,6 +2018,23 @@ const LeadDetail = ({
     }
   };
 
+  const markPayment = async (action: "confirm" | "pending") => {
+    setSavingAction(action === "confirm" ? "payment-confirm" : "payment-pending");
+    setError("");
+
+    const saved = await onPayment(lead.id, action, { skipToast: true });
+    setSavingAction(null);
+
+    if (saved) {
+      showDrawerToast(
+        "success",
+        action === "confirm" ? "Evaluación marcada como pagada." : "Pago marcado como pendiente.",
+      );
+    } else {
+      showDrawerToast("error", "No pudimos actualizar el pago.");
+    }
+  };
+
   const startEditingNote = (leadNote: LeadNote) => {
     setEditingNoteId(leadNote.id);
     setEditingNoteBody(leadNote.body);
@@ -1963,6 +2148,63 @@ const LeadDetail = ({
           </label>
           <Detail label="Intentos" value={lead.agentAttempts ? String(lead.agentAttempts) : "Sin intentos"} />
           <Detail label="Ultimo error" value={lead.lastError || "Sin error"} tone={lead.lastError ? "danger" : "default"} />
+        </section>
+
+        <section className="rounded-lg border border-slate-200 p-4">
+          <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <h3 className="text-sm font-semibold">Pago evaluación</h3>
+              <p className="mt-1 text-xs text-slate-500">
+                Fuente: {getAttributionLabel(leadAttribution)}
+                {leadAttribution.campaign ? ` · ${leadAttribution.campaign}` : ""}
+              </p>
+            </div>
+            <PaymentBadge lead={lead} />
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Detail
+              label="Pagado"
+              value={lead.paymentConfirmedAt ? formatDate(lead.paymentConfirmedAt) : getPaymentStatusLabel(lead)}
+              tone={isPendingEvaluationPayment(lead) ? "warning" : "default"}
+            />
+            <Detail label="Origen" value={`${leadAttribution.source || "direct"} / ${leadAttribution.medium || "direct"}`} />
+            <Detail label="Campaña" value={leadAttribution.campaign || "Sin campaña"} />
+            <Detail label="Referencia reserva" value={lead.bookingReference || "Sin dato"} />
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {canConfirmPayment ? (
+              <button
+                type="button"
+                className="inline-flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={() => void markPayment("confirm")}
+                disabled={isSaving}
+              >
+                {savingAction === "payment-confirm" ? <RefreshCcw className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
+                {savingAction === "payment-confirm" ? "Guardando..." : "Marcar pagada"}
+              </button>
+            ) : null}
+            {isPaidEvaluationLead(lead) ? (
+              <button
+                type="button"
+                className="inline-flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={() => void markPayment("pending")}
+                disabled={isSaving}
+              >
+                {savingAction === "payment-pending" ? <RefreshCcw className="h-4 w-4 animate-spin" /> : null}
+                {savingAction === "payment-pending" ? "Guardando..." : "Volver a pendiente"}
+              </button>
+            ) : null}
+            {lead.paymentUrl ? (
+              <a
+                className="inline-flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600"
+                href={lead.paymentUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Abrir link de pago
+              </a>
+            ) : null}
+          </div>
         </section>
 
         <section className="rounded-lg border border-slate-200 p-4">
@@ -2413,8 +2655,8 @@ const AttributionView = ({
 }) => {
   const rows = buildAttributionRows(leads);
   const totalLeads = leads.length;
-  const totalEvaluations = rows.reduce((sum, row) => sum + row.evaluations, 0);
-  const totalWon = rows.reduce((sum, row) => sum + row.won, 0);
+  const totalPaidEvaluations = leads.filter(isPaidEvaluationLead).length;
+  const totalPendingPayments = leads.filter(isPendingEvaluationPayment).length;
   const totalValue = rows.reduce((sum, row) => sum + row.value, 0);
   const recentLeads = [...leads]
     .sort((firstLead, secondLead) => Date.parse(secondLead.createdAt) - Date.parse(firstLead.createdAt))
@@ -2424,8 +2666,8 @@ const AttributionView = ({
     <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <MetricTile metric={{ id: "attr-leads", label: "Leads atribuidos", value: totalLeads, tone: "blue" }} />
-        <MetricTile metric={{ id: "attr-evals", label: "Evaluaciones", value: totalEvaluations, tone: "green" }} />
-        <MetricTile metric={{ id: "attr-won", label: "Ganados", value: totalWon, tone: "green" }} />
+        <MetricTile metric={{ id: "attr-paid-evals", label: "Evals pagadas", value: totalPaidEvaluations, tone: "green" }} />
+        <MetricTile metric={{ id: "attr-pending-payments", label: "Pagos pendientes", value: totalPendingPayments, tone: "amber" }} />
         <MetricTile
           metric={{
             id: "attr-value",
@@ -2441,7 +2683,7 @@ const AttributionView = ({
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
           <div>
             <h2 className="font-semibold">Fuentes y conversiones</h2>
-            <p className="mt-1 text-sm text-slate-500">Origen real desde UTMs, referrer y clics pagados.</p>
+            <p className="mt-1 text-sm text-slate-500">Origen desde UTMs, referrer y clics pagados.</p>
           </div>
         </div>
         <div className="overflow-x-auto">
@@ -2452,8 +2694,11 @@ const AttributionView = ({
                 <th className="px-5 py-3">Medio</th>
                 <th className="px-5 py-3 text-right">Leads</th>
                 <th className="px-5 py-3 text-right">Evaluaciones</th>
+                <th className="px-5 py-3 text-right">Pagadas</th>
+                <th className="px-5 py-3 text-right">Pendientes</th>
                 <th className="px-5 py-3 text-right">Cirugias</th>
                 <th className="px-5 py-3 text-right">Ganados</th>
+                <th className="px-5 py-3 text-right">Pago eval.</th>
                 <th className="px-5 py-3 text-right">Lead a eval.</th>
                 <th className="px-5 py-3 text-right">Valor</th>
               </tr>
@@ -2468,8 +2713,15 @@ const AttributionView = ({
                   <td className="px-5 py-3 text-slate-600">{row.medium}</td>
                   <td className="px-5 py-3 text-right font-semibold">{row.leads}</td>
                   <td className="px-5 py-3 text-right">{row.evaluations}</td>
+                  <td className="px-5 py-3 text-right font-semibold text-emerald-700">{row.paidEvaluations}</td>
+                  <td className="px-5 py-3 text-right text-amber-700">{row.pendingPayments}</td>
                   <td className="px-5 py-3 text-right">{row.surgeries}</td>
                   <td className="px-5 py-3 text-right">{row.won}</td>
+                  <td className="px-5 py-3 text-right">
+                    {row.paidEvaluations + row.pendingPayments
+                      ? `${Math.round((row.paidEvaluations / (row.paidEvaluations + row.pendingPayments)) * 100)}%`
+                      : "0%"}
+                  </td>
                   <td className="px-5 py-3 text-right">
                     {row.leads ? `${Math.round((row.evaluations / row.leads) * 100)}%` : "0%"}
                   </td>
@@ -2496,6 +2748,7 @@ const AttributionView = ({
               <tr>
                 <th className="px-5 py-3">Lead</th>
                 <th className="px-5 py-3">Fuente</th>
+                <th className="px-5 py-3">Pago</th>
                 <th className="px-5 py-3">Campana</th>
                 <th className="px-5 py-3">Landing</th>
                 <th className="px-5 py-3">Etapa</th>
@@ -2523,6 +2776,12 @@ const AttributionView = ({
                       <p className="mt-0.5 text-xs text-slate-500">
                         {attribution.source || "direct"} / {attribution.medium || "direct"}
                       </p>
+                    </td>
+                    <td className="px-5 py-3">
+                      <PaymentBadge lead={lead} />
+                      {lead.paymentConfirmedAt ? (
+                        <p className="mt-1 text-xs text-slate-500">{formatDate(lead.paymentConfirmedAt)}</p>
+                      ) : null}
                     </td>
                     <td className="px-5 py-3 text-slate-600">{attribution.campaign || "Sin campana"}</td>
                     <td className="max-w-[260px] truncate px-5 py-3 text-slate-600">
@@ -3749,6 +4008,71 @@ const Cirugia360Dashboard = () => {
     }
   };
 
+  const updatePayment = async (
+    leadId: string,
+    action: "confirm" | "pending" = "confirm",
+    options: ActionOptions = {},
+  ) => {
+    setError("");
+    const previousSnapshot = snapshot;
+    const nowIso = new Date().toISOString();
+    const optimisticPatch: Partial<DashboardLead> =
+      action === "confirm"
+        ? {
+            paymentStatus: "confirmed",
+            paymentConfirmedAt: nowIso,
+          }
+        : {
+            paymentStatus: "pending",
+            paymentConfirmedAt: null,
+          };
+
+    patchLead(leadId, optimisticPatch);
+
+    try {
+      const updatedLead = await apiRequest<DashboardLead>("/api/cirugia360-speed/dashboard?resource=lead-payment", {
+        method: "POST",
+        body: JSON.stringify({
+          leadId,
+          action,
+        }),
+      });
+      patchLead(leadId, {
+        paymentStatus: updatedLead.paymentStatus,
+        paymentConfirmedAt: updatedLead.paymentConfirmedAt,
+        paymentReference: updatedLead.paymentReference,
+        bookingReference: updatedLead.bookingReference,
+        paymentUrl: updatedLead.paymentUrl,
+        metadata: updatedLead.metadata,
+      });
+
+      if (!options.skipToast) {
+        showActionToast(
+          "success",
+          action === "confirm" ? "Evaluación marcada como pagada." : "Pago marcado como pendiente.",
+        );
+      }
+
+      return true;
+    } catch (paymentError) {
+      if (isSessionExpiredError(paymentError)) {
+        await expireDashboardSession();
+        return false;
+      }
+
+      const message = getDashboardErrorMessage(paymentError, "No pudimos actualizar el pago.");
+      setError(message);
+      await reconcileAfterFailure(previousSnapshot);
+      setError(message);
+
+      if (!options.skipToast) {
+        showActionToast("error", "No pudimos actualizar el pago.", message);
+      }
+
+      return false;
+    }
+  };
+
   const addLeadNote = async (leadId: string, body: string, options: ActionOptions = {}) => {
     const trimmedBody = body.trim();
 
@@ -4382,6 +4706,7 @@ const Cirugia360Dashboard = () => {
           onDeleteNote={deleteLeadNote}
           onAgent={updateAssignedAgent}
           onCallback={updateCallback}
+          onPayment={updatePayment}
           onCall={callLead}
         />
       ) : null}

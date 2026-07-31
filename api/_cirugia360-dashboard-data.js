@@ -170,6 +170,15 @@ export const toPublicLead = (lead, notes = [], transcriptionSegments = []) => ({
   message: lead.message,
   summaryText: lead.summary_text,
   sourceUrl: lead.source_url,
+  paymentStatus: lead.payment_status || "not_required",
+  paymentDueAt: lead.payment_due_at,
+  paymentConfirmedAt: lead.payment_confirmed_at,
+  paymentReference: lead.payment_reference,
+  bookingReference: lead.booking_reference,
+  paymentUrl: lead.payment_url,
+  externalReferenceCandidates: Array.isArray(lead.external_reference_candidates)
+    ? lead.external_reference_candidates
+    : [],
   assignedAgentName: lead.assigned_agent_name,
   assignedAgentPhone: lead.assigned_agent_phone,
   assignedAgentEmail: lead.assigned_agent_email,
