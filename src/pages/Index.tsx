@@ -105,7 +105,7 @@ const bookingHighlights = [
 
 const Index = () => {
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background pb-28 md:pb-24">
       <Navbar />
 
       {/* Hero */}
@@ -373,6 +373,22 @@ const Index = () => {
       </section>
 
       <Footer />
+
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border/80 bg-background/95 px-4 py-3 shadow-[0_-12px_32px_rgba(18,24,38,0.12)] backdrop-blur md:px-8 md:pb-4">
+        <div className="container-premium flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-xs font-sans font-semibold uppercase tracking-[0.2em] text-primary">
+              POCOS CUPOS | 50% OFF ESTE MES
+            </p>
+            <p className="mt-1 text-sm font-medium text-foreground md:text-base">
+              Evaluación médica a $50.000. Toma tu hora online en Reservo.
+            </p>
+          </div>
+          <ContactModalButton className="btn-premium w-full px-6 py-3 text-xs md:w-auto">
+            Abrir agenda
+          </ContactModalButton>
+        </div>
+      </div>
     </div>
   );
 };
