@@ -78,7 +78,7 @@ export const siteStrings = {
       booking: {
         label: "Agendar y pagar evaluación",
         eyebrow: "Reserva online",
-        description: "Elige una hora real de Reservo y paga la evaluación con valor promocional.",
+        description: "Elige fecha y hora online y paga la evaluación con valor promocional.",
       },
     },
     fields: {
@@ -111,7 +111,7 @@ export const siteStrings = {
     copy: {
       stepOneTitle: "Agenda tu evaluación con 50% OFF",
       stepOneDescription:
-        "Reserva una hora real en Reservo. Este mes la evaluación médica queda en $50.000 por tiempo limitado.",
+        "Reserva tu evaluación online. Este mes queda en $50.000 por tiempo limitado.",
       contactDetailsTitle: "Datos de Contacto",
       bookingDetailsTitle: "Datos Personales",
       contactDetailsDescription: "Completa tus datos y activaremos el contacto con una asesora.",
@@ -121,8 +121,8 @@ export const siteStrings = {
       otherProcedureQuestion: "¿Cuál procedimiento?",
       otherProcedurePlaceholder: "Escribe el procedimiento o consulta",
       scheduleTitle: "Seleccionar Horario",
-      scheduleAvailabilityPrefix: "Estás viendo la disponibilidad real de",
-      loadingTitle: "Cargando horarios desde Reservo",
+      scheduleAvailabilityPrefix: "Estás viendo horarios disponibles de",
+      loadingTitle: "Cargando horarios disponibles",
       loadingDescription:
         "Estamos consultando la agenda seleccionada para mostrar solo horas disponibles.",
       scheduleErrorTitle: "No pudimos cargar la agenda.",

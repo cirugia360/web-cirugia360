@@ -94,7 +94,7 @@ const bookingHighlights = [
   {
     icon: CalendarCheck,
     title: "Toma tu hora online",
-    desc: "Haz clic en Agendar Evaluación y elige una hora real en Reservo.",
+    desc: "Haz clic en Agendar Evaluación y elige fecha y hora online.",
   },
   {
     icon: Clock3,
@@ -164,7 +164,7 @@ const Index = () => {
               </p>
               <p className="mt-2 text-base font-medium leading-relaxed text-background">
                 Evaluación médica a $50.000 por tiempo limitado. Toma tu hora en el botón
-                Agendar Evaluación y elige fecha real en Reservo.
+                Agendar Evaluación y elige fecha y hora online.
               </p>
             </motion.div>
             <motion.div
@@ -363,10 +363,10 @@ const Index = () => {
               Evaluación con 50% OFF este mes
             </h2>
             <p className="text-primary-foreground/70 font-sans mb-10 max-w-xl mx-auto">
-              Toma tu hora directamente desde la web, elige disponibilidad real en Reservo y paga $50.000 por tiempo limitado.
+              Toma tu hora directamente desde la web, elige fecha y hora online y paga $50.000 por tiempo limitado.
             </p>
             <ContactModalButton className="inline-flex items-center justify-center px-10 py-4 rounded-sm font-sans font-medium text-sm tracking-widest uppercase bg-background text-foreground transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5" style={{letterSpacing:"0.1em"}}>
-              Tomar hora en Reservo
+              Tomar hora online
             </ContactModalButton>
           </ScrollReveal>
         </div>
@@ -381,7 +381,7 @@ const Index = () => {
               POCOS CUPOS | 50% OFF ESTE MES
             </p>
             <p className="mt-1 text-sm font-medium text-foreground md:text-base">
-              Evaluación médica a $50.000. Toma tu hora online en Reservo.
+              Evaluación médica a $50.000. Toma tu hora online.
             </p>
           </div>
           <ContactModalButton className="btn-premium w-full px-6 py-3 text-xs md:w-auto">
