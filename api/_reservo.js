@@ -18,8 +18,8 @@ const bookingDefinitions = {
   presencial: {
     id: "presencial",
     label: "Evaluacion con el Dr. Torres",
-    description: "$100.000 con el Dr. Sebastian Torres.",
-    priceLabel: "$100.000",
+    description: "$50.000 con el Dr. Sebastian Torres. 50% OFF este mes.",
+    priceLabel: "$50.000",
     procedureName: "Consulta Medica Dr. Sebastian Torres - Presencial o a Distancia",
     professionalName: "Dr. Sebastian Torres",
     locationLabel: "Presencial o a distancia",

@@ -80,6 +80,7 @@ const appointmentCard: {
   description: contactBookingStrings.appointmentCard.description,
   procedureName: contactBookingStrings.appointmentCard.procedureName,
 };
+const promoCopy = contactBookingStrings.promo;
 
 const flowCopy: Record<
   FlowIntent,
@@ -696,6 +697,29 @@ const ContactBookingForm = () => {
 
   return (
     <div className="card-premium p-5 sm:p-7">
+      <div className="mb-5 border-b border-border/70 pb-5 sm:mb-7 sm:pb-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-xs font-sans font-semibold uppercase tracking-[0.2em] text-primary">
+              {promoCopy.availability}
+            </p>
+            <h3 className="mt-2 font-serif text-2xl font-medium leading-tight text-foreground">
+              {promoCopy.discount}
+            </h3>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+              {promoCopy.detail}
+            </p>
+          </div>
+          <div className="shrink-0 sm:text-right">
+            <p className="text-xs font-sans uppercase tracking-[0.16em] text-muted-foreground">
+              {promoCopy.previousPrice}
+            </p>
+            <p className="mt-1 font-serif text-3xl font-medium text-primary">
+              {promoCopy.price}
+            </p>
+          </div>
+        </div>
+      </div>
       <div className="mb-6 flex items-center gap-2 sm:mb-8">
         {progressStepIds.map((currentStep, index) => {
           const isActiveStep = index <= activeProgressIndex;

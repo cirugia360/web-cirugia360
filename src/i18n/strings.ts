@@ -59,8 +59,15 @@ export const siteStrings = {
   contactBooking: {
     appointmentCard: {
       label: "Evaluación con el Dr. Torres",
-      description: "$100.000 - Consulta médica con el Dr. Torres",
+      description: "$50.000 - 50% OFF este mes - POCOS CUPOS",
       procedureName: "Consulta Médica Dr. Sebastián Torres - Presencial o a Distancia",
+    },
+    promo: {
+      availability: "POCOS CUPOS",
+      discount: "50% OFF este mes",
+      price: "$50.000",
+      previousPrice: "Antes $100.000",
+      detail: "Promoción por tiempo limitado para evaluaciones reservadas desde la web.",
     },
     flow: {
       contact: {
@@ -71,7 +78,7 @@ export const siteStrings = {
       booking: {
         label: "Agendar y pagar evaluación",
         eyebrow: "Reserva online",
-        description: "Elige una hora real de Reservo y completa el pago de la evaluación.",
+        description: "Elige una hora real de Reservo y paga la evaluación con valor promocional.",
       },
     },
     fields: {
@@ -102,9 +109,9 @@ export const siteStrings = {
       bookingError: "No se pudo confirmar la reserva.",
     },
     copy: {
-      stepOneTitle: "Agenda tu evaluación",
+      stepOneTitle: "Agenda tu evaluación con 50% OFF",
       stepOneDescription:
-        "Reserva una hora real en Reservo y completa el pago de la evaluación con el Dr. Torres.",
+        "Reserva una hora real en Reservo. Este mes la evaluación médica queda en $50.000 por tiempo limitado.",
       contactDetailsTitle: "Datos de Contacto",
       bookingDetailsTitle: "Datos Personales",
       contactDetailsDescription: "Completa tus datos y activaremos el contacto con una asesora.",
@@ -143,7 +150,7 @@ export const siteStrings = {
       requesting: "Solicitando...",
       requestContact: "Solicitar contacto",
       confirming: "Confirmando...",
-      confirmAndPay: "Confirmar y pagar",
+      confirmAndPay: "Confirmar y pagar $50.000",
       next: "Siguiente",
     },
     metadata: {

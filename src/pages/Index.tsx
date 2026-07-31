@@ -1,6 +1,18 @@
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Award, GraduationCap, Globe, Shield, Star, ChevronRight, Zap, Target, Users } from "lucide-react";
+import {
+  Award,
+  BadgePercent,
+  CalendarCheck,
+  ChevronRight,
+  Clock3,
+  Globe,
+  GraduationCap,
+  Shield,
+  Star,
+  Target,
+  Zap,
+} from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import ScrollReveal from "@/components/ScrollReveal";
@@ -73,13 +85,31 @@ const stats = [
   { number: 4000, suffix: "+", label: "Pacientes tratados en celulitis" },
 ];
 
+const bookingHighlights = [
+  {
+    icon: BadgePercent,
+    title: "50% OFF este mes",
+    desc: "Evaluación médica a $50.000, antes $100.000.",
+  },
+  {
+    icon: CalendarCheck,
+    title: "Toma tu hora online",
+    desc: "Haz clic en Agendar Evaluación y elige una hora real en Reservo.",
+  },
+  {
+    icon: Clock3,
+    title: "Por tiempo limitado",
+    desc: "Promoción activa solo este mes, con pocos cupos disponibles.",
+  },
+];
+
 const Index = () => {
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
 
       {/* Hero */}
-      <section className="relative min-h-screen flex items-center overflow-hidden">
+      <section className="relative flex min-h-[92vh] items-center overflow-hidden">
         <div className="absolute inset-0">
           <picture className="block h-full w-full">
             <source type="image/avif" srcSet={heroDoctorImages.avif} sizes={heroDoctorImages.sizes} />
@@ -119,22 +149,52 @@ const Index = () => {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.3 }}
-              className="text-lg text-background/70 font-sans leading-relaxed mb-10 max-w-lg"
+              className="mb-6 max-w-lg font-sans text-lg leading-relaxed text-background/70"
             >
               Resultados naturales, tecnología avanzada y décadas de experiencia quirúrgica.
             </motion.p>
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.42 }}
+              className="mb-8 max-w-xl border-l-2 border-accent pl-4 text-background"
+            >
+              <p className="text-xs font-sans font-semibold uppercase tracking-[0.22em] text-accent">
+                POCOS CUPOS | 50% OFF ESTE MES
+              </p>
+              <p className="mt-2 text-base font-medium leading-relaxed text-background">
+                Evaluación médica a $50.000 por tiempo limitado. Toma tu hora en el botón
+                Agendar Evaluación y elige fecha real en Reservo.
+              </p>
+            </motion.div>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.5 }}
               className="flex flex-col sm:flex-row gap-4"
             >
-              <ContactModalButton className="btn-premium">Agendar Evaluación</ContactModalButton>
+              <ContactModalButton className="btn-premium">Tomar Hora 50% OFF</ContactModalButton>
               <Link to="/procedimientos" className="btn-outline-premium border-background/30 text-background hover:bg-background hover:text-foreground">
                 Ver Procedimientos
               </Link>
             </motion.div>
           </div>
+        </div>
+      </section>
+
+      <section className="border-b border-border/70 bg-background">
+        <div className="container-premium grid gap-6 px-6 py-8 md:grid-cols-3 md:px-12 lg:px-20">
+          {bookingHighlights.map((item) => (
+            <div key={item.title} className="flex items-start gap-4">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-sm bg-primary/10 text-primary">
+                <item.icon size={18} />
+              </div>
+              <div>
+                <p className="font-serif text-base font-medium text-foreground">{item.title}</p>
+                <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{item.desc}</p>
+              </div>
+            </div>
+          ))}
         </div>
       </section>
 
@@ -300,13 +360,13 @@ const Index = () => {
         <div className="container-premium text-center">
           <ScrollReveal>
             <h2 className="heading-section text-primary-foreground mb-6">
-              Agenda tu evaluación con el equipo del Dr. Sebastián Torres
+              Evaluación con 50% OFF este mes
             </h2>
             <p className="text-primary-foreground/70 font-sans mb-10 max-w-xl mx-auto">
-              Da el primer paso hacia la transformación que deseas con la confianza de un equipo de clase mundial.
+              Toma tu hora directamente desde la web, elige disponibilidad real en Reservo y paga $50.000 por tiempo limitado.
             </p>
             <ContactModalButton className="inline-flex items-center justify-center px-10 py-4 rounded-sm font-sans font-medium text-sm tracking-widest uppercase bg-background text-foreground transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5" style={{letterSpacing:"0.1em"}}>
-              Agendar Evaluación
+              Tomar hora en Reservo
             </ContactModalButton>
           </ScrollReveal>
         </div>
