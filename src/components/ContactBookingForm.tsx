@@ -25,12 +25,11 @@ import {
   fetchReservoAvailability,
   type AppointmentType,
   type Cirugia360ContactResponse,
-  type ReservoBookingOption,
   type ReservoPaymentRedirect,
   type ReservoBookingResponse,
 } from "@/lib/reservo";
 
-type Step = 1 | 2 | 3 | 4;
+type Step = 2 | 3 | 4;
 type FlowIntent = "contact" | "booking";
 
 type FormState = {
@@ -71,27 +70,11 @@ const getInitialProcedureInterest = () => {
   );
 };
 
-const appointmentCard: {
-  label: string;
-  description: string;
-  procedureName: string;
-} = {
-  label: contactBookingStrings.appointmentCard.label,
-  description: contactBookingStrings.appointmentCard.description,
-  procedureName: contactBookingStrings.appointmentCard.procedureName,
-};
 const promoCopy = contactBookingStrings.promo;
-
-const flowCopy: Record<
-  FlowIntent,
-  {
-    label: string;
-    eyebrow: string;
-    description: string;
-  }
-> = {
-  contact: contactBookingStrings.flow.contact,
-  booking: contactBookingStrings.flow.booking,
+const stepLabels: Record<Step, string> = {
+  2: "Datos",
+  3: "Horario",
+  4: "Pago",
 };
 
 const fields: Array<{
@@ -265,7 +248,7 @@ const continueToPayment = (
 };
 
 const ContactBookingForm = () => {
-  const [step, setStep] = useState<Step>(1);
+  const [step, setStep] = useState<Step>(2);
   const [flowIntent, setFlowIntent] = useState<FlowIntent | null>("booking");
   const [showDetailErrors, setShowDetailErrors] = useState(false);
   const [form, setForm] = useState<FormState>(() => ({
@@ -383,13 +366,11 @@ const ContactBookingForm = () => {
     }
   }, [availabilityQuery.data, selectedDate, selectedTime]);
 
-  const activeCard = appointmentCard;
   const isContactFlow = flowIntent === "contact";
   const isBookingFlow = flowIntent === "booking";
   const visibleFields = isContactFlow ? contactFields : fields;
-  const progressStepIds: Step[] = isContactFlow ? [1, 2, 4] : [1, 2, 3, 4];
+  const progressStepIds: Step[] = isContactFlow ? [2, 4] : [2, 3, 4];
   const activeProgressIndex = Math.max(progressStepIds.indexOf(step), 0);
-  const activeOption: ReservoBookingOption | null = availabilityQuery.data?.option || null;
   const availability = availabilityQuery.data?.availability || {};
   const availableDates = Object.keys(availability);
   const availableTimes = selectedDate ? availability[selectedDate] || [] : [];
@@ -591,16 +572,6 @@ const ContactBookingForm = () => {
   };
 
   const handlePrimaryAction = () => {
-    if (step === 1) {
-      if (!flowIntent) {
-        toast.error(contactBookingStrings.validation.chooseFlow);
-        return;
-      }
-
-      setStep(2);
-      return;
-    }
-
     if (step === 2) {
       if (!canContinueFromDetails) {
         setShowDetailErrors(true);
@@ -663,12 +634,11 @@ const ContactBookingForm = () => {
     }
 
     if (step === 2) {
-      setStep(1);
+      return;
     }
   };
 
   const primaryButtonDisabled =
-    (step === 1 && !flowIntent) ||
     (step === 2 && contactMutation.isPending) ||
     (step === 3 && !canConfirmBooking);
 
@@ -696,31 +666,24 @@ const ContactBookingForm = () => {
     );
 
   return (
-    <div className="card-premium p-5 sm:p-7">
-      <div className="mb-5 border-b border-border/70 pb-5 sm:mb-7 sm:pb-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="text-xs font-sans font-semibold uppercase tracking-[0.2em] text-primary">
-              {promoCopy.availability}
-            </p>
-            <h3 className="mt-2 font-serif text-2xl font-medium leading-tight text-foreground">
-              {promoCopy.discount}
-            </h3>
-            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-              {promoCopy.detail}
-            </p>
-          </div>
-          <div className="shrink-0 sm:text-right">
-            <p className="text-xs font-sans uppercase tracking-[0.16em] text-muted-foreground">
-              {promoCopy.previousPrice}
-            </p>
-            <p className="mt-1 font-serif text-3xl font-medium text-primary">
-              {promoCopy.price}
-            </p>
-          </div>
+    <div className="card-premium p-4 sm:p-5">
+      <div className="mb-4 rounded-sm border border-primary/20 bg-primary/5 px-3 py-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-[11px] font-sans font-semibold uppercase tracking-[0.16em] text-primary">
+            {promoCopy.availability} · {promoCopy.discount}
+          </p>
+          <p className="text-sm font-semibold text-foreground">
+            {promoCopy.price}{" "}
+            <span className="text-xs font-normal text-muted-foreground line-through">
+              {promoCopy.previousPrice.replace("Antes ", "")}
+            </span>
+          </p>
         </div>
       </div>
-      <div className="mb-6 flex items-center gap-2 sm:mb-8">
+      <p className="mb-2 text-xs font-sans font-medium uppercase tracking-[0.16em] text-muted-foreground">
+        Paso {activeProgressIndex + 1} de {progressStepIds.length} · {stepLabels[step]}
+      </p>
+      <div className="mb-4 flex items-center gap-2">
         {progressStepIds.map((currentStep, index) => {
           const isActiveStep = index <= activeProgressIndex;
           const isCompleteStep = index < activeProgressIndex;
@@ -728,7 +691,7 @@ const ContactBookingForm = () => {
           return (
             <div key={currentStep} className="flex flex-1 items-center gap-2">
               <div
-                className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-sans font-medium transition-colors ${
+                className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-sans font-medium transition-colors ${
                   isActiveStep ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
                 }`}
               >
@@ -742,44 +705,6 @@ const ContactBookingForm = () => {
         })}
       </div>
 
-      {step === 1 && (
-        <div>
-          <h3 className="mb-2 font-serif text-xl font-medium text-foreground">
-            {contactBookingStrings.copy.stepOneTitle}
-          </h3>
-          <p className="mb-6 text-sm text-muted-foreground">
-            {contactBookingStrings.copy.stepOneDescription}
-          </p>
-          <div className="grid gap-4">
-            <button
-              type="button"
-              onClick={() => setFlowIntent("booking")}
-              className={`rounded-sm border-2 p-5 text-left transition-all ${
-                flowIntent === "booking"
-                  ? "border-primary bg-primary/5"
-                  : "border-border bg-background hover:border-primary/40"
-              }`}
-            >
-              <span className="mb-4 flex h-11 w-11 items-center justify-center rounded-full bg-primary/10 text-primary">
-                <CalendarIcon size={20} />
-              </span>
-              <span className="block text-xs font-sans uppercase tracking-[0.2em] text-muted-foreground">
-                {flowCopy.booking.eyebrow}
-              </span>
-              <span className="mt-2 block font-serif text-lg font-medium text-foreground">
-                {flowCopy.booking.label}
-              </span>
-              <span className="mt-2 block text-sm text-muted-foreground">
-                {flowCopy.booking.description}
-              </span>
-              <span className="mt-4 block rounded-sm bg-muted px-3 py-2 text-xs text-muted-foreground">
-                {activeCard.description}
-              </span>
-            </button>
-          </div>
-        </div>
-      )}
-
       {step === 2 && (
         <div>
           <h3 className="mb-2 font-serif text-xl font-medium text-foreground">
@@ -787,28 +712,20 @@ const ContactBookingForm = () => {
               ? contactBookingStrings.copy.contactDetailsTitle
               : contactBookingStrings.copy.bookingDetailsTitle}
           </h3>
-          <p className="mb-6 text-sm text-muted-foreground">
+          <p className="mb-4 text-sm text-muted-foreground">
             {isContactFlow
               ? contactBookingStrings.copy.contactDetailsDescription
-              : `Completa tus datos para reservar en ${activeCard?.label.toLowerCase()}.`}
+              : "Completa tus datos y luego elige horario."}
           </p>
-          <div className="mb-5 rounded-sm border border-border bg-background/70 p-4">
-            <p className="text-xs font-sans uppercase tracking-[0.2em] text-muted-foreground">
-              {contactBookingStrings.copy.requestType}
-            </p>
-            <p className="mt-2 text-sm text-foreground">
-              {isContactFlow ? flowCopy.contact.label : activeCard?.label}
-            </p>
-          </div>
-          <div className="mb-5 space-y-4">
+          <div className="mb-4 space-y-3">
             <div>
-              <label className="mb-1.5 block text-xs font-sans font-medium uppercase tracking-wider text-muted-foreground">
+              <label className="mb-1.5 block text-xs font-sans font-medium uppercase tracking-[0.14em] text-muted-foreground">
                 {contactBookingStrings.copy.procedureInterest}
               </label>
               <select
                 value={form.procedimiento}
                 onChange={(event) => setField("procedimiento", event.target.value)}
-                className="w-full rounded-sm border border-border bg-background px-4 py-3 text-sm font-sans text-foreground transition-colors focus:border-primary focus:outline-none"
+                className="w-full rounded-sm border border-border bg-background px-3 py-2.5 text-sm font-sans text-foreground transition-colors focus:border-primary focus:outline-none"
               >
                 <option value="">{contactBookingStrings.copy.selectProcedure}</option>
                 {procedureOptions.map((procedure) => (
@@ -818,12 +735,12 @@ const ContactBookingForm = () => {
                 ))}
               </select>
               {procedureError && !isOtherProcedure && (
-                <p className="mt-2 text-sm text-destructive">{procedureError}</p>
+                <p className="mt-1.5 text-xs text-destructive">{procedureError}</p>
               )}
             </div>
             {isOtherProcedure && (
               <div>
-                <label className="mb-1.5 block text-xs font-sans font-medium uppercase tracking-wider text-muted-foreground">
+                <label className="mb-1.5 block text-xs font-sans font-medium uppercase tracking-[0.14em] text-muted-foreground">
                   {contactBookingStrings.copy.otherProcedureQuestion}
                 </label>
                 <input
@@ -831,19 +748,19 @@ const ContactBookingForm = () => {
                   placeholder={contactBookingStrings.copy.otherProcedurePlaceholder}
                   value={form.otroProcedimiento}
                   onChange={(event) => setField("otroProcedimiento", event.target.value)}
-                  className="w-full rounded-sm border border-border bg-background px-4 py-3 text-sm font-sans text-foreground transition-colors focus:border-primary focus:outline-none"
+                  className="w-full rounded-sm border border-border bg-background px-3 py-2.5 text-sm font-sans text-foreground transition-colors focus:border-primary focus:outline-none"
                 />
-                {procedureError && <p className="mt-2 text-sm text-destructive">{procedureError}</p>}
+                {procedureError && <p className="mt-1.5 text-xs text-destructive">{procedureError}</p>}
               </div>
             )}
           </div>
-          <div className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2">
             {visibleFields.map((field) => {
               const fieldError = getFieldError(field.key);
 
               return (
                 <div key={field.key}>
-                  <label className="mb-1.5 block text-xs font-sans font-medium uppercase tracking-wider text-muted-foreground">
+                  <label className="mb-1.5 block text-xs font-sans font-medium uppercase tracking-[0.14em] text-muted-foreground">
                     {field.label}
                   </label>
                   <input
@@ -851,9 +768,9 @@ const ContactBookingForm = () => {
                     placeholder={field.placeholder}
                     value={form[field.key]}
                     onChange={(event) => setField(field.key, event.target.value)}
-                    className="w-full rounded-sm border border-border bg-background px-4 py-3 text-sm font-sans text-foreground transition-colors focus:border-primary focus:outline-none"
+                    className="w-full rounded-sm border border-border bg-background px-3 py-2.5 text-sm font-sans text-foreground transition-colors focus:border-primary focus:outline-none"
                   />
-                  {fieldError && <p className="mt-2 text-sm text-destructive">{fieldError}</p>}
+                  {fieldError && <p className="mt-1.5 text-xs text-destructive">{fieldError}</p>}
                 </div>
               );
             })}
@@ -863,29 +780,21 @@ const ContactBookingForm = () => {
 
       {step === 3 && (
         <div>
-          <div className="mb-6 flex flex-wrap items-start justify-between gap-4 rounded-sm border border-border bg-background/70 p-4">
+          <div className="mb-4 rounded-sm border border-border bg-background/70 p-3">
             <div>
-              <h3 className="font-serif text-xl font-medium text-foreground">
+              <h3 className="font-serif text-lg font-medium text-foreground">
                 {contactBookingStrings.copy.scheduleTitle}
               </h3>
-              <p className="mt-2 text-sm text-muted-foreground">
-                {contactBookingStrings.copy.scheduleAvailabilityPrefix}{" "}
-                {activeOption?.label || activeCard?.label}.
+              <p className="mt-1 text-sm text-muted-foreground">
+                Elige día y hora disponible.
               </p>
-            </div>
-            <div className="space-y-2 text-sm text-muted-foreground">
-              <p className="flex items-center gap-2">
-                <MapPin size={14} />
-                {activeOption?.locationLabel || activeCard?.description}
-              </p>
-              <p>{activeOption?.professionalName}</p>
             </div>
           </div>
 
           {availabilityQuery.isPending && (
-            <div className="flex min-h-56 flex-col items-center justify-center rounded-sm border border-dashed border-border px-6 py-10 text-center">
-              <LoaderCircle className="mb-4 animate-spin text-primary" size={28} />
-              <p className="font-serif text-lg text-foreground">
+            <div className="flex min-h-40 flex-col items-center justify-center rounded-sm border border-dashed border-border px-5 py-8 text-center">
+              <LoaderCircle className="mb-3 animate-spin text-primary" size={24} />
+              <p className="font-serif text-base text-foreground">
                 {contactBookingStrings.copy.loadingTitle}
               </p>
               <p className="mt-2 max-w-sm text-sm text-muted-foreground">
@@ -926,7 +835,7 @@ const ContactBookingForm = () => {
           )}
 
           {!availabilityQuery.isPending && !availabilityQuery.isError && availableDates.length > 0 && (
-            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_220px]">
+            <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_180px]">
               <div className="rounded-sm border border-border p-3">
                 <Calendar
                   mode="single"
@@ -944,11 +853,11 @@ const ContactBookingForm = () => {
                 />
               </div>
               <div>
-                <p className="mb-3 text-xs font-sans uppercase tracking-[0.2em] text-muted-foreground">
+                <p className="mb-2 text-xs font-sans uppercase tracking-[0.16em] text-muted-foreground">
                   {contactBookingStrings.copy.availableHours}
                 </p>
                 {selectedDate && (
-                  <p className="mb-4 text-sm text-foreground">{formatLongDate(selectedDate)}</p>
+                  <p className="mb-3 text-sm text-foreground">{formatLongDate(selectedDate)}</p>
                 )}
                 <div className="grid grid-cols-2 gap-2">
                   {availableTimes.map((time) => (
@@ -956,7 +865,7 @@ const ContactBookingForm = () => {
                       key={time}
                       type="button"
                       onClick={() => setSelectedTime(time)}
-                      className={`rounded-sm py-3 text-sm font-sans transition-all ${
+                      className={`rounded-sm py-2.5 text-sm font-sans transition-all ${
                         selectedTime === time
                           ? "bg-primary text-primary-foreground"
                           : "bg-muted text-foreground hover:bg-primary/10"
@@ -976,8 +885,8 @@ const ContactBookingForm = () => {
           )}
 
           {selectedDate && selectedTime && (
-            <div className="mt-6 rounded-sm border border-border bg-background/70 p-4">
-              <p className="text-xs font-sans uppercase tracking-[0.2em] text-muted-foreground">
+            <div className="mt-4 rounded-sm border border-border bg-background/70 p-3">
+              <p className="text-xs font-sans uppercase tracking-[0.16em] text-muted-foreground">
                 {contactBookingStrings.copy.selectedBooking}
               </p>
               <p className="mt-2 text-sm text-foreground">{formatSummaryDate(selectedDate, selectedTime)}</p>
@@ -1082,12 +991,12 @@ const ContactBookingForm = () => {
       )}
 
       {step < 4 && (
-        <div className="mt-8 flex justify-between">
+        <div className="mt-5 flex justify-between">
           <button
             type="button"
             onClick={handleBack}
             className={`flex items-center gap-2 text-sm font-sans text-muted-foreground transition-colors ${
-              step === 1 || bookingMutation.isPending || contactMutation.isPending
+              activeProgressIndex === 0 || bookingMutation.isPending || contactMutation.isPending
                 ? "invisible"
                 : "hover:text-foreground"
             }`}
@@ -1098,7 +1007,7 @@ const ContactBookingForm = () => {
             type="button"
             onClick={handlePrimaryAction}
             disabled={primaryButtonDisabled}
-            className={`btn-premium px-8 py-3 text-xs ${primaryButtonDisabled ? "cursor-not-allowed opacity-40" : ""}`}
+            className={`btn-premium px-6 py-2.5 text-xs ${primaryButtonDisabled ? "cursor-not-allowed opacity-40" : ""}`}
           >
             {primaryButtonContent}
           </button>

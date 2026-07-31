@@ -52,7 +52,7 @@ export const ContactModalProvider = ({ children }: { children: ReactNode }) => {
       {children}
 
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
-        <DialogContent className="w-[calc(100vw-2rem)] max-w-2xl overflow-hidden border-0 bg-transparent p-0 shadow-none sm:w-[calc(100vw-4rem)]">
+        <DialogContent className="w-[calc(100vw-2rem)] max-w-xl overflow-hidden border-0 bg-transparent p-0 shadow-none sm:w-[calc(100vw-4rem)]">
           <DialogTitle className="sr-only">Agendar evaluación</DialogTitle>
           <DialogDescription className="sr-only">
             Completa el formulario para reservar y pagar una evaluación con el Dr. Torres. Puedes cerrar esta
