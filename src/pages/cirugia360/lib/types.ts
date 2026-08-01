@@ -35,6 +35,8 @@ export type DashboardLead = {
   id: string;
   createdAt: string;
   updatedAt: string;
+  leadKind?: string | null;
+  triggerSource?: string | null;
   status: string;
   salesCallStatus: string | null;
   customerCallStatus: string | null;

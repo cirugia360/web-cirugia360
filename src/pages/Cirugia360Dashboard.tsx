@@ -75,6 +75,7 @@ import type {
 const navItems = [
   { id: "overview", label: "Resumen", icon: LayoutDashboard },
   { id: "attribution", label: "Atribucion", icon: GitBranch },
+  { id: "appointments", label: "Horas", icon: CalendarCheck },
   { id: "pipeline", label: "Pipeline", icon: Target },
   { id: "leads", label: "Leads", icon: Users },
   { id: "team", label: "Equipo", icon: Settings },
@@ -346,8 +347,15 @@ type LeadAttribution = {
   medium?: string | null;
   channel?: string | null;
   campaign?: string | null;
+  content?: string | null;
   landingPage?: string | null;
   referrer?: string | null;
+};
+
+type BookingSlot = {
+  date: string;
+  time: string;
+  timeZone?: string | null;
 };
 
 const attributionLabels: Record<string, string> = {
@@ -375,6 +383,7 @@ const getLeadAttribution = (lead: DashboardLead): LeadAttribution => {
     medium,
     channel: channel || source || "direct",
     campaign: typeof attribution.campaign === "string" ? attribution.campaign : null,
+    content: typeof attribution.content === "string" ? attribution.content : null,
     landingPage: typeof attribution.landingPage === "string" ? attribution.landingPage : lead.sourceUrl || null,
     referrer: typeof attribution.referrer === "string" ? attribution.referrer : null,
   };
@@ -385,6 +394,63 @@ const getAttributionLabel = (attribution: LeadAttribution) => {
 
   return attributionLabels[channel] || channel.replace(/[_-]+/g, " ");
 };
+
+const getStringValue = (value: unknown) =>
+  typeof value === "string" ? value : typeof value === "number" ? String(value) : "";
+
+const getLeadBookingSlot = (lead: DashboardLead): BookingSlot | null => {
+  const metadata = isRecord(lead.metadata) ? lead.metadata : {};
+  const selectedSlot = isRecord(metadata.selectedSlot) ? metadata.selectedSlot : null;
+
+  if (!selectedSlot) {
+    return null;
+  }
+
+  const date = getStringValue(selectedSlot.date).trim();
+  const time = getStringValue(selectedSlot.time).trim();
+
+  if (!date) {
+    return null;
+  }
+
+  return {
+    date,
+    time,
+    timeZone: getStringValue(selectedSlot.timeZone).trim() || null,
+  };
+};
+
+const getBookingSlotSortValue = (slot: BookingSlot | null) => {
+  if (!slot?.date) {
+    return Number.MAX_SAFE_INTEGER;
+  }
+
+  const time = slot.time && /^\d{1,2}:\d{2}/.test(slot.time) ? slot.time.slice(0, 5) : "00:00";
+  const parsed = Date.parse(`${slot.date}T${time}:00`);
+
+  return Number.isFinite(parsed) ? parsed : Number.MAX_SAFE_INTEGER;
+};
+
+const formatBookingSlotDate = (slot: BookingSlot | null) => {
+  if (!slot?.date) {
+    return "Sin fecha";
+  }
+
+  const parsed = Date.parse(`${slot.date}T12:00:00`);
+
+  if (!Number.isFinite(parsed)) {
+    return slot.date;
+  }
+
+  return new Intl.DateTimeFormat("es-CL", {
+    weekday: "short",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(parsed));
+};
+
+const formatBookingSlotTime = (slot: BookingSlot | null) => slot?.time || "Sin hora";
 
 const normalizePaymentStatus = (lead: DashboardLead) => String(lead.paymentStatus || "not_required").toLowerCase();
 
@@ -400,6 +466,11 @@ const isPendingEvaluationPayment = (lead: DashboardLead) => {
 
 const hasEvaluationPaymentTracking = (lead: DashboardLead) =>
   Boolean(hasEvaluationPaymentArtifact(lead) || isPaidEvaluationLead(lead) || isPendingEvaluationPayment(lead));
+
+const isBookingEvaluationLead = (lead: DashboardLead) =>
+  lead.leadKind === "booking_request" ||
+  lead.triggerSource === "reservo_booking_created" ||
+  Boolean(getLeadBookingSlot(lead) && hasEvaluationPaymentArtifact(lead));
 
 const getPaymentStatusLabel = (lead: DashboardLead) => {
   const status = normalizePaymentStatus(lead);
@@ -702,6 +773,59 @@ const exportLeadsCsv = (leads: DashboardLead[], filename: string) => {
       attribution.landingPage || lead.sourceUrl || "",
       lead.bookingReference || "",
       lead.pipelineValue || 0,
+    ];
+  });
+  const csv = [headers, ...rows].map((row) => row.map(escapeCsvCell).join(",")).join("\n");
+  const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = url;
+  link.download = `${filename}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+};
+
+const exportAppointmentsCsv = (leads: DashboardLead[], filename: string) => {
+  const headers = [
+    "Tomada",
+    "Fecha evaluacion",
+    "Hora evaluacion",
+    "Paciente",
+    "Telefono",
+    "Email",
+    "Procedimiento",
+    "Estado pago",
+    "Pago confirmado",
+    "Fuente",
+    "Medio",
+    "Campana",
+    "Contenido",
+    "Landing",
+    "Referencia reserva",
+  ];
+  const rows = leads.map((lead) => {
+    const slot = getLeadBookingSlot(lead);
+    const attribution = getLeadAttribution(lead);
+
+    return [
+      formatDate(lead.createdAt),
+      slot?.date || "",
+      slot?.time || "",
+      lead.fullName,
+      lead.phone,
+      lead.email || "",
+      lead.procedureInterest || "",
+      getPaymentStatusLabel(lead),
+      lead.paymentConfirmedAt ? formatDate(lead.paymentConfirmedAt) : "",
+      attribution.source || "direct",
+      attribution.medium || "direct",
+      attribution.campaign || "",
+      attribution.content || "",
+      attribution.landingPage || lead.sourceUrl || "",
+      lead.bookingReference || "",
     ];
   });
   const csv = [headers, ...rows].map((row) => row.map(escapeCsvCell).join(",")).join("\n");
@@ -2642,6 +2766,215 @@ const CreateLeadModal = ({
           </button>
         </div>
       </form>
+    </div>
+  );
+};
+
+const AppointmentsView = ({
+  leads,
+  onSelect,
+}: {
+  leads: DashboardLead[];
+  onSelect: (lead: DashboardLead) => void;
+}) => {
+  const [search, setSearch] = useState("");
+  const [paymentFilter, setPaymentFilter] = useState<"all" | "pending" | "paid" | "unpaid">("all");
+
+  const appointmentLeads = useMemo(
+    () =>
+      leads
+        .filter(isBookingEvaluationLead)
+        .sort((firstLead, secondLead) => {
+          const firstSlotValue = getBookingSlotSortValue(getLeadBookingSlot(firstLead));
+          const secondSlotValue = getBookingSlotSortValue(getLeadBookingSlot(secondLead));
+
+          if (firstSlotValue !== secondSlotValue) {
+            return firstSlotValue - secondSlotValue;
+          }
+
+          return Date.parse(secondLead.createdAt) - Date.parse(firstLead.createdAt);
+        }),
+    [leads],
+  );
+
+  const filteredAppointments = useMemo(() => {
+    const normalizedSearch = search.trim().toLowerCase();
+
+    return appointmentLeads
+      .filter((lead) => {
+        if (paymentFilter === "paid") {
+          return isPaidEvaluationLead(lead);
+        }
+
+        if (paymentFilter === "pending") {
+          return isPendingEvaluationPayment(lead);
+        }
+
+        if (paymentFilter === "unpaid") {
+          return getPaymentStatusLabel(lead) === "Sin pago";
+        }
+
+        return true;
+      })
+      .filter((lead) => {
+        if (!normalizedSearch) {
+          return true;
+        }
+
+        const slot = getLeadBookingSlot(lead);
+        const attribution = getLeadAttribution(lead);
+        const haystack = [
+          lead.fullName,
+          lead.phone,
+          lead.email,
+          lead.procedureInterest,
+          getPaymentStatusLabel(lead),
+          formatBookingSlotDate(slot),
+          formatBookingSlotTime(slot),
+          attribution.source,
+          attribution.medium,
+          attribution.campaign,
+          attribution.content,
+          lead.bookingReference,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+
+        return haystack.includes(normalizedSearch);
+      });
+  }, [appointmentLeads, paymentFilter, search]);
+
+  const pendingCount = appointmentLeads.filter(isPendingEvaluationPayment).length;
+  const paidCount = appointmentLeads.filter(isPaidEvaluationLead).length;
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-3">
+        <MetricTile metric={{ id: "appointments-total", label: "Horas tomadas", value: appointmentLeads.length, tone: "blue" }} />
+        <MetricTile metric={{ id: "appointments-pending", label: "Pendientes pago", value: pendingCount, tone: "amber" }} />
+        <MetricTile metric={{ id: "appointments-paid", label: "Pagadas", value: paidCount, tone: "green" }} />
+      </div>
+
+      <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-col gap-3 border-b border-slate-200 p-4 lg:flex-row lg:items-center">
+          <label className="relative min-w-[240px] flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-dashboard-subtle" />
+            <input
+              className="h-10 w-full rounded-lg border border-dashboard-line bg-white pl-9 pr-3 text-sm outline-none transition focus:border-dashboard-primary"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Buscar paciente, procedimiento, campana u origen"
+            />
+          </label>
+          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500 lg:w-52">
+            Pago
+            <select
+              className="mt-1 h-10 w-full rounded-lg border border-dashboard-line bg-white px-3 text-sm font-normal normal-case text-slate-900 outline-none focus:border-dashboard-primary"
+              value={paymentFilter}
+              onChange={(event) => setPaymentFilter(event.target.value as "all" | "pending" | "paid" | "unpaid")}
+            >
+              <option value="all">Todos</option>
+              <option value="pending">Pendientes</option>
+              <option value="paid">Pagadas</option>
+              <option value="unpaid">Sin pago</option>
+            </select>
+          </label>
+          <button
+            type="button"
+            onClick={() => exportAppointmentsCsv(filteredAppointments, "cirugia360-horas-tomadas")}
+            disabled={filteredAppointments.length === 0}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-dashboard-line bg-white px-3 text-sm font-bold text-dashboard-muted transition hover:text-dashboard-primary disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <FileText className="h-4 w-4" />
+            Exportar
+          </button>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="min-w-[1120px] w-full border-collapse text-left text-sm">
+            <caption className="sr-only">Horas tomadas desde la web</caption>
+            <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+              <tr>
+                <th scope="col" className="px-5 py-3">Para cuando</th>
+                <th scope="col" className="px-5 py-3">Paciente</th>
+                <th scope="col" className="px-5 py-3">Procedimiento</th>
+                <th scope="col" className="px-5 py-3">Pago</th>
+                <th scope="col" className="px-5 py-3">Origen</th>
+                <th scope="col" className="px-5 py-3">Tomada</th>
+                <th scope="col" className="px-5 py-3">Reserva</th>
+                <th scope="col" className="px-5 py-3 text-right">Accion</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {filteredAppointments.map((lead) => {
+                const slot = getLeadBookingSlot(lead);
+                const attribution = getLeadAttribution(lead);
+
+                return (
+                  <tr key={lead.id} className="align-top transition hover:bg-slate-50">
+                    <td className="whitespace-nowrap px-5 py-3">
+                      <p className="font-semibold text-slate-950">{formatBookingSlotDate(slot)}</p>
+                      <p className="mt-0.5 text-xs font-bold text-dashboard-primary">{formatBookingSlotTime(slot)}</p>
+                    </td>
+                    <td className="px-5 py-3">
+                      <button
+                        type="button"
+                        className="text-left font-semibold text-dashboard-primary hover:underline"
+                        onClick={() => onSelect(lead)}
+                      >
+                        {lead.fullName}
+                      </button>
+                      <p className="mt-0.5 text-xs text-slate-500">{lead.phone}</p>
+                    </td>
+                    <td className="max-w-[220px] px-5 py-3 text-slate-700">
+                      <span className="line-clamp-2">{lead.procedureInterest || "Evaluacion"}</span>
+                    </td>
+                    <td className="px-5 py-3">
+                      <PaymentBadge lead={lead} />
+                      {lead.paymentConfirmedAt ? (
+                        <p className="mt-1 text-xs text-slate-500">{formatDate(lead.paymentConfirmedAt)}</p>
+                      ) : null}
+                    </td>
+                    <td className="max-w-[260px] px-5 py-3">
+                      <p className="font-medium text-slate-800">{getAttributionLabel(attribution)}</p>
+                      <p className="mt-0.5 text-xs text-slate-500">
+                        {attribution.source || "direct"} / {attribution.medium || "direct"}
+                      </p>
+                      <p className="mt-0.5 line-clamp-1 text-xs text-slate-500">
+                        {attribution.campaign || attribution.content || "Sin campana"}
+                      </p>
+                    </td>
+                    <td className="whitespace-nowrap px-5 py-3 text-slate-600">{formatDate(lead.createdAt)}</td>
+                    <td className="max-w-[180px] truncate px-5 py-3 text-xs text-slate-500">
+                      {lead.bookingReference || "Sin referencia"}
+                    </td>
+                    <td className="px-5 py-3 text-right">
+                      <button
+                        type="button"
+                        className="rounded-md border border-dashboard-line px-3 py-2 text-xs font-bold text-dashboard-muted transition hover:border-dashboard-primary hover:text-dashboard-primary"
+                        onClick={() => onSelect(lead)}
+                      >
+                        Ver lead
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {filteredAppointments.length === 0 ? (
+          <div className="border-t border-slate-100 p-6 text-sm font-medium text-slate-500">
+            No hay horas tomadas que coincidan con los filtros.
+          </div>
+        ) : null}
+
+        <div className="flex flex-col gap-1 border-t border-slate-200 px-5 py-3 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between">
+          <span>Mostrando {filteredAppointments.length} de {appointmentLeads.length} horas tomadas</span>
+          <span>{pendingCount} pendientes de pago</span>
+        </div>
+      </section>
     </div>
   );
 };
@@ -4644,6 +4977,10 @@ const Cirugia360Dashboard = () => {
           ) : null}
           {activeView === "attribution" && snapshot ? (
             <AttributionView leads={leads} onSelect={openLeadDetail} />
+          ) : null}
+
+          {activeView === "appointments" && snapshot ? (
+            <AppointmentsView leads={leads} onSelect={openLeadDetail} />
           ) : null}
 
           {activeView === "pipeline" && snapshot ? (
