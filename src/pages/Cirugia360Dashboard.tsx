@@ -420,17 +420,6 @@ const getLeadBookingSlot = (lead: DashboardLead): BookingSlot | null => {
   };
 };
 
-const getBookingSlotSortValue = (slot: BookingSlot | null) => {
-  if (!slot?.date) {
-    return Number.MAX_SAFE_INTEGER;
-  }
-
-  const time = slot.time && /^\d{1,2}:\d{2}/.test(slot.time) ? slot.time.slice(0, 5) : "00:00";
-  const parsed = Date.parse(`${slot.date}T${time}:00`);
-
-  return Number.isFinite(parsed) ? parsed : Number.MAX_SAFE_INTEGER;
-};
-
 const formatBookingSlotDate = (slot: BookingSlot | null) => {
   if (!slot?.date) {
     return "Sin fecha";
@@ -2784,16 +2773,7 @@ const AppointmentsView = ({
     () =>
       leads
         .filter(isBookingEvaluationLead)
-        .sort((firstLead, secondLead) => {
-          const firstSlotValue = getBookingSlotSortValue(getLeadBookingSlot(firstLead));
-          const secondSlotValue = getBookingSlotSortValue(getLeadBookingSlot(secondLead));
-
-          if (firstSlotValue !== secondSlotValue) {
-            return firstSlotValue - secondSlotValue;
-          }
-
-          return Date.parse(secondLead.createdAt) - Date.parse(firstLead.createdAt);
-        }),
+        .sort((firstLead, secondLead) => Date.parse(secondLead.createdAt) - Date.parse(firstLead.createdAt)),
     [leads],
   );
 
