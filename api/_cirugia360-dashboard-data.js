@@ -12,6 +12,7 @@ export const META_EVENT_NAMES = {
   prospectCaptured: normalizeText(process.env.META_EVENT_NAME_LEAD) || "ProspectCaptured",
   prospectReached: normalizeText(process.env.META_EVENT_NAME_CONTACT) || "ProspectReached",
   prospectQualified: normalizeText(process.env.META_EVENT_NAME_SCHEDULE) || "ProspectQualified",
+  prospectScheduled: normalizeText(process.env.META_EVENT_NAME_SCHEDULED) || "ProspectScheduled",
   prospectClosed: normalizeText(process.env.META_EVENT_NAME_PURCHASE) || "ProspectClosed",
 };
 

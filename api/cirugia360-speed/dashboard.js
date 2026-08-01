@@ -13,8 +13,10 @@ import {
   deleteLeadNote,
   dispatchMetaEvent,
   insertTrackingEvent,
+  META_EVENT_NAMES,
   restoreLeadNote,
   toPublicLead,
+  trackLeadMetaEvent,
   updateLeadNote,
 } from "../_cirugia360-dashboard-data.js";
 import {
@@ -728,6 +730,29 @@ const handleLeadPayment = async (request, response, user) => {
     paymentReference: lead.payment_reference || null,
     source: "dashboard_manual",
   });
+
+  if (nextPaymentStatus === "confirmed") {
+    await trackLeadMetaEvent({
+      lead: updatedLead,
+      eventName: META_EVENT_NAMES.prospectScheduled,
+      eventSource: "dashboard",
+      requestContext: {
+        clientIp: getClientIp(request),
+        clientUserAgent: getHeader(request, "user-agent"),
+        sourceUrl: lead.source_url,
+      },
+      metadata: {
+        trigger: "payment_marked_confirmed",
+        clinicalEvent: "scheduled",
+        paymentStatus: "confirmed",
+        previousPaymentStatus: lead.payment_status || null,
+        bookingReference: lead.booking_reference || null,
+        paymentReference: lead.payment_reference || null,
+        changedBy: user.email || null,
+        at: nowIso,
+      },
+    });
+  }
 
   return sendJson(response, 200, {
     success: true,
